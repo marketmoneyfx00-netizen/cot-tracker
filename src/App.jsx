@@ -1,633 +1,19 @@
 import { useState, useRef, useCallback, useEffect, Component } from "react";
-// ─── MARKET LOGIC ENGINE (inlined) ─────────────────────────────────────────
-/**
- * marketLogic.js — Motor de lógica macro por tipo de indicador
- *
- * Arquitectura basada en 5 grupos con lógica propia:
- *   A) PRO_CURRENCY    — dato fuerte = divisa fuerte (PMI, GDP, Retail, NFP...)
- *   B) ANTI_CURRENCY   — dato fuerte = divisa débil  (Claims, Unemployment Rate)
- *   C) INFLATION       — hawkish/dovish dynamics      (CPI, PCE, PPI)
- *   D) COMMODITY_OIL   — commodity-first              (Crude, EIA, API)
- *   E) COMMODITY_GAS   — commodity-first              (Natural Gas Storage)
- *
- * Uso:
- *   const logic = getIndicatorLogic(eventName, currency, actual, forecast, previous)
- */
+import { getIndicatorLogic } from './marketLogic.js';
+import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
+import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
+import { useAuth } from './components/AuthProvider.jsx';
+import LoginScreen from './components/LoginScreen.jsx';
+import { logout } from './lib/authService.js';
 
-// ─── UTILS ────────────────────────────────────────────────────────────────────
-
-function parseNum(v) {
-  if (v === null || v === undefined) return NaN;
-  return parseFloat(String(v).replace(/[%KMBT$,]/g,''));
-}
-
-function calcSurp(actual, forecast) {
-  const a = parseNum(actual), f = parseNum(forecast);
-  if (isNaN(a) || isNaN(f)) return null;
-  const raw = a - f;
-  const pct = f !== 0 ? ((a - f) / Math.abs(f)) * 100 : 0;
-  return { raw, pct, dir: raw > 0 ? 1 : raw < 0 ? -1 : 0 };
-}
-
-function calcDelta(actual, previous) {
-  const a = parseNum(actual), p = parseNum(previous);
-  if (isNaN(a) || isNaN(p)) return null;
-  const raw = a - p;
-  const pct = p !== 0 ? ((a - p) / Math.abs(p)) * 100 : 0;
-  return { raw, pct, dir: raw > 0 ? 1 : raw < 0 ? -1 : 0 };
-}
-
-// ─── CCY → ASSETS MAP ─────────────────────────────────────────────────────────
-// Para cada moneda, define los activos afectados y su sensibilidad al ciclo económico.
-// dir: +1 = sube cuando la divisa se fortalece / economía mejora
-//      -1 = baja cuando la divisa se fortalece / economía mejora (refugio/inverso)
-
-const CCY_ASSET_MAP = {
-  USD: [
-    { asset:'USD',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'US10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'SPX',    proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },  // dovish = rate cut rally
-    { asset:'NAS100', proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },  // growth loves low rates
-    { asset:'XAUUSD', proCcy:-1, antiCcy:1,  hawkish:-1, dovish:1  },  // safe haven + real rates
-  ],
-  EUR: [
-    { asset:'EUR',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'DE10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'STOXX50',proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },
-    { asset:'XAUUSD', proCcy:-1, antiCcy:1,  hawkish:-1, dovish:1  },
-  ],
-  GBP: [
-    { asset:'GBP',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'UK10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'FTSE',   proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },
-    { asset:'XAUUSD', proCcy:-1, antiCcy:1,  hawkish:-1, dovish:1  },
-  ],
-  JPY: [
-    { asset:'JPY',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'JP10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'NIKKEI', proCcy:-1, antiCcy:1,  hawkish:-1, dovish:1  }, // weak JPY → Nikkei up
-  ],
-  CAD: [
-    { asset:'CAD',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'CA10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'TSX',    proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },
-    { asset:'WTI',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },  // CAD correlates with oil
-  ],
-  AUD: [
-    { asset:'AUD',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'AU10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'ASX200', proCcy:1,  antiCcy:1,  hawkish:-1, dovish:1  },
-  ],
-  NZD: [
-    { asset:'NZD',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'NZ10Y',  proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-  ],
-  CHF: [
-    { asset:'CHF',    proCcy:1,  antiCcy:-1, hawkish:1,  dovish:-1 },
-    { asset:'SMI',    proCcy:-1, antiCcy:1,  hawkish:-1, dovish:1  }, // safe haven currency
-  ],
-};
-
-// Oil-specific assets (commodity-first, not USD-centric)
-const OIL_ASSETS = [
-  // dir: +1 = up when oil is bullish (less inventory), -1 = down when oil is bullish
-  { asset:'WTI',    bullOil:1,  bearOil:-1 },
-  { asset:'BRENT',  bullOil:1,  bearOil:-1 },
-  { asset:'CAD',    bullOil:1,  bearOil:-1 },  // oil-correlated currency
-  { asset:'USD',    bullOil:-1, bearOil:1  },  // energy price = inflation concern
-  { asset:'XAUUSD', bullOil:1,  bearOil:-1 },  // inflation hedge
-];
-
-const GAS_ASSETS = [
-  { asset:'NG',     bullGas:1,  bearGas:-1 },
-  { asset:'USD',    bullGas:-1, bearGas:1  },
-];
-
-// ─── EVENT TYPE DETECTION ─────────────────────────────────────────────────────
-
-function detectType(name) {
-  const n = (name || '').toLowerCase();
-
-  // ── Anti-currency ──
-  if (/jobless|initial claims|continuing claims|unemployment claims|peticiones|subsidio por desempleo/.test(n))
-    return 'CLAIMS';
-  if (/unemployment rate|tasa de desempleo/.test(n))
-    return 'UNEMPLOYMENT_RATE';
-
-  // ── Commodity-first ──
-  if (/crude oil|oil inventories|eia crude|api weekly crude|petroleum inventories|inventarios de petróleo/.test(n))
-    return 'OIL';
-  if (/natural gas storage|natural gas inventories|gas storage/.test(n))
-    return 'NAT_GAS';
-
-  // ── Inflation ──
-  if (/\bcpi\b|consumer price|hicp|\bipc\b|core cpi|\bpce\b|core pce|personal consumption expenditure/.test(n))
-    return 'CPI';
-  if (/\bppi\b|producer price|wholesale price|factory gate/.test(n))
-    return 'PPI';
-
-  // ── Rates ──
-  if (/interest rate decision|rate decision|tipos de interés|base rate|overnight rate|cash rate|decisión de tipos/.test(n))
-    return 'RATE_DECISION';
-  if (/fomc|fed minutes|meeting minutes|monetary policy minutes|federal open|actas de la/.test(n))
-    return 'CB_MINUTES';
-  if (/speaks|speech|testimony|press conference/.test(n))
-    return 'CB_SPEECH';
-
-  // ── Employment pro-currency ──
-  if (/non.farm|nonfarm|nfp|nóminas no agr|nominas no agr/.test(n) || (n.includes('payroll') && !n.includes('adp')))
-    return 'NFP';
-  if (/\badp\b/.test(n) || (n.includes('employment change') && n.includes('adp')))
-    return 'ADP';
-  if (/employment|average earnings|average hourly|wage|salary|\bjobs\b|labor market|labour market|empleo|jolts|job openings|hiring/.test(n))
-    return 'EMPLOYMENT';
-
-  // ── Growth / PMI ──
-  if (/\bpmi\b|purchasing managers|ism |manufacturing index|services index|composite pmi|ivey|caixin|markit|business activity/.test(n))
-    return 'PMI';
-  if (/\bgdp\b|gross domestic|\bpib\b|growth rate/.test(n))
-    return 'GDP';
-  if (/retail sales|ventas minoristas|core retail/.test(n))
-    return 'RETAIL';
-  if (/durable goods|factory orders|capital goods|bienes duraderos|core durable/.test(n))
-    return 'DURABLE_GOODS';
-  if (/industrial production|manufacturing output|industrial output|capacity utilization/.test(n))
-    return 'INDUSTRIAL';
-  if (/trade balance|current account|balanza comercial|trade deficit/.test(n))
-    return 'TRADE';
-  if (/consumer confidence|consumer sentiment|michigan|confianza del consumidor|optimism|zew|ifo|economic optimism|business confidence/.test(n))
-    return 'CONFIDENCE';
-  if (/housing|home sales|building permits|housing starts|existing home|new home|real estate|mortgage/.test(n))
-    return 'HOUSING';
-  if (/consumer credit|lending|credit growth|money supply/.test(n))
-    return 'CREDIT';
-  if (/bond auction|t-note|t-bond|bund auction|gilt auction/.test(n) || (n.includes('auction') && (n.includes('year') || n.includes('y '))))
-    return 'BOND_AUCTION';
-
-  return null;
-}
-
-// ─── SCORE CALCULATION ────────────────────────────────────────────────────────
-
-const TYPE_META = {
-  // Group, inverse (true = high number is BAD for currency), tier
-  CLAIMS:           { group:'ANTI_CURRENCY',   inverse:true,  tier:'medium' },
-  UNEMPLOYMENT_RATE:{ group:'ANTI_CURRENCY',   inverse:true,  tier:'medium' },
-  CPI:              { group:'INFLATION',        inverse:false, tier:'high'   },
-  PPI:              { group:'INFLATION',        inverse:false, tier:'medium' },
-  RATE_DECISION:    { group:'RATE',             inverse:false, tier:'high'   },
-  CB_MINUTES:       { group:'QUALITATIVE',      inverse:false, tier:'medium' },
-  CB_SPEECH:        { group:'QUALITATIVE',      inverse:false, tier:'low'    },
-  NFP:              { group:'PRO_CURRENCY',     inverse:false, tier:'high'   },
-  ADP:              { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  EMPLOYMENT:       { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  PMI:              { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  GDP:              { group:'PRO_CURRENCY',     inverse:false, tier:'high'   },
-  RETAIL:           { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  DURABLE_GOODS:    { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  INDUSTRIAL:       { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  TRADE:            { group:'PRO_CURRENCY',     inverse:false, tier:'medium' },
-  CONFIDENCE:       { group:'PRO_CURRENCY',     inverse:false, tier:'low'    },
-  HOUSING:          { group:'PRO_CURRENCY',     inverse:false, tier:'low'    },
-  CREDIT:           { group:'PRO_CURRENCY',     inverse:false, tier:'low'    },
-  OIL:              { group:'COMMODITY_OIL',    inverse:true,  tier:'medium' },
-  NAT_GAS:          { group:'COMMODITY_GAS',    inverse:true,  tier:'medium' },
-  BOND_AUCTION:     { group:'BOND',             inverse:false, tier:'low'    },
-};
-
-function calcScore(surprise, delta, meta) {
-  if (!surprise) return 0;
-  const inv = meta?.inverse ? -1 : 1;
-  let score = 0;
-  score += Math.max(-60, Math.min(60, surprise.pct * 10)) * inv;
-  if (delta) score += Math.max(-30, Math.min(30, delta.pct * 3)) * inv;
-  return Math.max(-100, Math.min(100, Math.round(score)));
-}
-
-function scoreToLabel(s) {
-  if (s >  50) return 'Muy Alcista';
-  if (s >  20) return 'Alcista';
-  if (s > -20) return 'Neutral';
-  if (s > -50) return 'Bajista';
-  return 'Muy Bajista';
-}
-
-function scoreToColor(s) {
-  if (s >  20) return '#22c55e';
-  if (s < -20) return '#ef4444';
-  return '#f59e0b';
-}
-
-// ─── ASSET DIRECTIONS ─────────────────────────────────────────────────────────
-
-function arrowCol(dir) {
-  return {
-    arrow: dir > 0 ? '↑' : dir < 0 ? '↓' : '→',
-    col:   dir > 0 ? '#22c55e' : dir < 0 ? '#ef4444' : '#8b90a0',
-  };
-}
-
-function getAssetDirections(group, ccy, effectiveDir) {
-  if (group === 'COMMODITY_OIL') {
-    const bull = effectiveDir > 0;
-    return OIL_ASSETS.map(a => {
-      const dir = bull ? a.bullOil : a.bearOil;
-      return { asset: a.asset, ...arrowCol(dir) };
-    });
-  }
-  if (group === 'COMMODITY_GAS') {
-    const bull = effectiveDir > 0;
-    return GAS_ASSETS.map(a => {
-      const dir = bull ? a.bullGas : a.bearGas;
-      return { asset: a.asset, ...arrowCol(dir) };
-    });
-  }
-
-  const map = CCY_ASSET_MAP[ccy] || CCY_ASSET_MAP['USD'];
-
-  return map.map(a => {
-    let dir;
-    if (group === 'INFLATION') {
-      dir = effectiveDir > 0 ? a.hawkish : effectiveDir < 0 ? a.dovish : 0;
-    } else {
-      dir = effectiveDir > 0 ? a.proCcy : effectiveDir < 0 ? a.antiCcy : 0;
-    }
-    return { asset: a.asset, ...arrowCol(dir) };
-  });
-}
-
-// ─── SCENARIOS TABLE ──────────────────────────────────────────────────────────
-// Genera el objeto de escenarios compatible con el render existente de App.jsx.
-// DÉBIL = dato débil del indicador (desde la perspectiva del indicador, no de la economía)
-// Para ANTI_CURRENCY (Claims): DÉBIL = pocas peticiones = BUENO para la divisa
-
-function buildScenarios(evType, group, ccy) {
-  const map = CCY_ASSET_MAP[ccy] || CCY_ASSET_MAP['USD'];
-
-  const CAT_MAP = {
-    PRO_CURRENCY:  { cat:'CRECIMIENTO',       col:'#10b981' },
-    ANTI_CURRENCY: { cat:'EMPLEO',             col:'#3b82f6' },
-    INFLATION:     { cat:'INFLACIÓN',          col:'#ef4444' },
-    COMMODITY_OIL: { cat:'ENERGÍA',            col:'#f59e0b' },
-    COMMODITY_GAS: { cat:'ENERGÍA',            col:'#f59e0b' },
-    RATE:          { cat:'POLÍTICA MONETARIA', col:'#f97316' },
-    BOND:          { cat:'BONOS',              col:'#6b7280' },
-  };
-
-  // Override per specific type
-  const CAT_OVERRIDE = {
-    PMI:'ADELANTADOS', CPI:'INFLACIÓN', PPI:'INFLACIÓN',
-    NFP:'EMPLEO', ADP:'EMPLEO', EMPLOYMENT:'EMPLEO',
-    CLAIMS:'EMPLEO', UNEMPLOYMENT_RATE:'EMPLEO',
-    GDP:'CRECIMIENTO', RETAIL:'CONSUMO', CONFIDENCE:'SENTIMIENTO',
-    TRADE:'COMERCIO', HOUSING:'VIVIENDA',
-  };
-  const meta   = TYPE_META[evType] || {};
-  const catObj = CAT_MAP[group] || { cat:'MACRO', col:'#6b7280' };
-  const cat    = CAT_OVERRIDE[evType] || catObj.cat;
-  const col    = catObj.col;
-
-  let assets, weak, inline, strong, result_up, result_down;
-  const N = n => Array(n).fill('⇄ Neutral');
-
-  if (group === 'COMMODITY_OIL') {
-    assets = OIL_ASSETS.map(a => a.asset);
-    // DÉBIL = menos inventario (alcista WTI), FUERTE = más inventario (bajista WTI)
-    // NOTE: inverse=true, so actual>forecast = bearish oil. FUERTE = muchos inventarios = bajista WTI
-    weak   = OIL_ASSETS.map(a => a.bullOil > 0 ? '↑ Sube' : '↓ Baja');  // DÉBIL = pocos = alcista WTI
-    strong = OIL_ASSETS.map(a => a.bullOil > 0 ? '↓ Baja' : '↑ Sube');  // FUERTE = muchos = bajista WTI
-    inline = N(assets.length);
-    result_up   = 'Inventarios por encima del consenso indican exceso de oferta. Bajista para WTI y Brent. El CAD puede ceder. El USD se beneficia levemente por menor presión inflacionaria.';
-    result_down = 'Inventarios menores de lo esperado señalan escasez de oferta o alta demanda. Alcista para WTI y Brent. El CAD se fortalece. Presión alcista sobre inflación.';
-    return { cat, col, assets, weak, inline, strong, result_up, result_down };
-  }
-
-  if (group === 'COMMODITY_GAS') {
-    assets = GAS_ASSETS.map(a => a.asset);
-    weak   = GAS_ASSETS.map(a => a.bullGas > 0 ? '↑ Sube' : '↓ Baja');
-    strong = GAS_ASSETS.map(a => a.bullGas > 0 ? '↓ Baja' : '↑ Sube');
-    inline = N(assets.length);
-    result_up   = 'Inyección de gas mayor de lo esperado indica exceso de oferta. Bajista para el precio del gas natural.';
-    result_down = 'Inyección menor de lo esperado indica demanda fuerte o menor producción. Alcista para el gas natural.';
-    return { cat, col, assets, weak, inline, strong, result_up, result_down };
-  }
-
-  // Standard CCY-based
-  assets = map.map(a => a.asset);
-  inline = N(assets.length);
-
-  if (group === 'ANTI_CURRENCY') {
-    // DÉBIL = pocas peticiones / tasa baja = BUENO para divisa → proCcy direction
-    weak   = map.map(a => a.proCcy > 0 ? '↑ Sube' : a.proCcy < 0 ? '↓ Baja' : '⇄ Neutral');
-    // FUERTE = muchas peticiones / tasa alta = MALO para divisa → antiCcy direction
-    strong = map.map(a => a.antiCcy > 0 ? '↑ Sube' : a.antiCcy < 0 ? '↓ Baja' : '⇄ Neutral');
-
-    if (evType === 'CLAIMS') {
-      result_up   = `Más peticiones de desempleo señalan deterioro laboral. Aumentan expectativas dovish: ${ccy} y yields bajan. Renta variable y oro pueden subir por expectativas de recortes.`;
-      result_down = `Pocas peticiones confirman mercado laboral fuerte. Expectativas hawkish: ${ccy} y yields al alza. Activos de riesgo bajo presión por menor probabilidad de recortes.`;
-    } else {
-      result_up   = `Tasa de desempleo mayor de lo esperado señala deterioro laboral. Presión bajista sobre ${ccy}.`;
-      result_down = `Tasa de desempleo menor de lo esperado confirma fortaleza laboral. Refuerza ${ccy}.`;
-    }
-    return { cat, col, assets, weak, inline, strong, result_up, result_down };
-  }
-
-  if (group === 'INFLATION') {
-    // DÉBIL = inflación baja = dovish → dovish direction
-    weak   = map.map(a => a.dovish > 0 ? '↑ Sube' : a.dovish < 0 ? '↓ Baja' : '⇄ Neutral');
-    // FUERTE = inflación alta = hawkish → hawkish direction
-    strong = map.map(a => a.hawkish > 0 ? '↑ Sube' : a.hawkish < 0 ? '↓ Baja' : '⇄ Neutral');
-
-    const banco = ccy==='USD'?'Fed':ccy==='EUR'?'BCE':ccy==='GBP'?'BOE':ccy==='JPY'?'BOJ':ccy==='CAD'?'BOC':ccy==='AUD'?'RBA':'banco central';
-    result_up   = `Inflación por encima del consenso activa escenario hawkish. El ${banco} puede mantener o subir tipos. ${ccy} y yields al alza. Renta variable bajo presión.`;
-    result_down = `Inflación inferior al consenso refuerza expectativas de recorte. Presión bajista sobre ${ccy} y yields. Renta variable y oro pueden beneficiarse.`;
-    return { cat, col, assets, weak, inline, strong, result_up, result_down };
-  }
-
-  // PRO_CURRENCY (default)
-  weak   = map.map(a => a.antiCcy > 0 ? '↑ Sube' : a.antiCcy < 0 ? '↓ Baja' : '⇄ Neutral');
-  strong = map.map(a => a.proCcy  > 0 ? '↑ Sube' : a.proCcy  < 0 ? '↓ Baja' : '⇄ Neutral');
-
-  const zona = ccy==='USD'?'estadounidense':ccy==='EUR'?'europeo':ccy==='GBP'?'británico':ccy==='JPY'?'japonés':ccy==='CAD'?'canadiense':ccy==='AUD'?'australiano':ccy;
-
-  // Specific texts per type
-  const texts = {
-    NFP:    ['Nóminas fuertes refuerzan el mercado laboral. USD y yields al alza. La Fed puede mantener tipos restrictivos más tiempo. Oro bajo presión.',
-             'Creación de empleo débil aumenta presión para recortes. USD y yields bajan. Oro y activos refugio se benefician.'],
-    ADP:    [`ADP fuerte anticipa NFP sólido. ${ccy} al alza.`, `ADP débil genera dudas sobre el viernes. ${ccy} bajo presión.`],
-    PMI:    [`PMI por encima de 50 indica expansión del sector ${zona}. Fortalece ${ccy} y apoya renta variable local. Activos refugio pueden ceder.`,
-             `PMI bajo 50 señala contracción. Debilita ${ccy} y presiona la bolsa. Oro y bonos soberanos como refugio.`],
-    GDP:    [`PIB fuerte confirma solidez económica. Reduce expectativas de recortes y refuerza ${ccy}, la bolsa y los rendimientos del bono.`,
-             `PIB débil aumenta probabilidad de recortes. Debilita ${ccy} y puede generar presión en renta variable.`],
-    RETAIL: [`Ventas minoristas fuertes reflejan consumo sólido. Positivo para ${ccy} y renta variable local.`,
-             `Ventas débiles sugieren desaceleración del consumo. Señal negativa para ${ccy} y bolsa.`],
-    EMPLOYMENT: [`Dato laboral fuerte respalda ${ccy} y puede mantener postura restrictiva del banco central.`,
-                 `Dato laboral débil genera presión para relajar la política monetaria. Debilita ${ccy}.`],
-  };
-  const t = texts[evType] || [
-    `Dato por encima del consenso refuerza la economía ${zona} y fortalece ${ccy}. Activos de riesgo al alza.`,
-    `Dato por debajo del consenso señala desaceleración. Presiona ${ccy} y activos de riesgo locales.`,
-  ];
-  result_up   = t[0];
-  result_down = t[1];
-  return { cat, col, assets, weak, inline, strong, result_up, result_down };
-}
-
-// ─── REGIME LABEL ─────────────────────────────────────────────────────────────
-
-function getRegime(evType, group, surprise, actual) {
-  if (!surprise) return null;
-  const up  = surprise.dir > 0;
-  const inv = TYPE_META[evType]?.inverse ?? false;
-  // Effective economic impact: positive = good for economy/currency
-  const econ = inv ? -surprise.dir : surprise.dir;
-
-  if (group === 'INFLATION') {
-    return up
-      ? { label:'HAWKISH', color:'#ef4444', bg:'rgba(239,68,68,0.12)', icon:'🔴', desc:'Inflación alta → banco central restrictivo → USD/yields al alza' }
-      : { label:'DOVISH',  color:'#22c55e', bg:'rgba(34,197,94,0.12)',  icon:'🟢', desc:'Inflación baja → expectativas de recortes → activos de riesgo al alza' };
-  }
-  if (group === 'ANTI_CURRENCY') {
-    return up
-      ? { label:'DOVISH',  color:'#22c55e', bg:'rgba(34,197,94,0.12)',  icon:'🟢', desc:`Dato alto = señal negativa para la economía → expectativas dovish → divisa baja` }
-      : { label:'HAWKISH', color:'#ef4444', bg:'rgba(239,68,68,0.12)', icon:'🔴', desc:`Dato bajo = señal positiva para la economía → mercado laboral fuerte` };
-  }
-  if (group === 'COMMODITY_OIL') {
-    return up
-      ? { label:'BAJISTA WTI', color:'#ef4444', bg:'rgba(239,68,68,0.12)', icon:'🔴', desc:'Exceso de inventario → mayor oferta → presión bajista sobre el petróleo' }
-      : { label:'ALCISTA WTI', color:'#22c55e', bg:'rgba(34,197,94,0.12)', icon:'🟢', desc:'Déficit de inventario → menor oferta → soporte para el precio del crudo' };
-  }
-  if (evType === 'PMI') {
-    const a = parseNum(actual);
-    if (!isNaN(a)) {
-      if (a >= 55) return { label:'EXPANSIÓN FUERTE', color:'#22c55e', bg:'rgba(34,197,94,0.12)', icon:'🟢', desc:'PMI ≥55: crecimiento sólido' };
-      if (a >= 50) return { label:'EXPANSIÓN',        color:'#84cc16', bg:'rgba(132,204,22,0.12)', icon:'🟡', desc:'PMI ≥50: sector en expansión' };
-      if (a >= 45) return { label:'CONTRACCIÓN',      color:'#f97316', bg:'rgba(249,115,22,0.12)', icon:'🟠', desc:'PMI <50: sector en contracción' };
-      return              { label:'RECESIÓN',          color:'#ef4444', bg:'rgba(239,68,68,0.12)', icon:'🔴', desc:'PMI <45: contracción severa' };
-    }
-  }
-  // Default: positive economic impact
-  return econ > 0
-    ? { label:'POSITIVO', color:'#22c55e', bg:'rgba(34,197,94,0.12)',  icon:'🟢', desc:'Dato mejor de lo esperado → fortaleza económica' }
-    : { label:'NEGATIVO', color:'#ef4444', bg:'rgba(239,68,68,0.12)', icon:'🔴', desc:'Dato peor de lo esperado → señal de debilidad' };
-}
-
-// ─── TEMPORAL HORIZON ─────────────────────────────────────────────────────────
-
-function getHorizon(evType, surprisePct) {
-  const abs = Math.abs(surprisePct || 0);
-  const im  = abs >= 2 ? '1–3 min' : abs >= 0.5 ? '2–5 min' : '5–15 min';
-  const id  = abs >= 2 ? 'sesión completa' : 'resto de sesión';
-  const notes = {
-    NFP:              'Evento de máxima relevancia macro — puede re-pricear la curva de tipos durante días',
-    CPI:              'Alta volatilidad inicial — movimiento puede sostenerse si confirma cambio de narrativa',
-    RATE_DECISION:    'Impacto sostenido en curva de tipos y divisas durante días',
-    CB_MINUTES:       'Puede generar re-pricing de expectativas de tipos a corto y medio plazo',
-    GDP:              'Dato revisable — reacción inicial puede revertirse con la segunda estimación',
-    ADP:              'Indicador previo del NFP — efecto limitado sin sesgo de mercado claro',
-    CLAIMS:           'Dato semanal laboral — peso menor que NFP mensual, pero mueve expectativas dovish/hawkish',
-    PPI:              'Indicador adelantado de CPI — vigilar si diverge del dato de inflación al consumidor',
-    PMI:              'Indicador adelantado de actividad — mueve expectativas de crecimiento a 1–2 meses',
-    OIL:              'Impacto directo en WTI/Brent — reversa posible si datos previos ya estaban descontados',
-    NAT_GAS:          'Mueve gas natural directamente — efecto en utilities y energéticas',
-  };
-  const macro = {
-    NFP:'2–5 días', CPI:'1–3 días', RATE_DECISION:'3–7 días', CB_MINUTES:'2–4 días',
-    GDP:'2–4 días', CLAIMS:'1–2 días', PMI:'1–2 días', PPI:'1–3 días',
-    OIL:'1–2 días', NAT_GAS:'1 día',
-  };
-  return {
-    immediate: im,
-    intraday:  id,
-    macro:     macro[evType] || '< 1 día',
-    note:      notes[evType] || 'Monitorizar reacción del mercado en los primeros minutos tras el dato',
-  };
-}
-
-// ─── CONFIDENCE BADGE ─────────────────────────────────────────────────────────
-
-function getConfidence(surprisePct, evType) {
-  const abs = Math.abs(surprisePct || 0);
-  const hi  = new Set(['NFP','CPI','RATE_DECISION','GDP']).has(evType);
-  if (abs >= 2.0 || (abs >= 1.0 && hi)) return { label:'Confianza alta',  color:'#22c55e', bg:'rgba(34,197,94,0.12)'  };
-  if (abs >= 0.5)                        return { label:'Confianza media', color:'#f59e0b', bg:'rgba(245,158,11,0.12)' };
-  if (abs >= 0.1)                        return { label:'Confianza baja',  color:'#f97316', bg:'rgba(249,115,22,0.12)' };
-  return                                        { label:'Sin sorpresa',     color:'#8b90a0', bg:'rgba(139,144,160,0.12)'};
-}
-
-// ─── EXPLANATION ──────────────────────────────────────────────────────────────
-
-function buildExplanation(evType, group, ccy, surprise, delta, surpriseDir_effective) {
-  if (!surprise) return null;
-  const sfmt = v => `${v.dir>0?'+':''}${v.raw.toFixed(2)} (${v.dir>0?'+':''}${v.pct.toFixed(2)}%)`;
-  const impAbs = Math.abs(surprise.pct);
-  const impLabel = impAbs < 0.3 ? 'en línea' : impAbs < 1 ? 'moderado' : impAbs < 2 ? 'fuerte' : 'extremo';
-  const parts = [];
-
-  if (surprise.dir > 0)
-    parts.push(`Dato <strong>superior al consenso</strong> en ${sfmt(surprise)} — impacto ${impLabel}.`);
-  else if (surprise.dir < 0)
-    parts.push(`Dato <strong>inferior al consenso</strong> en ${sfmt(surprise)} — impacto ${impLabel}.`);
-  else
-    parts.push(`Dato <strong>en línea con el consenso</strong>. Impacto de mercado limitado.`);
-
-  if (delta && delta.raw !== 0) {
-    const vs = delta.dir > 0 ? 'Mejora' : 'Deterioro';
-    parts.push(`${vs} vs dato anterior de ${sfmt(delta)}.`);
-  }
-
-  // Group-specific context
-  if (group === 'ANTI_CURRENCY' && evType === 'CLAIMS') {
-    if (surpriseDir_effective < 0) parts.push(`Dato peor de lo esperado.`);
-    else parts.push(`Dato mejor de lo esperado.`);
-  }
-
-  return parts.join(' ');
-}
-
-// ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
-
-/**
- * getIndicatorLogic — función principal del motor de lógica macro
- *
- * @param {string} eventName  - nombre del evento (e.g. "ISM Services PMI")
- * @param {string} currency   - moneda del país (e.g. "USD", "EUR")
- * @param {any}    actual     - dato publicado
- * @param {any}    forecast   - previsión/consenso
- * @param {any}    previous   - dato anterior
- * @returns {object}          - objeto completo con toda la lógica para el render
- */
-function getIndicatorLogic(eventName, currency, actual, forecast, previous) {
-  const evType  = detectType(eventName);
-  const meta    = TYPE_META[evType] || { group:'PRO_CURRENCY', inverse:false, tier:'low' };
-  const group   = meta.group;
-  const ccy     = (currency || 'USD').toUpperCase();
-
-  const surprise = calcSurp(actual, forecast);
-  const delta    = calcDelta(actual, previous);
-
-  // biasScore: from currency/commodity perspective
-  // For ANTI_CURRENCY: high actual = bad = negative score
-  // For COMMODITY_OIL: high inventory = bearish WTI = negative score
-  const rawScore     = calcScore(surprise, delta, meta);
-  const biasScore    = rawScore;
-  const biasLabel    = scoreToLabel(biasScore);
-  const biasColor    = scoreToColor(biasScore);
-  const primaryBias  = biasScore > 15 ? 'bullish' : biasScore < -15 ? 'bearish' : 'neutral';
-
-  // Effective economic direction (what the data means economically)
-  // For PRO_CURRENCY: surprise.dir > 0 = economically positive
-  // For ANTI_CURRENCY: surprise.dir > 0 = economically negative → flip
-  const econDir      = surprise ? (meta.inverse ? -surprise.dir : surprise.dir) : 0;
-
-  // Asset directions based on economic impact
-  const affectedAssets = surprise
-    ? getAssetDirections(group, ccy, econDir * (group === 'INFLATION' ? 1 : 1))
-    : [];
-
-  // Special: for INFLATION, effectiveDir is econDir (surprise.dir, no inversion)
-  const scenarioAssetDir = group === 'INFLATION'
-    ? (surprise?.dir || 0)
-    : econDir;
-
-  const scenarios  = (evType && group !== 'QUALITATIVE')
-    ? buildScenarios(evType, group, ccy)
-    : null;
-
-  const regime     = getRegime(evType, group, surprise, actual);
-  const horizon    = surprise ? getHorizon(evType, surprise.pct) : null;
-  const confidence = surprise ? getConfidence(surprise.pct, evType) : null;
-  const explanation = buildExplanation(evType, group, ccy, surprise, delta, econDir);
-
-  return {
-    // Identification
-    evType,
-    group,
-
-    // Scores
-    biasScore,
-    biasLabel,
-    primaryBias,
-    biasColor,
-
-    // Raw calculations
-    surprise,
-    delta,
-    econDir,
-
-    // UI helpers
-    regime,
-    affectedAssets,
-    scenarios,
-    horizon,
-    confidence,
-    explanation,
-
-    // For App.jsx backward-compat
-    macroScore: surprise ? { score: biasScore, label: biasLabel, color: biasColor } : null,
-  };
-}
-
-// Named re-exports for individual use in App.jsx if needed
-
-
-// ─── END MARKET LOGIC ENGINE ────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-// Fuente única de verdad para auth: Google Apps Script (GAS)
-// El GAS soporta: tipo=registro | tipo=login | tipo=bug
-// No usar /api/auth.js — ese proxy fue descartado porque el GAS ya hace todo.
-const GAS_URL   = "https://script.google.com/macros/s/AKfycbyM1DDfqukrE0agkGXbZWejTKFaRE6QCOHfxtiZNnUPGvhH2TAAhSzD7QtMzzRXwo50/exec";
-const STORAGE_KEY = "cot_user_registered";
-
-// ─── normalizeEmail ──────────────────────────────────────────────────────────
-// Función única de normalización de email — usada en LOGIN y REGISTRO.
-// Elimina espacios, caracteres invisibles (frecuentes en móvil con Translate), unicode.
-function normalizeEmail(email) {
-  return String(email || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\u200B/g, "")   // zero-width space
-    .replace(/\u00A0/g, "")   // non-breaking space
-    .replace(/\uFEFF/g, "")   // BOM
-    .normalize("NFKC");       // normalización unicode completa
-}
-
-// ─── jsonpRequest ────────────────────────────────────────────────────────────
-// JSONP para evitar CORS al llamar Google Apps Script desde el browser.
-// El GAS debe responder con ContentService.MimeType.JAVASCRIPT + callback(data).
-function jsonpRequest(url) {
-  return new Promise((resolve, reject) => {
-    const callbackName = "cb_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-
-    const script = document.createElement("script");
-
-    const timeoutId = setTimeout(() => {
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error("JSONP timeout"));
-    }, 12000);
-
-    window[callbackName] = (data) => {
-      clearTimeout(timeoutId);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      resolve(data);
-    };
-
-    script.onerror = () => {
-      clearTimeout(timeoutId);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error("JSONP failed"));
-    };
-
-    script.src = `${url}&callback=${callbackName}`;
-    document.body.appendChild(script);
-  });
-}
+// Auth: Supabase (see src/lib/authService.js + src/components/AuthProvider.jsx)
+// GAS_URL removed — no longer used for auth
+// STORAGE_KEY removed — session managed by Supabase, not localStorage
+const STORAGE_KEY = "cot_user_registered"; // kept for dark/lang prefs only
 // ─────────────────────────────────────────────────────────────────────────────
 const CONTRACT_MAP = [
   { keys: ["EURO FX - CHICAGO MERCANTILE", "EURO FX - CHICAGO"],           pair: "EUR/USD",   cat: "fx", invert: false },
@@ -831,6 +217,215 @@ function StrengthDots({strength}) {
   );
 }
 
+// ─── INSTITUTIONAL BIAS CARD ──────────────────────────────────────────────────
+function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!biasResult) return null;
+
+  const {
+    score = 0,
+    label = 'Neutral / Range',
+    direction = 'neutral',
+    color = '#94a3b8',
+    recommendation = 'Waiting for new COT data',
+    breakdown = {},
+  } = biasResult || {};
+
+  // Gauge: map -5..+5 to 0..100%
+  const pct = ((score + 5) / 10) * 100;
+
+  // Track colors
+  const trackBg = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+  // Gradient based on score
+  const barGradient = score > 0
+    ? `linear-gradient(90deg, ${trackBg} 0%, ${trackBg} 50%, ${color}CC 50%, ${color} ${pct}%)`
+    : `linear-gradient(90deg, ${color} ${pct}%, ${color}CC ${pct}%, ${trackBg} 50%, ${trackBg} 100%)`;
+
+  // Breakdown items
+  const rows = [
+    { key: 'Leveraged Flow',    val: breakdown?.leveragedFlow  ?? 0 },
+    { key: 'Divergence',        val: breakdown?.divergence     ?? 0 },
+    { key: 'Historical Extreme',val: breakdown?.percentile     ?? 0 },
+    { key: 'Asset Managers',    val: breakdown?.assetManagers  ?? 0 },
+    { key: 'Dealers Filter',    val: breakdown?.dealers        ?? 0 },
+  ];
+
+  const fmtVal = v => v > 0 ? `+${v}` : `${v}`;
+  const fmtColor = v => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : T.sub;
+
+  return (
+    <div style={{
+      background: T.card,
+      border: `1px solid ${color}55`,
+      borderRadius: 14,
+      padding: isMobile ? '14px 14px' : '18px 20px',
+      marginBottom: 12,
+      boxShadow: `0 0 0 1px ${color}22, 0 4px 20px rgba(0,0,0,0.15)`,
+    }}>
+      {/* Header row */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{
+            width:6, height:6, borderRadius:'50%',
+            background: color, boxShadow: `0 0 6px ${color}`,
+            animation: 'nowPulse 2s ease infinite',
+          }}/>
+          <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:'0.09em'}}>
+            INSTITUTIONAL BIAS ENGINE
+          </span>
+        </div>
+        <span style={{fontSize:10,color:T.sub2,background:T.card2,border:`1px solid ${T.border}`,
+          padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em'}}>SEMANAL · HTF</span>
+      </div>
+
+      {/* Score + Label */}
+      <div style={{display:'flex',alignItems:'center',gap:isMobile?12:20,marginBottom:16}}>
+        <div style={{
+          width: isMobile ? 56 : 68, height: isMobile ? 56 : 68,
+          borderRadius: '50%',
+          border: `3px solid ${color}`,
+          display:'flex',alignItems:'center',justifyContent:'center',
+          background: `${color}18`,
+          flexShrink: 0,
+          boxShadow: `0 0 16px ${color}40`,
+        }}>
+          <span style={{fontSize: isMobile ? 24 : 30, fontWeight:800, color, lineHeight:1}}>
+            {score > 0 ? `+${score}` : score}
+          </span>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize: isMobile ? 16 : 18, fontWeight:700, color, marginBottom:4}}>{label}</div>
+          <div style={{fontSize: isMobile ? 11 : 12, color:T.sub, lineHeight:1.5}}>{recommendation}</div>
+        </div>
+      </div>
+
+      {/* Gauge bar — thermometer -5 ◀═══●═══▶ +5 */}
+      <div style={{marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+          <span style={{fontSize:10,color:T.sub2,fontWeight:700}}>−5</span>
+          <span style={{fontSize:10,color:T.sub2,fontWeight:600,opacity:0.6}}>BEARISH ←  → BULLISH</span>
+          <span style={{fontSize:10,color:T.sub2,fontWeight:700}}>+5</span>
+        </div>
+        <div style={{position:'relative',height:10,borderRadius:99,background:trackBg,overflow:'visible'}}>
+          {/* Colored fill */}
+          <div style={{
+            position:'absolute',
+            top:0, bottom:0,
+            left: score >= 0 ? '50%' : `${pct}%`,
+            width: score >= 0 ? `${(score/10)*100}%` : `${(Math.abs(score)/10)*100}%`,
+            background: color,
+            borderRadius:99,
+            transition:'width 0.6s ease, left 0.6s ease',
+          }}/>
+          {/* Center line */}
+          <div style={{position:'absolute',left:'50%',top:-2,bottom:-2,width:2,
+            background:T.border,transform:'translateX(-50%)',borderRadius:1}}/>
+          {/* Needle */}
+          <div style={{
+            position:'absolute',
+            left:`${pct}%`,
+            top:'50%',
+            transform:'translate(-50%,-50%)',
+            width:16, height:16, borderRadius:'50%',
+            background:color,
+            border:`2px solid ${T.bg}`,
+            boxShadow:`0 0 8px ${color}`,
+            transition:'left 0.6s ease',
+            zIndex:2,
+          }}/>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+          {[-5,-4,-3,-2,-1,0,1,2,3,4,5].map(n=>(
+            <span key={n} style={{
+              fontSize:8,
+              color: n===score ? color : T.sub2,
+              fontWeight: n===score ? 800 : 400,
+            }}>{n}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Breakdown toggle */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width:'100%',background:'transparent',border:`1px solid ${T.border}`,
+          borderRadius:8,padding:'7px 12px',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+          color:T.sub,fontSize:11,fontWeight:600,
+          transition:'border-color 0.2s',
+          borderColor: expanded ? `${color}60` : T.border,
+        }}>
+        <span>{expanded ? 'Ocultar desglose' : 'Ver desglose de factores'}</span>
+        <span style={{fontSize:9,display:'inline-block',transform:expanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.25s ease'}}>▼</span>
+      </button>
+
+      {/* Breakdown rows */}
+      {expanded && (
+        <div style={{
+          marginTop:10,
+          overflow:'hidden',
+          animation:'fadeIn 0.2s ease',
+        }}>
+          <div style={{
+            background:T.card2,borderRadius:10,
+            border:`1px solid ${T.border}`,
+            overflow:'hidden',
+          }}>
+            {rows.map((r,i) => (
+              <div key={r.key} style={{
+                display:'flex',alignItems:'center',justifyContent:'space-between',
+                padding:'9px 14px',
+                borderBottom: i < rows.length-1 ? `1px solid ${T.border}` : 'none',
+                background: i%2===0 ? 'transparent' : `rgba(255,255,255,${darkMode?'0.02':'0.04'})`,
+              }}>
+                <span style={{fontSize:12,color:T.sub,fontWeight:500}}>{r.key}</span>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  {/* Mini bar for this factor */}
+                  <div style={{display:'flex',gap:2,alignItems:'center'}}>
+                    {[-2,-1,0,1,2].map(n => (
+                      <div key={n} style={{
+                        width:8,height:8,borderRadius:2,
+                        background: (r.val >= 0 && n > 0 && n <= r.val)
+                          ? '#22c55e'
+                          : (r.val <= 0 && n < 0 && n >= r.val)
+                          ? '#ef4444'
+                          : n === 0
+                          ? T.border
+                          : `rgba(150,150,150,0.15)`,
+                        transition:'background 0.3s',
+                      }}/>
+                    ))}
+                  </div>
+                  <span style={{
+                    fontSize:13,fontWeight:700,
+                    color:fmtColor(r.val),
+                    minWidth:24,textAlign:'right',
+                    fontVariantNumeric:'tabular-nums',
+                  }}>{fmtVal(r.val)}</span>
+                </div>
+              </div>
+            ))}
+            {/* Total row */}
+            <div style={{
+              display:'flex',alignItems:'center',justifyContent:'space-between',
+              padding:'10px 14px',
+              background: `${color}14`,
+              borderTop:`1px solid ${color}30`,
+            }}>
+              <span style={{fontSize:12,fontWeight:700,color:T.txt}}>BIAS SCORE</span>
+              <span style={{fontSize:18,fontWeight:800,color,fontVariantNumeric:'tabular-nums'}}>
+                {score > 0 ? `+${score}` : score}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MiniSparkline({values,positive}) {
   if (!values||values.length<2) return null;
   const min=Math.min(...values),max=Math.max(...values),range=max-min||1;
@@ -850,371 +445,6 @@ function MiniSparkline({values,positive}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN SCREEN  — for returning users who already have a plan
 // ─────────────────────────────────────────────────────────────────────────────
-function LoginScreen({onLogin, onNewAccount}) {
-  const [email,   setEmail]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
-
-  const handleLogin = async () => {
-    // ── normalizeEmail: trim + lowercase + eliminar caracteres invisibles ──
-    // Crítico: Google Translate en móvil puede añadir caracteres unicode ocultos
-    const emailClean = normalizeEmail(email);
-    console.log("[LOGIN INPUT]", emailClean); // debug — verificar email enviado
-
-    if (!emailClean || !emailClean.includes("@") || !emailClean.includes(".")) {
-      setError("Introduce un email válido."); return;
-    }
-    setLoading(true); setError("");
-    try {
-      // JSONP — evita CORS al llamar GAS directamente desde el browser
-      // GAS responde: { ok: true, nombre, email, plan, trialEnd } | { ok: false, msg }
-      const data = await jsonpRequest(
-        `${GAS_URL}?tipo=login&email=${encodeURIComponent(emailClean)}`
-      );
-      console.log("[LOGIN RESPONSE]", data); // debug
-
-      if (data?.ok) {
-        const userData = {
-          nombre:   data.nombre   || emailClean.split("@")[0],
-          email:    emailClean,
-          plan:     data.plan     || "Activo",
-          trialEnd: data.trialEnd || "",
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-        onLogin(userData);
-      } else {
-        setError(data?.msg || "Correo electrónico no encontrado. ¿Ya tienes cuenta? Verifica el correo electrónico o regístrate.");
-      }
-    } catch {
-      setError("Error de conexión. Comprueba tu internet e inténtalo de nuevo.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",background:"#f2f2f7",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} input:focus{outline:none!important;border-color:#0066cc!important;box-shadow:0 0 0 3px rgba(0,102,204,0.12)!important;}`}</style>
-      <div style={{background:"white",borderBottom:"1px solid #e5e5ea",padding:"14px 20px",display:"flex",alignItems:"center",gap:10}}>
-        <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#0066cc,#0077ed)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 3px 10px rgba(0,102,204,0.25)"}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <span style={{fontSize:16,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.3px"}}>COT Tracker</span>
-        <span style={{marginLeft:"auto",fontSize:11,color:"#8e8e93",background:"#f2f2f7",padding:"3px 10px",borderRadius:99}}>by MarketMoneyFX</span>
-      </div>
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 20px"}}>
-        <div style={{width:"100%",maxWidth:400,animation:"fadeIn 0.4s ease"}}>
-          <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{width:64,height:64,borderRadius:20,background:"linear-gradient(135deg,#0066cc,#0077ed)",
-              display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",
-              boxShadow:"0 8px 24px rgba(0,102,204,0.3)"}}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.5px"}}>Bienvenido de nuevo</h1>
-            <p style={{margin:0,fontSize:14,color:"#8e8e93"}}>Accede con tu email registrado</p>
-          </div>
-
-          <div style={{background:"white",borderRadius:20,padding:"22px 20px",boxShadow:"0 2px 16px rgba(0,0,0,0.08)"}}>
-            {error&&<div style={{background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#c0392b"}}>{error}</div>}
-            <div style={{marginBottom:18}}>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:6,letterSpacing:"0.04em",textTransform:"uppercase"}}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                placeholder="tu@email.com" onKeyDown={e=>e.key==="Enter"&&handleLogin()}
-                style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"1.5px solid #e5e5ea",fontSize:15,color:"#1c1c1e",background:"#f9f9fb",boxSizing:"border-box",fontFamily:"inherit",transition:"all 0.2s"}}/>
-            </div>
-            <button onClick={handleLogin} disabled={loading} style={{
-              width:"100%",padding:"14px",borderRadius:14,border:"none",cursor:loading?"not-allowed":"pointer",
-              background:loading?"#c7e0f4":"linear-gradient(135deg,#0066cc,#0077ed)",
-              color:"white",fontSize:15,fontWeight:700,boxShadow:loading?"none":"0 4px 16px rgba(0,102,204,0.35)",transition:"all 0.2s"}}>
-              {loading?"Entrando…":"Acceder →"}
-            </button>
-          </div>
-
-          <div style={{marginTop:16,textAlign:"center"}}>
-            <p style={{margin:0,fontSize:13,color:"#8e8e93"}}>
-              ¿No tienes cuenta?{" "}
-              <button onClick={onNewAccount} style={{background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontWeight:600,fontSize:13,padding:0}}>
-                Ver planes →
-              </button>
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PRICING CONFIG
-// ─────────────────────────────────────────────────────────────────────────────
-const PLANS = [
-  { id:"trial",    label:"Trial",      period:"7 días gratis",      price:0,      priceLabel:"Gratis",   perMonth:null,         discount:null,  badge:null,           highlight:false, paypalUrl:null,
-    features:["Acceso completo 7 días","Todos los pares FX","Señales institucionales","Sin tarjeta de crédito"], cta:"Empezar gratis" },
-  { id:"monthly",  label:"Mensual",    period:"por mes",            price:19.99,  priceLabel:"$19.99",   perMonth:null,         discount:null,  badge:null,           highlight:false, paypalUrl:"https://www.paypal.com/ncp/payment/PAHQ48GCL2GME",
-    features:["Acceso completo","8 pares FX","Señales + sparklines","Evolución semanal"], cta:"Pagar con PayPal" },
-  { id:"quarterly",label:"Trimestral", period:"cada 3 meses",       price:49.99,  priceLabel:"$49.99",   perMonth:"$16.66/mes", discount:"−17%", badge:null,           highlight:false, paypalUrl:"https://www.paypal.com/ncp/payment/56D3KLQFHLHTA",
-    features:["Todo lo del mensual","Ahorro de $10","Análisis de tendencia","Soporte prioritario"], cta:"Pagar con PayPal" },
-  { id:"biannual", label:"Semestral",  period:"cada 6 meses",       price:89.99,  priceLabel:"$89.99",   perMonth:"$15.00/mes", discount:"−25%", badge:"MÁS POPULAR",  highlight:true,  paypalUrl:"https://www.paypal.com/ncp/payment/C6WHM2L785UXA",
-    features:["Todo lo del trimestral","Ahorro de $30","Acceso a comunidad","Alertas semanales"], cta:"Pagar con PayPal" },
-  { id:"annual",   label:"Anual",      period:"al año",             price:149.99, priceLabel:"$149.99",  perMonth:"$12.50/mes", discount:"−37%", badge:"MEJOR VALOR",  highlight:false, paypalUrl:"https://www.paypal.com/ncp/payment/29TJHXYBYHFNY",
-    features:["Todo incluido","Ahorro de $90","Comunidad VIP","Copytrading access"], cta:"Pagar con PayPal" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PRICING SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
-function PricingScreen({onSelectPlan}) {
-  const [selected, setSelected] = useState("biannual");
-  const plan = PLANS.find(p=>p.id===selected);
-  return (
-    <div style={{fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",background:"#f2f2f7",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
-      {/* Top bar */}
-      <div style={{background:"white",borderBottom:"1px solid #e5e5ea",padding:"14px 20px",display:"flex",alignItems:"center",gap:10}}>
-        <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#0066cc,#0077ed)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 3px 10px rgba(0,102,204,0.25)"}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <span style={{fontSize:16,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.3px"}}>COT Tracker</span>
-        <span style={{marginLeft:"auto",fontSize:11,color:"#8e8e93",background:"#f2f2f7",padding:"3px 10px",borderRadius:99}}>by MarketMoneyFX</span>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"24px 16px 48px"}}>
-        <div style={{maxWidth:480,margin:"0 auto",animation:"fadeIn 0.4s ease"}}>
-          {/* Header */}
-          <div style={{textAlign:"center",marginBottom:24}}>
-            <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(0,102,204,0.08)",border:"1px solid rgba(0,102,204,0.15)",borderRadius:99,padding:"4px 14px",marginBottom:12}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:"#34c759",display:"inline-block"}}/>
-              <span style={{fontSize:11,fontWeight:600,color:"#0066cc",letterSpacing:"0.05em"}}>SEÑALES INSTITUCIONALES EN TIEMPO REAL</span>
-            </div>
-            <h1 style={{margin:"0 0 8px",fontSize:24,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.5px"}}>Elige tu plan</h1>
-            <p style={{margin:0,fontSize:14,color:"#8e8e93",lineHeight:1.5}}>Empieza gratis 7 días · Sin tarjeta de crédito · Cancela cuando quieras</p>
-          </div>
-          {/* Plan selector pills */}
-          <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
-            {PLANS.map(p=>(
-              <button key={p.id} onClick={()=>setSelected(p.id)} style={{
-                padding:"7px 14px",borderRadius:99,border:`1.5px solid ${selected===p.id?"#0066cc":"#e5e5ea"}`,
-                background:selected===p.id?"#0066cc":"white",color:selected===p.id?"white":"#3c3c43",
-                fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,transition:"all 0.15s",
-              }}>
-                {p.label}{p.discount&&<span style={{marginLeft:5,fontSize:10,opacity:0.85}}>{p.discount}</span>}
-              </button>
-            ))}
-          </div>
-          {/* Selected plan card */}
-          <div style={{
-            background:plan.highlight?"linear-gradient(135deg,#0066cc,#0055aa)":"white",
-            borderRadius:22,padding:"24px",marginBottom:16,position:"relative",overflow:"hidden",
-            boxShadow:plan.highlight?"0 8px 32px rgba(0,102,204,0.35)":"0 2px 16px rgba(0,0,0,0.08)",
-            border:plan.highlight?"none":"1.5px solid #e5e5ea",
-          }}>
-            {plan.badge&&(
-              <div style={{position:"absolute",top:16,right:16,
-                background:plan.highlight?"rgba(255,255,255,0.2)":"rgba(0,102,204,0.1)",
-                color:plan.highlight?"white":"#0066cc",fontSize:9,fontWeight:700,letterSpacing:"0.08em",padding:"3px 10px",borderRadius:99}}>
-                {plan.badge}
-              </div>
-            )}
-            <div style={{marginBottom:16}}>
-              <p style={{margin:"0 0 4px",fontSize:13,fontWeight:600,color:plan.highlight?"rgba(255,255,255,0.7)":"#8e8e93"}}>{plan.label}</p>
-              <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-                <span style={{fontSize:38,fontWeight:700,color:plan.highlight?"white":"#1c1c1e",letterSpacing:"-1px"}}>{plan.priceLabel}</span>
-                {plan.price>0&&<span style={{fontSize:13,color:plan.highlight?"rgba(255,255,255,0.6)":"#8e8e93"}}>{plan.period}</span>}
-              </div>
-              {plan.perMonth&&<p style={{margin:"4px 0 0",fontSize:12,color:plan.highlight?"rgba(255,255,255,0.7)":"#8e8e93"}}>equivale a {plan.perMonth}</p>}
-            </div>
-            <div style={{marginBottom:20}}>
-              {plan.features.map((f,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-                    background:plan.highlight?"rgba(255,255,255,0.2)":"rgba(52,199,89,0.15)"}}>
-                    <span style={{fontSize:10,color:plan.highlight?"white":"#34c759"}}>✓</span>
-                  </div>
-                  <span style={{fontSize:13,color:plan.highlight?"rgba(255,255,255,0.9)":"#3c3c43"}}>{f}</span>
-                </div>
-              ))}
-            </div>
-            <button onClick={()=>onSelectPlan(plan)} style={{
-              width:"100%",padding:"14px",borderRadius:14,border:"none",cursor:"pointer",
-              background:plan.highlight?"white":"linear-gradient(135deg,#0066cc,#0077ed)",
-              color:plan.highlight?"#0066cc":"white",fontSize:15,fontWeight:700,letterSpacing:"-0.1px",
-              boxShadow:plan.highlight?"0 4px 16px rgba(0,0,0,0.15)":"0 4px 16px rgba(0,102,204,0.35)",
-              transition:"all 0.2s",
-            }}>{plan.cta} →</button>
-          </div>
-          {/* Comparison list */}
-          <div style={{background:"white",borderRadius:18,padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:16}}>
-            <p style={{margin:"0 0 12px",fontSize:12,fontWeight:600,color:"#1c1c1e"}}>Comparativa de planes</p>
-            {PLANS.map(p=>(
-              <div key={p.id} onClick={()=>setSelected(p.id)} style={{
-                display:"flex",alignItems:"center",justifyContent:"space-between",
-                padding:"10px 12px",borderRadius:12,marginBottom:4,cursor:"pointer",
-                background:selected===p.id?"rgba(0,102,204,0.06)":"transparent",
-                border:`1px solid ${selected===p.id?"rgba(0,102,204,0.2)":"transparent"}`,transition:"all 0.15s",
-              }}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:selected===p.id?"#0066cc":"#d1d1d6",flexShrink:0,transition:"all 0.15s"}}/>
-                  <span style={{fontSize:13,fontWeight:selected===p.id?600:400,color:selected===p.id?"#0066cc":"#3c3c43"}}>{p.label}</span>
-                  {p.badge&&<span style={{fontSize:9,fontWeight:700,color:"#0066cc",background:"rgba(0,102,204,0.1)",padding:"2px 7px",borderRadius:99,letterSpacing:"0.05em"}}>{p.badge}</span>}
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <span style={{fontSize:13,fontWeight:700,color:"#1c1c1e"}}>{p.priceLabel}</span>
-                  {p.discount&&<span style={{fontSize:11,color:"#34c759",marginLeft:6,fontWeight:600}}>{p.discount}</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-          {/* Trust signals */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-            {[["🔒","100% Seguro","Datos encriptados"],["↩️","Cancela","cuando quieras"],["🎯","7 días","sin compromiso"]].map(([icon,t,d])=>(
-              <div key={t} style={{background:"white",borderRadius:12,padding:"12px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-                <div style={{fontSize:18,marginBottom:4}}>{icon}</div>
-                <p style={{margin:"0 0 2px",fontSize:11,fontWeight:600,color:"#1c1c1e"}}>{t}</p>
-                <p style={{margin:0,fontSize:10,color:"#8e8e93"}}>{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// REGISTRATION SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
-function RegisterScreen({onSuccess}) {
-  const [step,    setStep]    = useState("pricing");
-  const [plan,    setPlan]    = useState(null);
-  const [nombre,  setNombre]  = useState("");
-  const [email,   setEmail]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
-
-  const handleSelectPlan = (p) => { setPlan(p); setStep("register"); };
-
-  const handleSubmit = async () => {
-    const nombreClean = nombre.trim();
-    const emailClean  = normalizeEmail(email); // normalizeEmail en lugar de solo trim+toLowerCase
-    if (!nombreClean) { setError("Por favor introduce tu nombre."); return; }
-    if (!emailClean || !emailClean.includes("@") || !emailClean.includes(".")) {
-      setError("Por favor introduce un email válido."); return;
-    }
-    setLoading(true); setError("");
-    const userData = {
-      nombre: nombreClean,
-      email:  emailClean,
-      plan:   plan ? plan.label    : "Trial",
-      precio: plan ? plan.priceLabel : "Gratis",
-    };
-    // Registrar lead directamente en Google Apps Script (fuente única de verdad)
-    try {
-      const params = new URLSearchParams({ tipo: "registro", ...userData });
-      const res = await fetch(`${GAS_URL}?${params.toString()}`, { cache: "no-store" });
-      // No bloqueamos el flujo aunque falle — guardamos localmente siempre
-      if (res.status === 429) {
-        setError("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
-        setLoading(false); return;
-      }
-    } catch { /* continuar aunque falle la llamada */ }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-    setLoading(false);
-
-    if (plan && plan.paypalUrl) {
-      window.open(plan.paypalUrl, "_blank");
-      setTimeout(() => onSuccess(userData), 800);
-    } else {
-      onSuccess(userData);
-    }
-  };
-
-  if (step==="pricing") return <PricingScreen onSelectPlan={handleSelectPlan}/>;
-
-  return (
-    <div style={{fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",background:"#f2f2f7",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      <style>{`
-        @keyframes fadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-        input:focus{outline:none!important;border-color:#0066cc!important;box-shadow:0 0 0 3px rgba(0,102,204,0.12)!important;}
-      `}</style>
-      {/* Top bar */}
-      <div style={{background:"white",borderBottom:"1px solid #e5e5ea",padding:"14px 20px",display:"flex",alignItems:"center",gap:10}}>
-        <button onClick={()=>setStep("pricing")} style={{background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0,marginRight:4}}>← Planes</button>
-        <div style={{width:1,height:20,background:"#e5e5ea"}}/>
-        <span style={{fontSize:15,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.3px",marginLeft:4}}>Crear cuenta</span>
-        <span style={{marginLeft:"auto",fontSize:11,color:"#8e8e93",background:"#f2f2f7",padding:"3px 10px",borderRadius:99}}>by MarketMoneyFX</span>
-      </div>
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px"}}>
-        <div style={{width:"100%",maxWidth:420,animation:"fadeIn 0.4s ease"}}>
-          {/* Plan summary */}
-          {plan&&(
-            <div style={{
-              background:plan.highlight?"linear-gradient(135deg,#0066cc,#0055aa)":"white",
-              borderRadius:16,padding:"14px 18px",marginBottom:20,
-              display:"flex",alignItems:"center",justifyContent:"space-between",
-              boxShadow:"0 2px 12px rgba(0,0,0,0.08)",
-              border:plan.highlight?"none":"1.5px solid #e5e5ea",
-            }}>
-              <div>
-                <p style={{margin:"0 0 2px",fontSize:11,fontWeight:600,color:plan.highlight?"rgba(255,255,255,0.7)":"#8e8e93",textTransform:"uppercase",letterSpacing:"0.04em"}}>Plan seleccionado</p>
-                <p style={{margin:0,fontSize:15,fontWeight:700,color:plan.highlight?"white":"#1c1c1e"}}>{plan.label}</p>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <p style={{margin:0,fontSize:20,fontWeight:700,color:plan.highlight?"white":"#1c1c1e"}}>{plan.priceLabel}</p>
-                {plan.perMonth&&<p style={{margin:0,fontSize:11,color:plan.highlight?"rgba(255,255,255,0.6)":"#8e8e93"}}>{plan.perMonth}</p>}
-              </div>
-            </div>
-          )}
-          <div style={{marginBottom:20}}>
-            <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.4px"}}>
-              {plan?.price===0?"Empieza tu prueba gratuita":"Casi listo 🎯"}
-            </h2>
-            <p style={{margin:0,fontSize:14,color:"#8e8e93",lineHeight:1.5}}>
-              {plan?.price===0?"7 días de acceso completo sin tarjeta de crédito":"Introduce tus datos para activar tu plan"}
-            </p>
-          </div>
-          {/* Form */}
-          <div style={{background:"white",borderRadius:20,padding:"22px 20px",boxShadow:"0 2px 16px rgba(0,0,0,0.08)"}}>
-            {error&&(
-              <div style={{background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#c0392b"}}>{error}</div>
-            )}
-            <div style={{marginBottom:12}}>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:6,letterSpacing:"0.04em",textTransform:"uppercase"}}>Nombre</label>
-              <input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Tu nombre"
-                onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
-                style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"1.5px solid #e5e5ea",fontSize:15,color:"#1c1c1e",background:"#f9f9fb",boxSizing:"border-box",fontFamily:"inherit",transition:"all 0.2s"}}/>
-            </div>
-            <div style={{marginBottom:20}}>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:6,letterSpacing:"0.04em",textTransform:"uppercase"}}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com"
-                onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
-                style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"1.5px solid #e5e5ea",fontSize:15,color:"#1c1c1e",background:"#f9f9fb",boxSizing:"border-box",fontFamily:"inherit",transition:"all 0.2s"}}/>
-            </div>
-            <button onClick={handleSubmit} disabled={loading} style={{
-              width:"100%",padding:"14px",borderRadius:14,border:"none",cursor:loading?"not-allowed":"pointer",
-              background:loading?"#c7e0f4":plan?.paypalUrl?"#003087":"linear-gradient(135deg,#0066cc,#0077ed)",
-              color:"white",fontSize:15,fontWeight:700,letterSpacing:"-0.1px",
-              boxShadow:loading?"none":"0 4px 16px rgba(0,102,204,0.35)",transition:"all 0.2s",
-            }}>
-              {loading?"Procesando…":plan?.price===0?"Activar prueba gratuita →":plan?.paypalUrl?"Pagar con PayPal →":"Activar plan "+plan?.label+" →"}
-            </button>
-            {plan?.paypalUrl&&(
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:8}}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 100-16 8 8 0 000 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" fill="#8e8e93"/></svg>
-                <p style={{margin:0,fontSize:11,color:"#8e8e93"}}>Serás redirigido a PayPal para completar el pago de forma segura</p>
-              </div>
-            )}
-            <p style={{margin:"12px 0 0",fontSize:11,color:"#aeaeb2",textAlign:"center",lineHeight:1.5}}>
-              Al registrarte aceptas ser contactado sobre el plan seleccionado.<br/>Sin spam · Cancela cuando quieras.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const PRESETS=[{label:"4 semanas",weeks:4},{label:"2 meses",weeks:8},{label:"3 meses",weeks:13}];
 
 function buildDownloadUrl(from, to) {
@@ -1658,9 +888,16 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
 
   const sendBug = async () => {
     if (!bugText.trim()) return;
-    // Enviar bug report directamente al GAS
+    // Enviar bug report vía Supabase (no GAS)
     try {
-      await fetch(`${GAS_URL}?tipo=bug&email=${encodeURIComponent(user.email)}&mensaje=${encodeURIComponent(bugText.slice(0,500))}`);
+      const { supabase } = await import('./lib/supabase.js');
+      await supabase.from('login_logs').insert({
+        user_id:    profile?.id ?? null,
+        login_time: new Date().toISOString(),
+        device:     `BUG_REPORT: ${bugText.slice(0,250)}`,
+        success:    false,
+        fail_reason: bugText.slice(0,500),
+      });
     } catch { /* silencioso */ }
     setBugSent(true);
     setBugText("");
@@ -3742,9 +2979,16 @@ class ErrorBoundary extends Component {
 }
 
 function AppInner() {
-  // Check if already registered
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
-  const [user,      setUser]      = useState(saved);
+  // ── Supabase Auth (replaces localStorage session) ──────────────────────────
+  const { loading: authLoading, user: authUser, profile, accessStatus } = useAuth();
+
+  // user shape for UI compatibility: { email, nombre, plan }
+  const user = profile ? {
+    email:  profile.email,
+    nombre: profile.telegram_username || profile.email?.split('@')[0] || 'Usuario',
+    plan:   profile.plan   || 'Trial',
+    status: profile.status || 'trial',
+  } : null;
   const [pairsData, setPairsData] = useState(null);
   const [source,    setSource]    = useState("");
   const [error,     setError]     = useState(null);
@@ -3752,7 +2996,6 @@ function AppInner() {
   const [sort,      setSort]      = useState({col:"signal",dir:-1});
   const [detail,    setDetail]    = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [showLogin,    setShowLogin]    = useState(true);
   const [darkMode,  setDarkMode]  = useState(()=>{ try{return JSON.parse(localStorage.getItem("cot_dark")||"false");}catch{return false;} });
   const [lang,      setLang]      = useState(()=>{ try{return localStorage.getItem("cot_lang")||"es";}catch{return "es";} });
   const [mainTab,   setMainTab]   = useState("calendario");
@@ -3769,7 +3012,7 @@ function AppInner() {
 
   const toggleDark = () => { const v=!darkMode; setDarkMode(v); localStorage.setItem("cot_dark",JSON.stringify(v)); };
   const changeLang = (l) => { setLang(l); localStorage.setItem("cot_lang",l); };
-  const handleLogout = () => { localStorage.removeItem("cot_user_registered"); setUser(null); setPairsData(null); setShowSettings(false); setShowLogin(true); };
+  const handleLogout = async () => { await logout(); setPairsData(null); setShowSettings(false); };
 
   const handleFile = useCallback((text, name) => {
     setError(null);
@@ -3802,10 +3045,42 @@ function AppInner() {
   const textSecondary = "#8e8e93";
   const borderColor = darkMode ? "#2c2c2e"  : "#e5e5ea";
 
-  // ── REGISTER GATE ──────────────────────────────────────────────────────────
-  if (!user) {
-    if (showLogin) return <LoginScreen onLogin={setUser} onNewAccount={()=>setShowLogin(false)}/>;
-    return <RegisterScreen onSuccess={(u)=>{ setUser(u); setShowLogin(true); }}/>;
+  // ── AUTH GATE ──────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7' }}>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid #0066cc', borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          <p style={{ fontSize:13, color:'#8e8e93', margin:0 }}>Verificando acceso…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <LoginScreen />;
+  }
+
+  if (accessStatus && !accessStatus.hasAccess) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7', fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif" }}>
+        <div style={{ textAlign:'center', maxWidth:400, padding:'32px 24px', background:'white', borderRadius:20, boxShadow:'0 2px 20px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
+          <h2 style={{ margin:'0 0 8px', fontSize:20, fontWeight:700, color:'#1c1c1e' }}>Acceso no disponible</h2>
+          <p style={{ margin:'0 0 20px', fontSize:14, color:'#8e8e93', lineHeight:1.6 }}>
+            {accessStatus.reason === 'trial_expired'
+              ? 'Tu período de prueba ha expirado. Elige un plan para continuar.'
+              : accessStatus.reason === 'suspended'
+              ? 'Tu cuenta está suspendida. Contacta soporte.'
+              : 'No tienes un plan activo. Contacta soporte o elige un plan.'}
+          </p>
+          <button onClick={handleLogout} style={{ background:'none', border:'1px solid #e5e5ea', borderRadius:10, padding:'10px 20px', cursor:'pointer', fontSize:13, color:'#8e8e93' }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Terminal color palette
@@ -3853,7 +3128,7 @@ function AppInner() {
       {showSettings&&<SettingsPanel user={user} darkMode={darkMode} lang={lang}
         onDarkMode={toggleDark} onLang={changeLang} onLogout={handleLogout}
         onClose={()=>setShowSettings(false)}
-        onUpgrade={()=>{setShowSettings(false);setPairsData(null);setUser(null);setShowLogin(false);}}/>}
+        onUpgrade={()=>{setShowSettings(false);}}/>}
 
       {/* ── HEADER ── */}
       <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:10}}>
@@ -3922,6 +3197,89 @@ function AppInner() {
       )}
       {mainTab==="sesgos"&&pairsData&&(
         <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"12px":"20px"}}>
+
+          {/* ── INSTITUTIONAL BIAS ENGINE CARDS ─────────────────────────── */}
+          {(()=>{
+            // Safe pre-computation: each step guards against null/undefined
+            const biasResults = (fxPairs || []).map(p => {
+              if (!p) return null;
+              const inputs = deriveInputsFromPair(p);
+              if (!inputs) return null;
+              const bias = calculateBiasScore(inputs);
+              if (!bias) return null;
+              return { pair: p.pair, bias };
+            }).filter(Boolean);
+
+            if (!biasResults.length) return null;
+
+            const sorted = [...biasResults].sort((a,b)=>Math.abs(b.bias.score)-Math.abs(a.bias.score));
+            const top = sorted.slice(0,3);
+
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:'0.1em'}}>
+                    INSTITUTIONAL BIAS ENGINE
+                  </span>
+                  <span style={{flex:1,height:1,background:T.border}}/>
+                  <span style={{fontSize:10,color:T.sub2}}>HTF · Sesgo macro semanal · No es señal de entrada</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':`repeat(${Math.min(top.length,3)},1fr)`,gap:10}}>
+                  {top.map(({pair,bias})=>(
+                    bias && (
+                      <div key={pair}>
+                        <div style={{fontSize:10,fontWeight:700,color:T.sub,letterSpacing:'0.08em',marginBottom:6,textAlign:'center'}}>{pair}</div>
+                        <InstitutionalBiasCard biasResult={bias} darkMode={darkMode} T={T} isMobile={isMobile}/>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── INTRADAY EXECUTION LAYER ──────────────────────────────────── */}
+          {(()=>{
+            // Build availablePairs: all fxPairs with their precomputed bias
+            const availablePairs = (fxPairs||[]).map(p=>{
+              if(!p) return null;
+              const inp = deriveInputsFromPair(p);
+              if(!inp) return null;
+              const bias = calculateBiasScore(inp);
+              return { pair: p.pair, signal: p.signal, bias };
+            }).filter(Boolean);
+
+            if(!availablePairs.length) return null;
+
+            // Top bias pair drives the shared sentiment/risk approximation
+            const topBias = availablePairs.reduce((best,p)=>
+              Math.abs(p.bias.score) > Math.abs(best.bias.score) ? p : best
+            , availablePairs[0]);
+
+            const sentimentData = { fg: 55 - Math.abs(topBias.bias.score)*3, vix: 18 + Math.abs(topBias.bias.score)*1.5, highCount: 0, midCount: 1 };
+            const riskData      = { score: Math.abs(topBias.bias.score) * 4 };
+
+            return (
+              <div style={{marginBottom:4}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:'0.1em'}}>
+                    INTRADAY EXECUTION LAYER
+                  </span>
+                  <span style={{flex:1,height:1,background:T.border}}/>
+                  <span style={{fontSize:10,color:T.sub}}>Permiso operativo · No genera señales</span>
+                </div>
+                <IntradayExecutionCard
+                  biasResult={topBias.bias}
+                  availablePairs={availablePairs}
+                  sentimentData={sentimentData}
+                  riskData={riskData}
+                  darkMode={darkMode}
+                  T={T}
+                  isMobile={isMobile}
+                />
+              </div>
+            );
+          })()}
 
           {/* Summary bar */}
           <div style={{display:"flex",gap:6,marginBottom:12,padding:"10px 12px",flexWrap:"wrap",
