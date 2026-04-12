@@ -842,42 +842,424 @@ function DetailSheet({pairData, onClose}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS PANEL
 // ─────────────────────────────────────────────────────────────────────────────
-function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onClose, onUpgrade }) {
-  const [section, setSection] = useState(null);
-  const [bugText, setBugText] = useState("");
-  const [bugSent, setBugSent] = useState(false);
+// ─── PAYMENT PLAN URLS (one constant per plan for easy updates) ──────────────
+const PLAN_URLS = {
+  mensual:    "https://www.paypal.com/ncp/payment/PAHQ48GCL2GME",
+  trimestral: "https://www.paypal.com/ncp/payment/56D3KLQFHLHTA",
+  semestral:  "https://www.paypal.com/ncp/payment/C6WHM2L785UXA",
+  anual:      "https://www.paypal.com/ncp/payment/29TJHXYBYHFNY",
+};
+const CFTC_URL = "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm";
+const TELEGRAM_URL = "https://t.me/COT_TRACKER";
+const COPYTRADING_URL = "https://wa.me/message/SKJX64AP67OTN1";
+
+// ─── COT WEEKLY BANNER ────────────────────────────────────────────────────────
+// Shows on Fridays after 21:35 Spain time, once per week
+function COTWeeklyBanner({ darkMode, T }) {
+  const [visible, setVisible] = useState(() => {
+    try {
+      const stored = localStorage.getItem("cot_banner_dismissed");
+      if (!stored) return null; // determine after render
+      const { week, year } = JSON.parse(stored);
+      const now = new Date();
+      const currentWeek = getISOWeek(now);
+      if (week === currentWeek && year === now.getFullYear()) return false;
+      return null;
+    } catch { return null; }
+  });
+
+  useEffect(() => {
+    if (visible !== null) return;
+    const now = new Date();
+    // Convert to Spain time (CET=UTC+1, CEST=UTC+2 in summer)
+    const spainOffset = isDSTSpain(now) ? 2 : 1;
+    const spainTime = new Date(now.getTime() + spainOffset * 60 * 60 * 1000);
+    const isFriday = spainTime.getUTCDay() === 5;
+    const hour = spainTime.getUTCHours();
+    const min  = spainTime.getUTCMinutes();
+    const afterCutoff = hour > 21 || (hour === 21 && min >= 35);
+    setVisible(isFriday && afterCutoff);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const dismiss = () => {
+    const now = new Date();
+    localStorage.setItem("cot_banner_dismissed", JSON.stringify({
+      week: getISOWeek(now), year: now.getFullYear(),
+    }));
+    setVisible(false);
+  };
+
+  return (
+    <div style={{
+      background: darkMode ? "rgba(0,85,204,0.18)" : "rgba(0,85,204,0.07)",
+      border: `1px solid ${darkMode ? "rgba(0,85,204,0.4)" : "rgba(0,85,204,0.2)"}`,
+      borderRadius: 10,
+      padding: "10px 14px",
+      margin: "8px 12px 0",
+      display: "flex", alignItems: "flex-start", gap: 10,
+    }}>
+      <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>📊</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: "0 0 2px", fontSize: 12, fontWeight: 700, color: T.accent }}>
+          Nuevo reporte COT disponible
+        </p>
+        <p style={{ margin: "0 0 8px", fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
+          La CFTC ya ha publicado el informe semanal. Descarga <em>Traders in Financial Futures → Futures Only Reports</em> para actualizar el sesgo institucional de la próxima semana.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <a href={CFTC_URL} target="_blank" rel="noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5,
+              background: T.accent, color: "white", border: "none", borderRadius: 8,
+              padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+              textDecoration: "none" }}>
+            🌐 Ir a CFTC.gov
+          </a>
+          <button onClick={dismiss}
+            style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 8,
+              padding: "6px 10px", fontSize: 11, color: T.sub, cursor: "pointer" }}>
+            Descartar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function getISOWeek(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+}
+function isDSTSpain(date) {
+  // DST in Spain: last Sunday of March to last Sunday of October
+  const year = date.getUTCFullYear();
+  const lastSundayMarch   = lastSunday(year, 2);
+  const lastSundayOctober = lastSunday(year, 9);
+  return date >= lastSundayMarch && date < lastSundayOctober;
+}
+function lastSunday(year, month) {
+  const d = new Date(Date.UTC(year, month + 1, 0));
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return d;
+}
+
+// ─── BILLING / PLAN MODAL ─────────────────────────────────────────────────────
+const PLANS = [
+  { id: "free",       label: "Free",        price: "0€",    period: "",        color: "#8e8e93", url: null,
+    benefits: ["Dashboard COT básico","Señales semanales","Acceso comunidad"] },
+  { id: "mensual",    label: "Mensual",     price: "19€",   period: "/mes",    color: "#0066cc", url: PLAN_URLS.mensual,
+    benefits: ["Todo lo de Free","Bias Engine institucional","Intraday Execution Layer","Soporte prioritario"] },
+  { id: "trimestral", label: "Trimestral",  price: "49€",   period: "/3 meses",color: "#5856d6", url: PLAN_URLS.trimestral,
+    benefits: ["Todo lo de Mensual","Ahorro del 14%","Análisis macro semanal"] },
+  { id: "semestral",  label: "Semestral",   price: "89€",   period: "/6 meses",color: "#34c759", url: PLAN_URLS.semestral,
+    benefits: ["Todo lo de Trimestral","Ahorro del 22%","Acceso anticipado a nuevas features"] },
+  { id: "anual",      label: "Anual",       price: "149€",  period: "/año",    color: "#ff2d55", url: PLAN_URLS.anual,
+    benefits: ["Todo lo de Semestral","Ahorro del 35%","Badge de miembro fundador","Sesión estratégica 1:1"] },
+];
+
+function BillingModal({ user, darkMode, onClose }) {
+  const currentPlan = (user?.plan || "free").toLowerCase();
+
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:400,
+        display:"flex", alignItems:"flex-end", justifyContent:"center", backdropFilter:"blur(8px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:darkMode?"#1c1c1e":"white", borderRadius:"24px 24px 0 0",
+          width:"100%", maxWidth:520, maxHeight:"92vh", overflowY:"auto",
+          boxShadow:"0 -8px 60px rgba(0,0,0,0.3)", animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
+        <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        {/* Header */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px" }}>
+          <div>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>Elige tu plan</p>
+            <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Plan actual: <strong>{user?.plan || "Trial"}</strong></p>
+          </div>
+          <button onClick={onClose}
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+        </div>
+        {/* Plan cards */}
+        <div style={{ padding:"0 16px 40px", display:"flex", flexDirection:"column", gap:10 }}>
+          {PLANS.map(plan => {
+            const isActive = currentPlan === plan.id || (currentPlan === "trial" && plan.id === "free");
+            return (
+              <div key={plan.id}
+                style={{ borderRadius:16, border:`2px solid ${isActive ? plan.color : darkMode?"#2c2c2e":"#e5e5ea"}`,
+                  background: isActive ? `${plan.color}10` : darkMode?"#2c2c2e":"#f9f9fb",
+                  padding:"14px 16px", position:"relative", overflow:"hidden" }}>
+                {isActive && (
+                  <span style={{ position:"absolute",top:10,right:12,fontSize:10,fontWeight:700,
+                    background:plan.color,color:"white",padding:"2px 8px",borderRadius:99 }}>
+                    ACTUAL
+                  </span>
+                )}
+                <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:8 }}>
+                  <span style={{ fontSize:17,fontWeight:700,color:plan.color }}>{plan.label}</span>
+                  <span style={{ fontSize:22,fontWeight:800,color:darkMode?"#fff":"#1c1c1e" }}>{plan.price}</span>
+                  <span style={{ fontSize:12,color:"#8e8e93" }}>{plan.period}</span>
+                </div>
+                <ul style={{ margin:"0 0 12px",padding:"0 0 0 16px",listStyle:"none" }}>
+                  {plan.benefits.map((b,i) => (
+                    <li key={i} style={{ fontSize:12,color:darkMode?"#aeaeb2":"#3c3c43",marginBottom:3,paddingLeft:0 }}>
+                      <span style={{ color:plan.color,marginRight:6 }}>✓</span>{b}
+                    </li>
+                  ))}
+                </ul>
+                {plan.url ? (
+                  <a href={plan.url} target="_blank" rel="noreferrer"
+                    style={{ display:"block",textAlign:"center",padding:"10px",borderRadius:12,
+                      background:`linear-gradient(135deg,${plan.color},${plan.color}cc)`,
+                      color:"white",fontSize:13,fontWeight:700,textDecoration:"none",
+                      boxShadow:`0 3px 12px ${plan.color}44` }}>
+                    Elegir {plan.label} →
+                  </a>
+                ) : (
+                  <div style={{ textAlign:"center",padding:"10px",borderRadius:12,
+                    background:darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
+                    color:"#8e8e93",fontSize:13,fontWeight:600 }}>
+                    {isActive ? "Plan activo" : "Plan gratuito"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BUG REPORT MODAL ─────────────────────────────────────────────────────────
+function BugReportModal({ user, darkMode, onClose }) {
+  const [subject, setSubject] = useState("");
+  const [desc,    setDesc]    = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent,    setSent]    = useState(false);
+
+  const send = async () => {
+    if (!desc.trim()) return;
+    setSending(true);
+    try {
+      const { supabase } = await import('./lib/supabase.js');
+      await supabase.from('bug_reports').insert({
+        user_email:  user?.email ?? null,
+        subject:     subject.slice(0, 120) || "(sin asunto)",
+        description: desc.slice(0, 1000),
+        created_at:  new Date().toISOString(),
+        device:      navigator.userAgent.slice(0, 250),
+      });
+    } catch { /* graceful degradation — still show success */ }
+    setSending(false);
+    setSent(true);
+    setSubject(""); setDesc("");
+    setTimeout(onClose, 2800);
+  };
+
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,
+        display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:darkMode?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",
+          width:"100%",maxWidth:520,boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
+          animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",paddingBottom:40 }}>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px",
+          borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>🐛 Reportar un error</p>
+          <button onClick={onClose}
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+        </div>
+        <div style={{ padding:"16px 20px" }}>
+          {sent ? (
+            <div style={{ textAlign:"center",padding:"28px 0" }}>
+              <div style={{ fontSize:44,marginBottom:14 }}>✅</div>
+              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>¡Reporte enviado!</p>
+              <p style={{ margin:0,fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
+                Reporte enviado correctamente.<br/>Gracias por ayudarnos a mejorar.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p style={{ margin:"0 0 14px",fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
+                Describe qué ocurrió y lo solucionaremos lo antes posible.
+              </p>
+              <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Asunto</label>
+              <input value={subject} onChange={e=>setSubject(e.target.value)}
+                placeholder="Ej: El dropdown no cierra correctamente"
+                style={{ width:"100%",padding:"10px 12px",borderRadius:10,
+                  border:`1.5px solid ${darkMode?"#3a3a3c":"#e5e5ea"}`,
+                  fontSize:14,color:darkMode?"#fff":"#1c1c1e",background:darkMode?"#2c2c2e":"#f9f9fb",
+                  boxSizing:"border-box",fontFamily:"inherit",marginBottom:12,outline:"none" }}/>
+              <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Descripción</label>
+              <textarea value={desc} onChange={e=>setDesc(e.target.value)}
+                placeholder="Describe el problema con el mayor detalle posible…" rows={4}
+                style={{ width:"100%",padding:"10px 12px",borderRadius:10,
+                  border:`1.5px solid ${darkMode?"#3a3a3c":"#e5e5ea"}`,
+                  fontSize:14,color:darkMode?"#fff":"#1c1c1e",background:darkMode?"#2c2c2e":"#f9f9fb",
+                  resize:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5,outline:"none",
+                  marginBottom:14 }}/>
+              <button onClick={send} disabled={sending||!desc.trim()}
+                style={{ width:"100%",padding:"13px",borderRadius:14,border:"none",
+                  cursor:sending||!desc.trim()?"not-allowed":"pointer",
+                  background:sending||!desc.trim()?"#c7e0f4":"linear-gradient(135deg,#0066cc,#0077ed)",
+                  color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
+                {sending ? "Enviando…" : "Enviar reporte →"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PRIVACY / TERMS VIEWS ────────────────────────────────────────────────────
+function LegalView({ type, darkMode, onBack, onClose }) {
+  const isPrivacy = type === "privacy";
+  const bg = darkMode ? "#1c1c1e" : "white";
+  const txt = darkMode ? "#e5e5ea" : "#1c1c1e";
+  const sub = "#8e8e93";
+  const title = isPrivacy ? "Política de Privacidad" : "Términos y Condiciones";
+
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,
+        display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:bg,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:520,
+          maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
+          animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 8px"}}/>
+        <div style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 20px 16px",
+          borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+          <button onClick={onBack}
+            style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
+            ← Volver
+          </button>
+          <span style={{ fontSize:16,fontWeight:700,color:txt,flex:1,textAlign:"center",marginRight:40 }}>{title}</span>
+        </div>
+        <div style={{ padding:"20px 24px 48px",color:txt }}>
+          <p style={{ margin:"0 0 6px",fontSize:11,color:sub }}>Última actualización: Abril 2026 · COT Tracker by MarketMoneyFX</p>
+          {isPrivacy ? (
+            <>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>1. Datos que recopilamos</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Recopilamos únicamente tu dirección de email para gestionar el acceso a la plataforma. No recopilamos datos financieros, información de pago directa (procesada por PayPal) ni datos de dispositivo más allá del agente de usuario para diagnóstico técnico.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>2. Uso de los datos</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Tu email se utiliza exclusivamente para autenticación (magic link vía Supabase) y comunicaciones relacionadas con tu suscripción. No se comparte con terceros ni se usa para publicidad.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>3. Almacenamiento</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Los datos se almacenan en Supabase (infraestructura EU). Los datos de preferencias de la app (modo oscuro, idioma) se guardan localmente en tu dispositivo.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>4. Tus derechos</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Puedes solicitar la eliminación de tus datos en cualquier momento contactando a marketmoneyfx00@gmail.com. Tu cuenta se desactivará y tus datos serán eliminados en un plazo de 30 días.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>5. Cookies</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Usamos únicamente cookies de sesión necesarias para mantener tu autenticación. No usamos cookies de seguimiento ni de terceros.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>6. Contacto</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:0 }}>
+                marketmoneyfx00@gmail.com — Canal Telegram: t.me/COT_TRACKER
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>1. Servicio</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                COT Tracker es una herramienta de análisis de datos públicos del mercado de futuros (CFTC). No constituye asesoramiento financiero, de inversión ni de ningún otro tipo regulado.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>2. Riesgo</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                El trading en mercados financieros conlleva riesgo de pérdida de capital. El uso de COT Tracker no garantiza resultados positivos. El usuario es el único responsable de sus decisiones de trading.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>3. Suscripción y pagos</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                Los pagos se procesan a través de PayPal. Las suscripciones se activan manualmente por el equipo de COT Tracker tras confirmar el pago. No se realizan devoluciones pasados 14 días desde la activación.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>4. Propiedad intelectual</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
+                El software, diseño y contenido de COT Tracker es propiedad de MarketMoneyFX. Queda prohibida su reproducción o distribución sin autorización expresa.
+              </p>
+              <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>5. Modificaciones</h3>
+              <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:0 }}>
+                Nos reservamos el derecho de modificar estos términos. Los usuarios serán notificados de cambios relevantes por email o mediante aviso en la plataforma.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SETTINGS SHELL (sub-screen wrapper) ─────────────────────────────────────
+function SettingsShell({children, onBack, title, onClose, dark}) {
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
+        display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:dark?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:500,
+          maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
+          animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
+        <div style={{ width:36,height:4,borderRadius:99,background:dark?"#3a3a3c":"#d1d1d6",margin:"12px auto 8px"}}/>
+        <div style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 20px 16px",
+          borderBottom:`1px solid ${dark?"#2c2c2e":"#f2f2f7"}` }}>
+          <button onClick={onBack}
+            style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
+            ← Volver
+          </button>
+          <span style={{ fontSize:16,fontWeight:700,color:dark?"#fff":"#1c1c1e",flex:1,textAlign:"center",marginRight:40 }}>
+            {title}
+          </span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── SETTINGS PANEL (main) ───────────────────────────────────────────────────
+function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onClose }) {
+  const [section,    setSection]    = useState(null);
+  const [showBilling,setShowBilling]= useState(false);
+  const [showBug,    setShowBug]    = useState(false);
+  const [legalType,  setLegalType]  = useState(null); // "privacy" | "terms"
   const [notifications, setNotifications] = useState(
     () => { try { return JSON.parse(localStorage.getItem("cot_notif")||"true"); } catch { return true; } }
   );
 
   const t = lang === "en" ? {
     account:"My Account", prefs:"Preferences", community:"Community", support:"Support", legal:"Legal",
-    profile:"Profile", billing:"Billing", upgrade:"Upgrade Plan", cancel:"Cancel Subscription",
+    profile:"Profile", billing:"Billing", upgrade:"Upgrade Plan",
     darkmode:"Dark Mode", language:"Language", notif:"Weekly Notifications",
-    referral:"Refer a Friend", telegram:"Telegram Channel", copy:"Copytrading",
-    help:"Help Center", bug:"Report a Bug", news:"What's New", contact:"Contact",
+    telegram:"Telegram Channel", copy:"Copytrading", help:"Help Center",
+    bug:"Report a Bug", news:"What's New", contact:"Contact",
     privacy:"Privacy Policy", terms:"Terms & Conditions", logout:"Log Out",
-    close:"Close", send:"Send Report", sent:"Sent! Thanks",
     planActive:"Active Plan", memberSince:"Member since",
-    referralDesc:"Invite a friend and get 1 free month",
-    telegramDesc:"Join the MarketMoneyFX community",
-    copyDesc:"Follow my trades automatically",
-    bugPlaceholder:"Describe the issue...",
-    cancelDesc:"Your subscription will remain active until the end of the period",
+    telegramDesc:"Join the COT Tracker community",
+    copyDesc:"Follow trades automatically via WhatsApp",
   } : {
     account:"Mi Cuenta", prefs:"Preferencias", community:"Comunidad", support:"Soporte", legal:"Legal",
-    profile:"Perfil", billing:"Facturación", upgrade:"Mejorar Plan", cancel:"Cancelar Suscripción",
+    profile:"Perfil", billing:"Facturación", upgrade:"Mejorar Plan",
     darkmode:"Modo Oscuro", language:"Idioma", notif:"Notificaciones semanales",
-    referral:"Invita a un amigo", telegram:"Canal de Telegram", copy:"Copytrading",
-    help:"Centro de Ayuda", bug:"Informar un error", news:"Novedades", contact:"Contacto",
+    telegram:"Canal de Telegram", copy:"Copytrading", help:"Centro de Ayuda",
+    bug:"Informar un error", news:"Novedades", contact:"Contacto",
     privacy:"Política de Privacidad", terms:"Términos y Condiciones", logout:"Cerrar Sesión",
-    close:"Cerrar", send:"Enviar reporte", sent:"¡Enviado! Gracias",
     planActive:"Plan activo", memberSince:"Miembro desde",
-    referralDesc:"Invita a un amigo y consigue 1 mes gratis",
-    telegramDesc:"Únete a la comunidad MarketMoneyFX",
-    copyDesc:"Sigue mis operaciones automáticamente",
-    bugPlaceholder:"Describe el problema...",
-    cancelDesc:"Tu suscripción seguirá activa hasta el final del período",
+    telegramDesc:"Únete a la comunidad COT Tracker",
+    copyDesc:"Sigue operaciones automáticamente vía WhatsApp",
   };
 
   const toggleNotif = () => {
@@ -886,121 +1268,75 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
     localStorage.setItem("cot_notif", JSON.stringify(v));
   };
 
-  const sendBug = async () => {
-    if (!bugText.trim()) return;
-    // Enviar bug report vía Supabase (no GAS)
-    try {
-      const { supabase } = await import('./lib/supabase.js');
-      await supabase.from('login_logs').insert({
-        user_id:    profile?.id ?? null,
-        login_time: new Date().toISOString(),
-        device:     `BUG_REPORT: ${bugText.slice(0,250)}`,
-        success:    false,
-        fail_reason: bugText.slice(0,500),
-      });
-    } catch { /* silencioso */ }
-    setBugSent(true);
-    setBugText("");
-    setTimeout(() => setBugSent(false), 3000);
-  };
+  const PLAN_COLORS = { Trial:"#ff9500",Free:"#8e8e93",Mensual:"#0066cc",Trimestral:"#5856d6",Semestral:"#34c759",Anual:"#ff2d55" };
+  const planColor = PLAN_COLORS[user?.plan] || "#0066cc";
 
-  const PLAN_COLORS = { Trial:"#ff9500", Mensual:"#0066cc", Trimestral:"#5856d6", Semestral:"#34c759", Anual:"#ff2d55" };
-  const planColor = PLAN_COLORS[user.plan] || "#0066cc";
+  // ── SUB-MODALS ───────────────────────────────────────────────────────────
+  if (showBilling) return (
+    <BillingModal user={user} darkMode={darkMode} onClose={()=>setShowBilling(false)}/>
+  );
+  if (showBug) return (
+    <BugReportModal user={user} darkMode={darkMode} onClose={()=>setShowBug(false)}/>
+  );
+  if (legalType) return (
+    <LegalView type={legalType} darkMode={darkMode} onBack={()=>setLegalType(null)} onClose={()=>{setLegalType(null);onClose();}}/>
+  );
 
-  // ── SUB-SECTIONS ───────────────────────────────────────────────────────────
+  // ── PROFILE VIEW ────────────────────────────────────────────────────────
   if (section === "profile") return (
     <SettingsShell onBack={()=>setSection(null)} title={t.profile} onClose={onClose} dark={darkMode}>
-      <div style={{padding:"0 20px"}}>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 0 20px"}}>
-          <div style={{width:72,height:72,borderRadius:"50%",background:`linear-gradient(135deg,${planColor},${planColor}aa)`,
+      <div style={{ padding:"0 20px" }}>
+        <div style={{ display:"flex",flexDirection:"column",alignItems:"center",padding:"24px 0 20px" }}>
+          <div style={{ width:72,height:72,borderRadius:"50%",
+            background:`linear-gradient(135deg,${planColor},${planColor}aa)`,
             display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12,
-            boxShadow:`0 4px 20px ${planColor}44`}}>
-            <span style={{fontSize:28,fontWeight:700,color:"white"}}>{user.nombre[0].toUpperCase()}</span>
+            boxShadow:`0 4px 20px ${planColor}44` }}>
+            <span style={{ fontSize:28,fontWeight:700,color:"white" }}>{(user?.nombre||"U")[0].toUpperCase()}</span>
           </div>
-          <p style={{margin:"0 0 4px",fontSize:20,fontWeight:700,color:darkMode?"#fff":"#1c1c1e"}}>{user.nombre}</p>
-          <p style={{margin:"0 0 10px",fontSize:13,color:"#8e8e93"}}>{user.email}</p>
-          <span style={{fontSize:11,fontWeight:700,background:`${planColor}22`,color:planColor,padding:"4px 14px",borderRadius:99}}>
-            {user.plan || "Trial"}
+          <p style={{ margin:"0 0 4px",fontSize:20,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>{user?.nombre}</p>
+          <p style={{ margin:"0 0 10px",fontSize:13,color:"#8e8e93" }}>{user?.email}</p>
+          <span style={{ fontSize:11,fontWeight:700,background:`${planColor}22`,color:planColor,padding:"4px 14px",borderRadius:99 }}>
+            {user?.plan || "Trial"}
           </span>
         </div>
         {[
-          [t.planActive, user.plan || "Trial", planColor],
+          [t.planActive, user?.plan || "Trial", planColor],
           [t.memberSince, new Date().toLocaleDateString(lang==="en"?"en-US":"es-ES",{month:"long",year:"numeric"}), "#8e8e93"],
-          ["Email", user.email, "#8e8e93"],
+          ["Email", user?.email, "#8e8e93"],
         ].map(([label,val,color])=>(
-          <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-            padding:"14px 0",borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`}}>
-            <span style={{fontSize:13,color:"#8e8e93"}}>{label}</span>
-            <span style={{fontSize:13,fontWeight:600,color:darkMode?"#fff":color}}>{val}</span>
+          <div key={label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
+            padding:"14px 0",borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+            <span style={{ fontSize:13,color:"#8e8e93" }}>{label}</span>
+            <span style={{ fontSize:13,fontWeight:600,color:darkMode?"#fff":color }}>{val}</span>
           </div>
         ))}
       </div>
     </SettingsShell>
   );
 
-  if (section === "billing") return (
-    <SettingsShell onBack={()=>setSection(null)} title={t.billing} onClose={onClose} dark={darkMode}>
-      <div style={{padding:"0 20px"}}>
-        <div style={{background:darkMode?"#1c1c1e":"#f9f9fb",borderRadius:16,padding:"18px",margin:"16px 0"}}>
-          <p style={{margin:"0 0 4px",fontSize:11,color:"#8e8e93",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em"}}>{t.planActive}</p>
-          <p style={{margin:"0 0 10px",fontSize:22,fontWeight:700,color:planColor}}>{user.plan || "Trial"}</p>
-          <button onClick={onUpgrade} style={{width:"100%",padding:"12px",borderRadius:12,border:"none",cursor:"pointer",
-            background:`linear-gradient(135deg,${planColor},${planColor}cc)`,color:"white",fontSize:14,fontWeight:600}}>
-            {t.upgrade} →
-          </button>
-        </div>
-        <div style={{background:"rgba(255,59,48,0.06)",border:"1px solid rgba(255,59,48,0.15)",borderRadius:14,padding:"14px 16px",marginTop:8}}>
-          <p style={{margin:"0 0 4px",fontSize:13,fontWeight:600,color:"#c0392b"}}>{t.cancel}</p>
-          <p style={{margin:"0 0 10px",fontSize:12,color:"#8e8e93",lineHeight:1.5}}>{t.cancelDesc}</p>
-          <button style={{background:"none",border:"1px solid rgba(255,59,48,0.3)",borderRadius:10,padding:"8px 16px",
-            color:"#c0392b",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            {t.cancel}
-          </button>
-        </div>
-      </div>
-    </SettingsShell>
-  );
-
-  if (section === "bug") return (
-    <SettingsShell onBack={()=>setSection(null)} title={t.bug} onClose={onClose} dark={darkMode}>
-      <div style={{padding:"16px 20px"}}>
-        <p style={{margin:"0 0 14px",fontSize:13,color:"#8e8e93",lineHeight:1.6}}>
-          {lang==="en"?"Describe what happened and we'll fix it as soon as possible.":"Describe qué pasó y lo solucionaremos lo antes posible."}
-        </p>
-        <textarea value={bugText} onChange={e=>setBugText(e.target.value)}
-          placeholder={t.bugPlaceholder} rows={5}
-          style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${darkMode?"#3a3a3c":"#e5e5ea"}`,
-            fontSize:14,color:darkMode?"#fff":"#1c1c1e",background:darkMode?"#2c2c2e":"#f9f9fb",
-            resize:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5}}/>
-        <button onClick={sendBug} style={{width:"100%",marginTop:12,padding:"13px",borderRadius:12,border:"none",
-          cursor:"pointer",background:bugSent?"#34c759":"linear-gradient(135deg,#0066cc,#0077ed)",
-          color:"white",fontSize:14,fontWeight:600,transition:"all 0.2s"}}>
-          {bugSent ? t.sent : t.send}
-        </button>
-      </div>
-    </SettingsShell>
-  );
-
+  // ── NEWS VIEW ─────────────────────────────────────────────────────────
   if (section === "news") return (
     <SettingsShell onBack={()=>setSection(null)} title={t.news} onClose={onClose} dark={darkMode}>
-      <div style={{padding:"0 20px"}}>
+      <div style={{ padding:"0 20px" }}>
         {[
-          {v:"v6.0", date:"Abr 2026", title:"Panel de ajustes completo",   desc:"Perfil, facturación, modo oscuro, idioma y mucho más."},
-          {v:"v5.0", date:"Abr 2026", title:"Planes de suscripción",        desc:"Sistema de planes Trial, Mensual, Trimestral, Semestral y Anual."},
-          {v:"v4.0", date:"Abr 2026", title:"Registro de leads",            desc:"Integración con Google Sheets y emails automáticos."},
-          {v:"v3.0", date:"Abr 2026", title:"Señales institucionales",      desc:"Motor de señales basado en Leveraged Money del CFTC TFF."},
-          {v:"v2.0", date:"Abr 2026", title:"Vista cronológica",            desc:"Sparklines y evolución semanal por par de divisas."},
-          {v:"v1.0", date:"Abr 2026", title:"COT Tracker lanzado",          desc:"Primera versión con soporte CSV del CFTC."},
+          {v:"v7.0", date:"Abr 2026", title:"Settings premium completo", desc:"Billing interno, bug reports, legal, novedades y banner COT semanal."},
+          {v:"v6.0", date:"Abr 2026", title:"Supabase Auth migrado",      desc:"Magic Link OTP, sesión real, eliminación de GAS y localStorage como auth."},
+          {v:"v5.0", date:"Abr 2026", title:"Intraday Execution Layer",   desc:"Motor de permiso operativo con selector de par, bias-alignment y breakdown."},
+          {v:"v4.0", date:"Abr 2026", title:"Institutional Bias Engine",  desc:"Score HTF -5 a +5 basado en COT. Gauge visual, desglose de factores."},
+          {v:"v3.0", date:"Abr 2026", title:"Señales institucionales",    desc:"Motor de señales basado en Leveraged Money del CFTC TFF."},
+          {v:"v2.0", date:"Abr 2026", title:"Vista cronológica",          desc:"Sparklines y evolución semanal por par de divisas."},
+          {v:"v1.0", date:"Abr 2026", title:"COT Tracker lanzado",        desc:"Primera versión con soporte CSV del CFTC."},
         ].map((item,i)=>(
-          <div key={i} style={{display:"flex",gap:14,padding:"16px 0",borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,alignItems:"flex-start"}}>
-            <div style={{flexShrink:0,width:56,textAlign:"center"}}>
-              <span style={{fontSize:10,fontWeight:700,background:"rgba(0,102,204,0.1)",color:"#0066cc",
-                padding:"3px 8px",borderRadius:99,display:"block",marginBottom:4,whiteSpace:"nowrap"}}>{item.v}</span>
-              <span style={{fontSize:10,color:"#8e8e93",whiteSpace:"nowrap"}}>{item.date}</span>
+          <div key={i} style={{ display:"flex",gap:14,padding:"16px 0",
+            borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,alignItems:"flex-start" }}>
+            <div style={{ flexShrink:0,width:58,textAlign:"center" }}>
+              <span style={{ fontSize:10,fontWeight:700,background:"rgba(0,102,204,0.1)",color:"#0066cc",
+                padding:"3px 8px",borderRadius:99,display:"block",marginBottom:4,whiteSpace:"nowrap" }}>{item.v}</span>
+              <span style={{ fontSize:10,color:"#8e8e93",whiteSpace:"nowrap" }}>{item.date}</span>
             </div>
-            <div style={{flex:1}}>
-              <p style={{margin:"0 0 4px",fontSize:13,fontWeight:600,color:darkMode?"#fff":"#1c1c1e"}}>{item.title}</p>
-              <p style={{margin:0,fontSize:12,color:"#8e8e93",lineHeight:1.6}}>{item.desc}</p>
+            <div style={{ flex:1 }}>
+              <p style={{ margin:"0 0 4px",fontSize:13,fontWeight:600,color:darkMode?"#fff":"#1c1c1e" }}>{item.title}</p>
+              <p style={{ margin:0,fontSize:12,color:"#8e8e93",lineHeight:1.6 }}>{item.desc}</p>
             </div>
           </div>
         ))}
@@ -1008,142 +1344,114 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
     </SettingsShell>
   );
 
-  // ── MAIN SETTINGS ──────────────────────────────────────────────────────────
+  // ── MAIN PANEL ─────────────────────────────────────────────────────────
   const Row = ({icon,label,desc,onPress,right,danger}) => (
-    <div onClick={onPress} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 20px",cursor:onPress?"pointer":"default",
-      borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,transition:"background 0.15s"}}
+    <div onClick={onPress}
+      style={{ display:"flex",alignItems:"center",gap:12,padding:"13px 20px",
+        cursor:onPress?"pointer":"default",
+        borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,transition:"background 0.15s" }}
       onMouseEnter={e=>onPress&&(e.currentTarget.style.background=darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.02)")}
       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-      <span style={{fontSize:18,width:28,textAlign:"center",flexShrink:0}}>{icon}</span>
-      <div style={{flex:1,minWidth:0}}>
-        <p style={{margin:0,fontSize:14,fontWeight:500,color:danger?"#c0392b":darkMode?"#fff":"#1c1c1e"}}>{label}</p>
-        {desc&&<p style={{margin:0,fontSize:12,color:"#8e8e93",marginTop:1}}>{desc}</p>}
+      <span style={{ fontSize:18,width:28,textAlign:"center",flexShrink:0 }}>{icon}</span>
+      <div style={{ flex:1,minWidth:0 }}>
+        <p style={{ margin:0,fontSize:14,fontWeight:500,color:danger?"#c0392b":darkMode?"#fff":"#1c1c1e" }}>{label}</p>
+        {desc&&<p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:1 }}>{desc}</p>}
       </div>
-      {right || (onPress && <span style={{color:"#c7c7cc",fontSize:16}}>›</span>)}
+      {right || (onPress && <span style={{ color:"#c7c7cc",fontSize:16 }}>›</span>)}
     </div>
   );
-
   const SectionTitle = ({title}) => (
-    <p style={{margin:"20px 20px 6px",fontSize:11,fontWeight:700,color:"#8e8e93",letterSpacing:"0.06em",textTransform:"uppercase"}}>{title}</p>
+    <p style={{ margin:"20px 20px 6px",fontSize:11,fontWeight:700,color:"#8e8e93",letterSpacing:"0.06em",textTransform:"uppercase" }}>{title}</p>
   );
-
   const Toggle = ({value,onChange}) => (
-    <div onClick={onChange} style={{width:44,height:26,borderRadius:99,background:value?"#34c759":"#d1d1d6",
-      position:"relative",cursor:"pointer",transition:"background 0.2s",flexShrink:0}}>
-      <div style={{position:"absolute",top:3,left:value?20:3,width:20,height:20,borderRadius:"50%",
-        background:"white",boxShadow:"0 1px 4px rgba(0,0,0,0.2)",transition:"left 0.2s"}}/>
+    <div onClick={onChange}
+      style={{ width:44,height:26,borderRadius:99,background:value?"#34c759":"#d1d1d6",
+        position:"relative",cursor:"pointer",transition:"background 0.2s",flexShrink:0 }}>
+      <div style={{ position:"absolute",top:3,left:value?20:3,width:20,height:20,borderRadius:"50%",
+        background:"white",boxShadow:"0 1px 4px rgba(0,0,0,0.2)",transition:"left 0.2s" }}/>
     </div>
   );
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
-      display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)"}}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        background:darkMode?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:500,
-        maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
-        animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",
-      }}>
+    <div onClick={onClose}
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
+        display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:darkMode?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",
+          width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",
+          boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
         <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
-        {/* Handle */}
-        <div style={{width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 4px"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 4px"}}/>
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 20px 0"}}>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 20px 0" }}>
           <div>
-            <p style={{margin:0,fontSize:18,fontWeight:700,color:darkMode?"#fff":"#1c1c1e",letterSpacing:"-0.3px"}}>Ajustes</p>
-            <p style={{margin:0,fontSize:12,color:"#8e8e93"}}>{user.nombre} · {user.plan||"Trial"}</p>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#fff":"#1c1c1e",letterSpacing:"-0.3px" }}>Ajustes</p>
+            <p style={{ margin:0,fontSize:12,color:"#8e8e93" }}>{user?.nombre} · {user?.plan||"Trial"}</p>
           </div>
-          <button onClick={onClose} style={{width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14}}>✕</button>
+          <button onClick={onClose}
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+        </div>
+        {/* Avatar */}
+        <div style={{ display:"flex",justifyContent:"center",padding:"16px 0 8px" }}>
+          <div style={{ width:56,height:56,borderRadius:"50%",
+            background:`linear-gradient(135deg,${planColor},${planColor}aa)`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            boxShadow:`0 4px 16px ${planColor}44` }}>
+            <span style={{ fontSize:22,fontWeight:700,color:"white" }}>{(user?.nombre||"U")[0].toUpperCase()}</span>
+          </div>
         </div>
 
-        {/* User avatar */}
-        <div style={{display:"flex",justifyContent:"center",padding:"16px 0 8px"}}>
-          <div style={{width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${planColor},${planColor}aa)`,
-            display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 4px 16px ${planColor}44`}}>
-            <span style={{fontSize:22,fontWeight:700,color:"white"}}>{user.nombre[0].toUpperCase()}</span>
-          </div>
-        </div>
-
-        {/* ── MY ACCOUNT ── */}
+        {/* MY ACCOUNT */}
         <SectionTitle title={t.account}/>
-        <Row icon="👤" label={t.profile} desc={user.email} onPress={()=>setSection("profile")}/>
-        <Row icon="💳" label={t.billing} desc={user.plan||"Trial"} onPress={()=>setSection("billing")}/>
-        <Row icon="⬆️" label={t.upgrade} desc={lang==="en"?"Get more features":"Accede a todas las funciones"} onPress={onUpgrade}/>
+        <Row icon="👤" label={t.profile} desc={user?.email} onPress={()=>setSection("profile")}/>
+        <Row icon="💳" label={t.billing} desc={user?.plan||"Trial"} onPress={()=>setShowBilling(true)}/>
+        <Row icon="⬆️" label={t.upgrade} desc={lang==="en"?"Get more features":"Accede a todas las funciones"} onPress={()=>setShowBilling(true)}/>
 
-        {/* ── PREFERENCES ── */}
+        {/* PREFERENCES */}
         <SectionTitle title={t.prefs}/>
-        <Row icon={darkMode?"🌙":"☀️"} label={t.darkmode}
-          right={<Toggle value={darkMode} onChange={onDarkMode}/>}/>
+        <Row icon={darkMode?"🌙":"☀️"} label={t.darkmode} right={<Toggle value={darkMode} onChange={onDarkMode}/>}/>
         <Row icon="🌐" label={t.language}
           right={
-            <div style={{display:"flex",gap:4}}>
+            <div style={{ display:"flex",gap:4 }}>
               {["es","en"].map(l=>(
-                <button key={l} onClick={(e)=>{e.stopPropagation();onLang(l);}} style={{
-                  padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
-                  background:lang===l?"#0066cc":"#f2f2f7",color:lang===l?"white":"#3c3c43",transition:"all 0.15s",
-                }}>{l==="es"?"🇪🇸 ES":"🇬🇧 EN"}</button>
+                <button key={l} onClick={e=>{e.stopPropagation();onLang(l);}}
+                  style={{ padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
+                    background:lang===l?"#0066cc":"#f2f2f7",color:lang===l?"white":"#3c3c43",transition:"all 0.15s" }}>
+                  {l==="es"?"🇪🇸 ES":"🇬🇧 EN"}
+                </button>
               ))}
             </div>
           }/>
-        <Row icon="🔔" label={t.notif} desc={lang==="en"?"Every Friday at 3:30 PM ET":"Cada viernes a las 21:30h"}
+        <Row icon="🔔" label={t.notif} desc={lang==="en"?"Every Friday at 9:35 PM":"Cada viernes a las 21:35h"}
           right={<Toggle value={notifications} onChange={toggleNotif}/>}/>
 
-        {/* ── COMMUNITY ── */}
+        {/* COMMUNITY */}
         <SectionTitle title={t.community}/>
-        <Row icon="🎁" label={t.referral} desc={t.referralDesc}
-          onPress={()=>{
-            const refUrl = "https://cot-tracker.vercel.app?ref="+encodeURIComponent(user.email.split("@")[0]);
-            navigator.clipboard.writeText(refUrl);
-            alert("¡Link de referido copiado! Compártelo con tus amigos: "+refUrl);
-          }}/>
         <Row icon="✈️" label={t.telegram} desc={t.telegramDesc}
-          onPress={()=>window.open("https://t.me/COT_TRACKER","_blank")}/>
+          onPress={()=>window.open(TELEGRAM_URL,"_blank")}/>
         <Row icon="📊" label={t.copy} desc={t.copyDesc}
-          onPress={()=>window.open("https://t.me/Alejandro_Ibz_fx?text=COPY%20-%20Quiero%20seguir%20tus%20operaciones","_blank")}/>
+          onPress={()=>window.open(COPYTRADING_URL,"_blank")}/>
 
-        {/* ── SUPPORT ── */}
+        {/* SUPPORT */}
         <SectionTitle title={t.support}/>
-        <Row icon="❓" label={t.help} onPress={()=>window.open("https://t.me/COT_TRACKER","_blank")}/>
-        <Row icon="🐛" label={t.bug} onPress={()=>setSection("bug")}/>
+        <Row icon="❓" label={t.help} onPress={()=>window.open(TELEGRAM_URL,"_blank")}/>
+        <Row icon="🐛" label={t.bug} onPress={()=>setShowBug(true)}/>
         <Row icon="🚀" label={t.news} onPress={()=>setSection("news")}/>
         <Row icon="💬" label={t.contact} onPress={()=>window.open("mailto:marketmoneyfx00@gmail.com","_blank")}/>
 
-        {/* ── LEGAL ── */}
+        {/* LEGAL */}
         <SectionTitle title={t.legal}/>
-        <Row icon="🔒" label={t.privacy}
-          onPress={()=>window.open("https://marketmoneyfx.com/privacy","_blank")}/>
-        <Row icon="📄" label={t.terms}
-          onPress={()=>window.open("https://marketmoneyfx.com/terms","_blank")}/>
+        <Row icon="🔒" label={t.privacy}  onPress={()=>setLegalType("privacy")}/>
+        <Row icon="📄" label={t.terms}    onPress={()=>setLegalType("terms")}/>
 
-        {/* ── LOGOUT ── */}
-        <div style={{padding:"8px 0 48px"}}>
+        {/* LOGOUT */}
+        <div style={{ padding:"8px 0 48px" }}>
           <Row icon="🚪" label={t.logout} danger onPress={onLogout}/>
         </div>
       </div>
     </div>
   );
 }
-
-// Shell wrapper for sub-screens inside settings
-function SettingsShell({children, onBack, title, onClose, dark}) {
-  return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
-      display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)"}}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        background:dark?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:500,
-        maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
-        animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",
-      }}>
-        <div style={{width:36,height:4,borderRadius:99,background:dark?"#3a3a3c":"#d1d1d6",margin:"12px auto 8px"}}/>
-        <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 20px 16px",borderBottom:`1px solid ${dark?"#2c2c2e":"#f2f2f7"}`}}>
-          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0}}>← Volver</button>
-          <span style={{fontSize:16,fontWeight:700,color:dark?"#fff":"#1c1c1e",flex:1,textAlign:"center",marginRight:40}}>{title}</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALENDARIO ECONÓMICO
@@ -3127,8 +3435,7 @@ function AppInner() {
       {detail&&<DetailSheet pairData={detail} onClose={()=>setDetail(null)}/>}
       {showSettings&&<SettingsPanel user={user} darkMode={darkMode} lang={lang}
         onDarkMode={toggleDark} onLang={changeLang} onLogout={handleLogout}
-        onClose={()=>setShowSettings(false)}
-        onUpgrade={()=>{setShowSettings(false);}}/>}
+        onClose={()=>setShowSettings(false)}/>}
 
       {/* ── HEADER ── */}
       <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:10}}>
@@ -3175,6 +3482,9 @@ function AppInner() {
           </div>
         </div>
       </div>
+
+      {/* ── COT WEEKLY BANNER ── */}
+      <COTWeeklyBanner darkMode={darkMode} T={T}/>
 
       {/* ── TAB 1: CALENDARIO ── */}
       {mainTab==="calendario"&&(

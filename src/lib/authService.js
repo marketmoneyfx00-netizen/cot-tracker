@@ -14,7 +14,7 @@
 
 import { supabase } from './supabase.js';
 
-// ─── Normalize email (same as was used in App.jsx) ───────────────────────────
+// ─── Normalize email ──────────────────────────────────────────────────────────
 export function normalizeEmail(email) {
   return String(email || '')
     .trim()
@@ -28,100 +28,88 @@ export function normalizeEmail(email) {
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 /**
  * Send a magic link / OTP to the user's email.
- * Does NOT return a session immediately — session arrives via onAuthStateChange
- * after the user clicks the link.
+ * Session will be created after clicking the email link.
  *
  * @param {string} email
  * @returns {{ error: Error|null }}
  */
 export async function loginWithEmail(email) {
-  const emailClean = normalizeEmail(email);
+  try {
+    const emailClean = normalizeEmail(email);
 
-  if (!emailClean || !emailClean.includes('@')) {
-    return { error: new Error('Email inválido') };
+    if (!emailClean || !emailClean.includes('@')) {
+      return { error: new Error('Email inválido') };
+    }
+
+    console.log('[AUTH] Sending magic link to:', emailClean);
+
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: emailClean,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      console.error('[AUTH ERROR]', error);
+      return { error };
+    }
+
+    console.log('[AUTH SUCCESS]', data);
+
+    return { error: null };
+  } catch (err) {
+    console.error('[AUTH CATCH ERROR]', err);
+    return { error: err };
   }
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email: emailClean,
-    options: {
-      emailRedirectTo: window.location.origin,
-      // Prevents creating a new account if email doesn't exist
-      shouldCreateUser: false,
-    },
-  });
-
-  return { error: error || null };
 }
 
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
-/**
- * Sign out the current user and clear all Supabase session data.
- * @returns {{ error: Error|null }}
- */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   return { error: error || null };
 }
 
 // ─── GET CURRENT SESSION ──────────────────────────────────────────────────────
-/**
- * Returns the active Supabase session, or null if not authenticated.
- * Safe to call on app boot.
- *
- * @returns {Promise<Session|null>}
- */
 export async function getCurrentSession() {
   const { data, error } = await supabase.auth.getSession();
+
   if (error) {
     console.error('[authService] getSession error:', error.message);
     return null;
   }
+
   return data?.session ?? null;
 }
 
 // ─── GET CURRENT USER ─────────────────────────────────────────────────────────
-/**
- * Returns the authenticated Supabase user, or null.
- *
- * @returns {Promise<User|null>}
- */
 export async function getCurrentUser() {
   const { data, error } = await supabase.auth.getUser();
+
   if (error) {
     console.error('[authService] getUser error:', error.message);
     return null;
   }
+
   return data?.user ?? null;
 }
 
 // ─── AUTH STATE LISTENER ──────────────────────────────────────────────────────
-/**
- * Subscribe to authentication state changes (login, logout, token refresh).
- * Returns an unsubscribe function — call it in useEffect cleanup.
- *
- * @param {(event: string, session: Session|null) => void} callback
- * @returns {() => void} unsubscribe
- */
 export function listenAuthChanges(callback) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(callback);
+
   return () => subscription.unsubscribe();
 }
 
 // ─── LOG LOGIN EVENT ──────────────────────────────────────────────────────────
-/**
- * Write a login event to login_logs table.
- * Non-blocking — failures are logged to console only, never thrown.
- *
- * @param {string}  userId
- * @param {boolean} success
- * @param {string}  [failReason]
- */
 export async function logLoginEvent(userId, success, failReason = null) {
   try {
     await supabase.from('login_logs').insert({
-      user_id:    userId,
+      user_id: userId,
       login_time: new Date().toISOString(),
-      device:     navigator.userAgent.slice(0, 250),
+      device: navigator.userAgent.slice(0, 250),
       success,
       fail_reason: failReason,
     });
@@ -131,12 +119,6 @@ export async function logLoginEvent(userId, success, failReason = null) {
 }
 
 // ─── UPDATE LAST LOGIN ────────────────────────────────────────────────────────
-/**
- * Update last_login timestamp in users_access.
- * Non-blocking.
- *
- * @param {string} email
- */
 export async function updateLastLogin(email) {
   try {
     await supabase
