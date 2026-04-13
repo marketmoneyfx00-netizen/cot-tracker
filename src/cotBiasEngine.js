@@ -119,6 +119,136 @@ function getBiasColor(score) {
   return                  '#ef4444'; // strong bear
 }
 
+
+// ─── V2 WEIGHT CONSTANTS ─────────────────────────────────────────────────────
+const V2_WEIGHTS = {
+  leveragedFlow:    1.5,
+  divergence:       1.0,
+  historicalExtreme:1.5,
+  assetManagers:    1.5,
+  dealersFilter:    0.5,
+};
+
+// Maximum possible raw score with V2 weights (for normalization to -5..+5):
+// Max per factor: leveragedFlow=2, divergence=2, historicalExtreme=1, assetManagers=1, dealers=1
+// Weighted max = (2*1.5) + (2*1.0) + (1*1.5) + (1*1.5) + (1*0.5) = 3+2+1.5+1.5+0.5 = 8.5
+const V2_MAX_RAW = 8.5;
+
+// ─── V2 LABEL MAP ─────────────────────────────────────────────────────────────
+function getLabelV2(score) {
+  if (score >= 4)    return 'Strong Bullish Edge';
+  if (score >= 1.5)  return 'Moderate Bullish Bias';
+  if (score > -1.5)  return 'Neutral / Divergence';
+  if (score > -4)    return 'Moderate Bearish Bias';
+  return                   'Strong Bearish Edge';
+}
+
+// ─── V2 RECOMMENDATION ────────────────────────────────────────────────────────
+function getRecommendationV2(score) {
+  if (score >= 4)
+    return 'Strong institutional alignment. Only look for long setups this week.';
+
+  if (score >= 1.5)
+    return 'Moderate bullish bias confirmed. Prioritize longs with HTF confirmation.';
+
+  if (score > -1.5)
+    return 'No clear directional edge. Wait for structure confirmation before trading.';
+
+  if (score > -4)
+    return 'Moderate bearish bias confirmed. Prioritize shorts with HTF confirmation.';
+
+  return 'Strong institutional alignment. Only look for short setups in HTF zones.';
+}
+
+// ─── V2 SCORING ENGINE ────────────────────────────────────────────────────────
+/**
+ * calculateInstitutionalBiasV2
+ *
+ * Weighted scoring engine with macro confidence multiplier.
+ * Normalizes to -5..+5 range. Falls back to V1 on any malformed input.
+ *
+ * @param {Object} data         - Same input shape as calculateBiasScore()
+ * @param {number} [data.macroConfidence] - Optional 0.0–1.0 multiplier (default 1.0)
+ * @returns {Object}            - Identical output shape to calculateBiasScore()
+ */
+export function calculateInstitutionalBiasV2(data = {}) {
+  // ── Null guard → fallback to V1 ─────────────────────────────────────────
+  if (!data) return calculateBiasScore(null);
+
+  try {
+    const leveragedFlow   = scoreLeveragedFlow(data.leveragedWeeklyChange);
+    const divergence      = scoreDivergence(data.priceDirection, data.positioningDirection);
+    const historicalEx    = scorePercentile(data.positionPercentile);
+    const assetManagers   = scoreAssetManagers(data.assetManagersChange);
+    const dealers         = scoreDealers(data.dealersExtreme);
+
+    // ── Malformed-input guard: if all factors are 0 and inputs look missing,
+    //    fall back gracefully rather than returning misleading neutral score ──
+    const hasAnyInput = (
+      data.leveragedWeeklyChange != null ||
+      data.priceDirection        != null ||
+      data.positionPercentile    != null ||
+      data.assetManagersChange   != null ||
+      data.dealersExtreme        != null
+    );
+    if (!hasAnyInput) return calculateBiasScore(data);
+
+    // ── Weighted raw score ────────────────────────────────────────────────
+    const rawScore =
+      (leveragedFlow  * V2_WEIGHTS.leveragedFlow)    +
+      (divergence     * V2_WEIGHTS.divergence)        +
+      (historicalEx   * V2_WEIGHTS.historicalExtreme) +
+      (assetManagers  * V2_WEIGHTS.assetManagers)     +
+      (dealers        * V2_WEIGHTS.dealersFilter);
+
+    // ── Normalize to -5..+5 via max-raw-score scaling ────────────────────
+    const normalizedRaw = V2_MAX_RAW > 0
+      ? (rawScore / V2_MAX_RAW) * 5
+      : rawScore;
+
+    // ── Macro confidence multiplier (default 1.0 if absent/invalid) ──────
+    const macroConf = (
+      typeof data.macroConfidence === 'number' &&
+      !isNaN(data.macroConfidence) &&
+      data.macroConfidence >= 0 &&
+      data.macroConfidence <= 1
+    ) ? data.macroConfidence : 1.0;
+
+    const finalRaw = normalizedRaw * macroConf;
+
+    // ── Safe clamp + decimal precision to -5..+5 ───────────────────────────
+    const score = Math.max(-5, Math.min(5, Number(finalRaw.toFixed(1))));
+
+    // ── NaN guard → fall back to V1 ──────────────────────────────────────
+    if (isNaN(score)) return calculateBiasScore(data);
+
+    return {
+      score,
+      label:          getLabelV2(score),
+      direction:      getDirection(score),          // reuse shared helper
+      color:          getBiasColor(score),           // reuse shared helper
+      recommendation: getRecommendationV2(score),
+      breakdown: {
+        leveragedFlow,
+        divergence,
+        percentile:    historicalEx,                 // key kept for UI compatibility
+        assetManagers,
+        dealers,
+      },
+      // V2 metadata (ignored by UI — backward safe)
+      _v2: {
+        rawWeighted:      rawScore,
+        normalized:       normalizedRaw,
+        macroConfidence:  macroConf,
+        weightsApplied:   V2_WEIGHTS,
+      },
+    };
+  } catch (_err) {
+    // Any unexpected error → silent fallback to V1
+    return calculateBiasScore(data);
+  }
+}
+
 // ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
 /**
  * calculateBiasScore
@@ -133,40 +263,59 @@ function getBiasColor(score) {
  *
  * @returns {Object} Bias result with score, label, direction, recommendation, breakdown
  */
+/**
+ * calculateBiasScore
+ *
+ * Public export. Routes to V2 engine (calculateInstitutionalBiasV2) with
+ * automatic fallback to V1 logic on any error or malformed input.
+ * Output shape is identical regardless of which engine runs.
+ *
+ * @param {Object} data  - Same input shape as before (backward compatible)
+ * @returns {Object}     - { score, label, direction, color, recommendation, breakdown }
+ */
 export function calculateBiasScore(data = {}) {
+  // ── V1 null guard (kept for backward compatibility) ───────────────────────
   if (!data) {
     return {
       score: 0,
-      label: 'Neutral / Range',
+      label: 'Neutral / Divergence',
       direction: 'neutral',
       color: '#94a3b8',
       recommendation: 'Waiting for new COT data',
       breakdown: { leveragedFlow:0, divergence:0, percentile:0, assetManagers:0, dealers:0 },
     };
   }
-  const leveragedFlow  = scoreLeveragedFlow(data.leveragedWeeklyChange);
-  const divergence     = scoreDivergence(data.priceDirection, data.positioningDirection);
-  const percentile     = scorePercentile(data.positionPercentile);
-  const assetManagers  = scoreAssetManagers(data.assetManagersChange);
-  const dealers        = scoreDealers(data.dealersExtreme);
 
-  const rawScore = leveragedFlow + divergence + percentile + assetManagers + dealers;
-  const score    = Math.max(-5, Math.min(5, rawScore));
+  // ── V1 ENGINE (preserved as fallback — do not remove) ────────────────────
+  function _v1() {
+    const leveragedFlow  = scoreLeveragedFlow(data.leveragedWeeklyChange);
+    const divergence     = scoreDivergence(data.priceDirection, data.positioningDirection);
+    const percentile     = scorePercentile(data.positionPercentile);
+    const assetManagers  = scoreAssetManagers(data.assetManagersChange);
+    const dealers        = scoreDealers(data.dealersExtreme);
+    const rawScore = leveragedFlow + divergence + percentile + assetManagers + dealers;
+    const score    = Math.max(-5, Math.min(5, rawScore));
+    return {
+      score,
+      label:          getLabel(score),
+      direction:      getDirection(score),
+      color:          getBiasColor(score),
+      recommendation: getRecommendation(score),
+      breakdown: { leveragedFlow, divergence, percentile, assetManagers, dealers },
+    };
+  }
 
-  return {
-    score,
-    label:          getLabel(score),
-    direction:      getDirection(score),
-    color:          getBiasColor(score),
-    recommendation: getRecommendation(score),
-    breakdown: {
-      leveragedFlow,
-      divergence,
-      percentile,
-      assetManagers,
-      dealers,
-    },
-  };
+  // ── ACTIVE ENGINE: V2 with V1 fallback ───────────────────────────────────
+  try {
+    const v2Result = calculateInstitutionalBiasV2(data);
+    // Extra NaN/null guard on the returned score before accepting V2 result
+    if (!v2Result || typeof v2Result.score !== 'number' || isNaN(v2Result.score)) {
+      return _v1();
+    }
+    return v2Result;
+  } catch (_err) {
+    return _v1();
+  }
 }
 
 // ─── DERIVE FROM PROCESSED PAIR DATA (COT Tracker native format) ─────────────
@@ -194,13 +343,19 @@ export function deriveInputsFromPair(pairData) {
   // priceDirection: derived from smartNet sign over last 2 weeks
   // positioningDirection: derived from leveragedWeeklyChange
   const priceDirection = (() => {
-    if (!prev) return null;
-    // Use dealerNet as a proxy for price pressure (dealers are counter-trend)
-    // If dealer net went more short, institutions pushed price up
-    const dealerDelta = prev.dealerNet != null && latest.dealerNet != null
-      ? latest.dealerNet - prev.dealerNet : 0;
-    return dealerDelta < 0 ? 'up' : dealerDelta > 0 ? 'down' : null;
-  })();
+  if (!prev) return null;
+
+  // Use smartNet directional change as HTF directional proxy
+  if (latest.smartNet != null && prev.smartNet != null) {
+    return latest.smartNet > prev.smartNet
+      ? 'up'
+      : latest.smartNet < prev.smartNet
+      ? 'down'
+      : null;
+  }
+
+  return null;
+})();
   const positioningDirection = leveragedWeeklyChange > 0 ? 'up' : leveragedWeeklyChange < 0 ? 'down' : null;
 
   // Factor 3 — Historical percentile of current smartNet vs last 52 weeks
