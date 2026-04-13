@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
 
   // ── Load profile + subscription from Supabase ─────────────────────────────
   const loadProfile = useCallback(async (authUser) => {
+  try {
     if (!authUser?.email) {
       setProfile(null);
       setSubscription(null);
@@ -57,6 +58,26 @@ export function AuthProvider({ children }) {
     }
 
     const { profile: p } = await loadUserProfile(authUser.email);
+
+    if (!p) {
+      console.warn('[AuthProvider] Perfil no encontrado:', authUser.email);
+
+      const fallbackProfile = {
+        email: authUser.email,
+        telegram_username: authUser.email.split('@')[0],
+        plan: 'Trial',
+        status: 'trial'
+      };
+
+      setProfile(fallbackProfile);
+      setSubscription(null);
+      setAccessStatus({
+        hasAccess: true,
+        plan: 'Trial'
+      });
+
+      return;
+    }
 
     const { subscription: sub } = p?.id
       ? await loadUserSubscription(p.id)
@@ -68,12 +89,27 @@ export function AuthProvider({ children }) {
     setSubscription(sub);
     setAccessStatus(status);
 
-    // Non-blocking side effects
-    if (p) {
-      updateLastLogin(authUser.email);
-      logLoginEvent(p.id ?? authUser.id, true);
-    }
-  }, []);
+    updateLastLogin(authUser.email);
+    logLoginEvent(p.id ?? authUser.id, true);
+
+  } catch (error) {
+    console.error('[AuthProvider] loadProfile error:', error);
+
+    const fallbackProfile = {
+      email: authUser?.email || 'unknown',
+      telegram_username: authUser?.email?.split('@')[0] || 'Usuario',
+      plan: 'Trial',
+      status: 'trial'
+    };
+
+    setProfile(fallbackProfile);
+    setSubscription(null);
+    setAccessStatus({
+      hasAccess: true,
+      plan: 'Trial'
+    });
+  }
+}, []);
 
   // ── Expose refreshProfile for manual reload ───────────────────────────────
   const refreshProfile = useCallback(async () => {
