@@ -3462,7 +3462,7 @@ function AppInner() {
               <button onClick={()=>setShowSettings(true)} style={{width:28,height:28,borderRadius:"50%",
                 background:T.accent,border:"none",cursor:"pointer",flexShrink:0,
                 display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:11,fontWeight:700,color:"white"}}>{user.nombre[0].toUpperCase()}</span>
+                <span style={{fontSize:11,fontWeight:700,color:"white"}}>{(user?.nombre?.[0] || user?.email?.[0] || "U").toUpperCase()}</span>
               </button>
             </div>
           </div>
