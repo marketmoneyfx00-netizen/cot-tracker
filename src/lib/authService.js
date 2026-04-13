@@ -1,15 +1,13 @@
 /**
- * authService.js — Supabase Auth Service
+ * authService.js — Supabase Auth Service (Hybrid: Password + Magic Link)
  *
- * Single source of truth for all authentication operations.
- * Uses Supabase Auth (Magic Link / OTP) — no passwords, no GAS, no localStorage session.
- *
- * Public API:
- *   loginWithEmail(email)       → sends OTP/magic link
- *   logout()                    → signs out and clears session
- *   getCurrentSession()         → returns active session or null
- *   getCurrentUser()            → returns auth user or null
- *   listenAuthChanges(callback) → subscribes to auth state changes, returns unsubscribe fn
+ * Supports:
+ *   loginWithPassword(email, password)  → email + password login
+ *   loginWithEmail(email)               → OTP / magic link (fallback)
+ *   resetPassword(email)                → sends password reset email
+ *   updatePassword(newPassword)         → sets/changes password for logged-in user
+ *   logout()                            → signs out
+ *   listenAuthChanges(callback)         → single auth state listener
  */
 
 import { supabase } from './supabase.js';
@@ -25,43 +23,84 @@ export function normalizeEmail(email) {
     .normalize('NFKC');
 }
 
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
+// ─── LOGIN WITH PASSWORD ──────────────────────────────────────────────────────
 /**
- * Send a magic link / OTP to the user's email.
- * Session will be created after clicking the email link.
- *
- * @param {string} email
- * @returns {{ error: Error|null }}
+ * Email + password login. Primary method for returning users.
+ * @returns {{ data, error }}
+ */
+export async function loginWithPassword(email, password) {
+  const emailClean = normalizeEmail(email);
+
+  if (!emailClean || !emailClean.includes('@')) {
+    return { data: null, error: new Error('Email inválido') };
+  }
+  if (!password) {
+    return { data: null, error: new Error('Introduce tu contraseña') };
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: emailClean,
+    password,
+  });
+
+  return { data, error };
+}
+
+// ─── LOGIN WITH MAGIC LINK (OTP) ──────────────────────────────────────────────
+/**
+ * Sends a magic link / OTP email. Used for first access or as fallback.
+ * @returns {{ error }}
  */
 export async function loginWithEmail(email) {
-  try {
-    const emailClean = normalizeEmail(email);
+  const emailClean = normalizeEmail(email);
 
-    if (!emailClean || !emailClean.includes('@')) {
-      return { error: new Error('Email inválido') };
-    }
-
-    console.log('[AUTH] Sending magic link to:', emailClean);
-
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: emailClean,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    });
-
-    if (error) {
-      console.error('[AUTH ERROR]', error);
-      return { error };
-    }
-
-    console.log('[AUTH SUCCESS]', data);
-
-    return { error: null };
-  } catch (err) {
-    console.error('[AUTH CATCH ERROR]', err);
-    return { error: err };
+  if (!emailClean || !emailClean.includes('@')) {
+    return { error: new Error('Email inválido') };
   }
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email: emailClean,
+    options: {
+      emailRedirectTo: window.location.origin,
+      shouldCreateUser: false,
+    },
+  });
+
+  return { error };
+}
+
+// ─── RESET PASSWORD ───────────────────────────────────────────────────────────
+/**
+ * Sends a password reset email.
+ * @returns {{ error }}
+ */
+export async function resetPassword(email) {
+  const emailClean = normalizeEmail(email);
+
+  if (!emailClean || !emailClean.includes('@')) {
+    return { error: new Error('Email inválido') };
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(emailClean, {
+    redirectTo: `${window.location.origin}?mode=reset-password`,
+  });
+
+  return { error };
+}
+
+// ─── UPDATE PASSWORD (for logged-in users) ────────────────────────────────────
+/**
+ * Sets or changes the password for the currently authenticated user.
+ * Password lives ONLY in Supabase Auth — no custom tables touched.
+ * @returns {{ error }}
+ */
+export async function updatePassword(newPassword) {
+  if (!newPassword || newPassword.length < 8) {
+    return { error: new Error('La contraseña debe tener al menos 8 caracteres') };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  return { error };
 }
 
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
@@ -70,36 +109,26 @@ export async function logout() {
   return { error: error || null };
 }
 
-// ─── GET CURRENT SESSION ──────────────────────────────────────────────────────
+// ─── GET SESSION ──────────────────────────────────────────────────────────────
 export async function getCurrentSession() {
   const { data, error } = await supabase.auth.getSession();
-
   if (error) {
     console.error('[authService] getSession error:', error.message);
     return null;
   }
-
   return data?.session ?? null;
 }
 
-// ─── GET CURRENT USER ─────────────────────────────────────────────────────────
+// ─── GET USER ─────────────────────────────────────────────────────────────────
 export async function getCurrentUser() {
   const { data, error } = await supabase.auth.getUser();
-
-  if (error) {
-    console.error('[authService] getUser error:', error.message);
-    return null;
-  }
-
+  if (error) return null;
   return data?.user ?? null;
 }
 
 // ─── AUTH STATE LISTENER ──────────────────────────────────────────────────────
 export function listenAuthChanges(callback) {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(callback);
-
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
   return () => subscription.unsubscribe();
 }
 
@@ -107,14 +136,14 @@ export function listenAuthChanges(callback) {
 export async function logLoginEvent(userId, success, failReason = null) {
   try {
     await supabase.from('login_logs').insert({
-      user_id: userId,
-      login_time: new Date().toISOString(),
-      device: navigator.userAgent.slice(0, 250),
+      user_id:     userId,
+      login_time:  new Date().toISOString(),
+      device:      navigator.userAgent.slice(0, 250),
       success,
       fail_reason: failReason,
     });
   } catch (err) {
-    console.warn('[authService] Failed to write login_log:', err.message);
+    console.warn('[authService] login_log failed:', err.message);
   }
 }
 
@@ -126,6 +155,6 @@ export async function updateLastLogin(email) {
       .update({ last_login: new Date().toISOString() })
       .eq('email', normalizeEmail(email));
   } catch (err) {
-    console.warn('[authService] Failed to update last_login:', err.message);
+    console.warn('[authService] updateLastLogin failed:', err.message);
   }
 }

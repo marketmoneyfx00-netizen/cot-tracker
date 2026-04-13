@@ -1,190 +1,173 @@
 /**
  * AuthProvider.jsx — React Auth Context
  *
- * Manages authentication state globally.
- * Exposes: loading, session, user, profile, subscription, accessStatus
+ * FIX: Eliminado el useEffect de initAuth() que llamaba getCurrentSession()
+ * en paralelo con onAuthStateChange, causando lock contention en Supabase v2.
  *
- * Usage:
- *   Wrap <App> with <AuthProvider>
- *   Access state via: const { user, profile, accessStatus } = useAuth()
+ * En Supabase JS v2, onAuthStateChange dispara INITIAL_SESSION inmediatamente
+ * al suscribirse, entregando la sesión actual. No hay necesidad de llamar
+ * getSession() por separado — eso era la causa del lock stealing.
+ *
+ * Flujo correcto (serializado):
+ *   onAuthStateChange(INITIAL_SESSION) → setUser → loadProfile → setLoading(false)
+ *   onAuthStateChange(SIGNED_IN/OUT)   → setUser → loadProfile/clear
  */
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import {
-  getCurrentSession,
-  listenAuthChanges,
-  logLoginEvent,
-  updateLastLogin,
-} from '../lib/authService.js';
-import {
-  loadUserProfile,
-  loadUserSubscription,
-  getAccessStatus,
-} from '../lib/accessGuard.js';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { listenAuthChanges, logLoginEvent, updateLastLogin } from '../lib/authService.js';
+import { loadUserProfile, loadUserSubscription, getAccessStatus } from '../lib/accessGuard.js';
 
 // ─── CONTEXT ──────────────────────────────────────────────────────────────────
 const AuthContext = createContext({
-  loading: true,
-  session: null,
-  user: null,
-  profile: null,
-  subscription: null,
-  accessStatus: null,
+  loading:        true,
+  session:        null,
+  user:           null,
+  profile:        null,
+  subscription:   null,
+  accessStatus:   null,
   refreshProfile: async () => {},
 });
 
-// ─── HOOK ─────────────────────────────────────────────────────────────────────
 export function useAuth() {
   return useContext(AuthContext);
 }
 
 // ─── PROVIDER ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [session,      setSession]      = useState(null);
+  const [user,         setUser]         = useState(null);
+  const [profile,      setProfile]      = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [accessStatus, setAccessStatus] = useState(null);
 
-  // ── Load profile + subscription from Supabase ─────────────────────────────
+  // Serialization guard: prevents simultaneous loadProfile calls
+  const loadingProfileRef = useRef(false);
+
+  // ── Load profile + subscription (single serialized entry point) ───────────
   const loadProfile = useCallback(async (authUser) => {
-  try {
     if (!authUser?.email) {
+      console.log('[AUTH] No authUser.email — clearing profile');
       setProfile(null);
       setSubscription(null);
       setAccessStatus(null);
       return;
     }
 
-    const { profile: p } = await loadUserProfile(authUser.email);
-
-    if (!p) {
-      console.warn('[AuthProvider] Perfil no encontrado:', authUser.email);
-
-      const fallbackProfile = {
-        email: authUser.email,
-        telegram_username: authUser.email.split('@')[0],
-        plan: 'Trial',
-        status: 'trial'
-      };
-
-      setProfile(fallbackProfile);
-      setSubscription(null);
-      setAccessStatus({
-        hasAccess: true,
-        plan: 'Trial'
-      });
-
+    // Prevent parallel calls
+    if (loadingProfileRef.current) {
+      console.log('[AUTH] loadProfile already in progress — skipping duplicate');
       return;
     }
+    loadingProfileRef.current = true;
 
-    const { subscription: sub } = p?.id
-      ? await loadUserSubscription(p.id)
-      : { subscription: null };
+    try {
+      console.log('[AUTH] Loading profile for:', authUser.email, '| uid:', authUser.id);
+      // Pass both email (fallback) and auth UID (primary attempt)
+      const { profile: p, error: profileError } = await loadUserProfile(authUser.email, authUser.id);
 
-    const status = getAccessStatus(p, sub);
+      if (profileError || !p) {
+        // Profile not in DB — create safe fallback so app can open
+        console.warn('[AUTH] Fallback profile created for:', authUser.email);
+        const fallback = {
+          email:             authUser.email,
+          telegram_username: authUser.email.split('@')[0],
+          plan:              'Trial',
+          status:            'active',
+        };
+        setProfile(fallback);
+        setSubscription(null);
+        setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
+        return;
+      }
 
-    setProfile(p);
-    setSubscription(sub);
-    setAccessStatus(status);
+      const { subscription: sub } = p?.id
+        ? await loadUserSubscription(p.id)
+        : { subscription: null };
 
-    updateLastLogin(authUser.email);
-    logLoginEvent(p.id ?? authUser.id, true);
+      const status = getAccessStatus(p, sub);
 
-  } catch (error) {
-    console.error('[AuthProvider] loadProfile error:', error);
+      setProfile(p);
+      setSubscription(sub);
+      setAccessStatus(status);
 
-    const fallbackProfile = {
-      email: authUser?.email || 'unknown',
-      telegram_username: authUser?.email?.split('@')[0] || 'Usuario',
-      plan: 'Trial',
-      status: 'trial'
-    };
+      console.log('[AUTH] Profile loaded:', p.email, '| plan:', p.plan);
 
-    setProfile(fallbackProfile);
-    setSubscription(null);
-    setAccessStatus({
-      hasAccess: true,
-      plan: 'Trial'
-    });
-  }
-}, []);
+      // Non-blocking side effects
+      updateLastLogin(authUser.email).catch(() => {});
+      logLoginEvent(p.id ?? authUser.id, true).catch(() => {});
 
-  // ── Expose refreshProfile for manual reload ───────────────────────────────
+    } catch (err) {
+      // Network/DB error — use fallback, never crash
+      console.error('[AUTH] loadProfile caught error:', err.message);
+      const fallback = {
+        email:             authUser?.email ?? 'unknown',
+        telegram_username: authUser?.email?.split('@')[0] ?? 'Usuario',
+        plan:              'Trial',
+        status:            'active',
+      };
+      setProfile(fallback);
+      setSubscription(null);
+      setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
+    } finally {
+      loadingProfileRef.current = false;
+    }
+  }, []);
+
+  // ── refreshProfile for manual reload ──────────────────────────────────────
   const refreshProfile = useCallback(async () => {
-    if (user) await loadProfile(user);
+    if (user) {
+      loadingProfileRef.current = false; // allow forced refresh
+      await loadProfile(user);
+    }
   }, [user, loadProfile]);
 
-  // ── Boot: restore session on mount ───────────────────────────────────────
+  // ── SINGLE auth effect — onAuthStateChange handles EVERYTHING ─────────────
+  // DO NOT add a second useEffect calling getCurrentSession() / getSession().
+  // Supabase v2 fires INITIAL_SESSION on subscribe → eliminates lock contention.
   useEffect(() => {
-    let mounted = true;
+    console.log('[AUTH] Subscribing to auth state changes');
 
-    const initAuth = async () => {
-      try {
-        const sessionData = await getCurrentSession();
+const unsubscribe = listenAuthChanges(async (event, newSession) => {
+  console.log('[AUTH] Auth event:', event);
 
-        if (!mounted) return;
+  const forceResetMode =
+    new URLSearchParams(window.location.search).get('mode') === 'reset-password';
 
-        const restoredSession = sessionData?.session ?? null;
-        const restoredUser = restoredSession?.user ?? null;
+  if (forceResetMode) {
+    console.log('[AUTH] Reset mode detected - skipping session restore');
+    setLoading(false);
+    return;
+  }
 
-        setSession(restoredSession);
-        setUser(restoredUser);
+  const authUser = newSession?.user ?? null;
 
-        if (restoredUser) {
-          await loadProfile(restoredUser);
-        }
-      } catch (error) {
-        console.error('[AuthProvider] Session restore error:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initAuth();
-
-    return () => {
-      mounted = false;
-    };
-  }, [loadProfile]);
-
-  // ── Auth state listener: login, logout, token refresh ────────────────────
-  useEffect(() => {
-    const unsubscribe = listenAuthChanges(async (event, newSession) => {
-      const authUser = newSession?.user ?? null;
-
-      setSession(newSession);
-      setUser(authUser);
+  setSession(newSession);
+  setUser(authUser);
 
       if (authUser) {
+        console.log('[AUTH] Session active for:', authUser.email);
         await loadProfile(authUser);
       } else {
+        console.log('[AUTH] No session — clearing state');
         setProfile(null);
         setSubscription(null);
         setAccessStatus(null);
       }
 
+      // Only mark loading:false after first auth event
       setLoading(false);
+      console.log('[AUTH] Render ready');
     });
 
-    return unsubscribe;
+    return () => {
+      console.log('[AUTH] Unsubscribing from auth state changes');
+      unsubscribe();
+    };
   }, [loadProfile]);
 
-  const value = {
-    loading,
-    session,
-    user,
-    profile,
-    subscription,
-    accessStatus,
-    refreshProfile,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ loading, session, user, profile, subscription, accessStatus, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,16 +1,21 @@
 /**
  * accessGuard.js — Access Validation Layer
  *
- * Determines whether an authenticated user has active access to COT Tracker.
- * Access is determined ONLY by server-side data (users_access + subscriptions).
- * Never trusts frontend state alone.
+ * LOOKUP STRATEGY (dual, consistent):
  *
- * Public API:
- *   loadUserProfile(email)              → fetches users_access row
- *   loadUserSubscription(userId)        → fetches subscriptions row
- *   hasActiveAccess(profile, sub)       → boolean: is access currently valid?
- *   isTrialExpired(profile)             → boolean: trial window has closed
- *   getAccessStatus(profile, sub)       → detailed status object for UI
+ * loadUserProfile(email, authUid) intenta dos lookups en orden:
+ *
+ *   1. Por auth UID → .eq('id', authUid)
+ *      Funciona si users_access.id = auth.users.id (foreign key a auth.users)
+ *
+ *   2. Por email    → .eq('email', emailClean)
+ *      Fallback siempre válido (email es UNIQUE en users_access)
+ *
+ * Si la tabla fue creada con id = auth.users.id (patrón común Supabase),
+ * el lookup por UID es más fiable y no depende de normalización de email.
+ * Si la tabla tiene su propio UUID auto-generado, el fallback por email actúa.
+ *
+ * AuthProvider debe pasar ambos: loadUserProfile(authUser.email, authUser.id)
  */
 
 import { supabase } from './supabase.js';
@@ -18,123 +23,111 @@ import { normalizeEmail } from './authService.js';
 
 // ─── LOAD PROFILE ─────────────────────────────────────────────────────────────
 /**
- * Fetch the users_access row for a given email.
- *
- * @param {string} email
+ * @param {string}      email    - auth user email (fallback key)
+ * @param {string|null} authUid  - auth.users.id (primary key attempt)
  * @returns {{ profile: Object|null, error: Error|null }}
  */
-export async function loadUserProfile(email) {
-  const emailClean = normalizeEmail(email);
+export async function loadUserProfile(email, authUid = null) {
+  try {
+    // ── Attempt 1: lookup by auth UID ─────────────────────────────────────
+    if (authUid) {
+      const { data: byId, error: uidError } = await supabase
+        .from('users_access')
+        .select('*')
+        .eq('id', authUid)
+        .maybeSingle();
 
-  const { data, error } = await supabase
-    .from('users_access')
-    .select('*')
-    .eq('email', emailClean)
-    .maybeSingle();
+      if (!uidError && byId) {
+        console.log('[accessGuard] Profile found by UID');
+        return { profile: byId, error: null };
+      }
 
-  if (error) {
-    console.error('[accessGuard] loadUserProfile error:', error.message);
-    return { profile: null, error };
+      if (uidError) {
+        console.warn('[accessGuard] UID lookup failed, trying email:', uidError.message);
+      }
+    }
+
+    // ── Attempt 2: fallback lookup by email ───────────────────────────────
+    const emailClean = normalizeEmail(email);
+    const { data: byEmail, error: emailError } = await supabase
+      .from('users_access')
+      .select('*')
+      .eq('email', emailClean)
+      .maybeSingle();
+
+    if (emailError) {
+      console.error('[accessGuard] Email lookup error:', emailError.message);
+      return { profile: null, error: emailError };
+    }
+
+    if (byEmail) {
+      console.log('[accessGuard] Profile found by email');
+    }
+
+    return { profile: byEmail ?? null, error: null };
+
+  } catch (err) {
+    console.error('[accessGuard] loadUserProfile caught:', err.message);
+    return { profile: null, error: err };
   }
-
-  return { profile: data ?? null, error: null };
 }
 
 // ─── LOAD SUBSCRIPTION ────────────────────────────────────────────────────────
 /**
- * Fetch the most recent active subscription for a user_id.
- *
- * @param {string} userId  - UUID from users_access.id
- * @returns {{ subscription: Object|null, error: Error|null }}
+ * @param {string} userId - users_access.id (not necessarily = auth.users.id)
  */
 export async function loadUserSubscription(userId) {
   if (!userId) return { subscription: null, error: null };
 
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('start_date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) {
-    console.error('[accessGuard] loadUserSubscription error:', error.message);
-    return { subscription: null, error };
+    if (error) {
+      console.error('[accessGuard] loadUserSubscription error:', error.message);
+      return { subscription: null, error };
+    }
+
+    return { subscription: data ?? null, error: null };
+
+  } catch (err) {
+    console.error('[accessGuard] loadUserSubscription caught:', err.message);
+    return { subscription: null, error: err };
   }
-
-  return { subscription: data ?? null, error: null };
 }
 
 // ─── TRIAL EXPIRED ────────────────────────────────────────────────────────────
-/**
- * Returns true if the user is on a trial plan that has expired.
- *
- * @param {Object|null} profile - users_access row
- * @returns {boolean}
- */
 export function isTrialExpired(profile) {
   if (!profile) return true;
-  if (profile.plan !== 'trial') return false;
-
+  const plan = (profile.plan ?? '').toLowerCase();
+  if (plan !== 'trial') return false;
   const expires = profile.expires_at;
-  if (!expires) return false;  // no expiry set = still valid
-
+  if (!expires) return false;
   return new Date(expires) < new Date();
 }
 
 // ─── HAS ACTIVE ACCESS ────────────────────────────────────────────────────────
-/**
- * Returns true if the user currently has valid access.
- *
- * Rules (all must pass):
- *   1. Profile exists and status is 'active' or 'trial'
- *   2. If trial: not expired
- *   3. If subscription exists: status must be 'active'
- *
- * @param {Object|null} profile       - users_access row
- * @param {Object|null} subscription  - subscriptions row (optional)
- * @returns {boolean}
- */
 export function hasActiveAccess(profile, subscription) {
   if (!profile) return false;
-
   const validStatuses = ['active', 'trial'];
-  if (!validStatuses.includes(profile.status)) return false;
-
-  // Trial expiry check
-  if (profile.plan === 'trial' && isTrialExpired(profile)) return false;
-
-  // If there's a subscription record, it must also be active
+  const status = (profile.status ?? '').toLowerCase();
+  if (!validStatuses.includes(status)) return false;
+  if ((profile.plan ?? '').toLowerCase() === 'trial' && isTrialExpired(profile)) return false;
   if (subscription && subscription.status !== 'active') return false;
-
   return true;
 }
 
-// ─── GET ACCESS STATUS (for UI) ───────────────────────────────────────────────
-/**
- * Returns a detailed status object for displaying access state in the UI.
- *
- * @param {Object|null} profile
- * @param {Object|null} subscription
- * @returns {{
- *   hasAccess: boolean,
- *   reason: string,
- *   plan: string,
- *   status: string,
- *   expiresAt: string|null,
- *   isExpired: boolean,
- * }}
- */
+// ─── GET ACCESS STATUS ────────────────────────────────────────────────────────
 export function getAccessStatus(profile, subscription) {
   if (!profile) {
     return {
-      hasAccess: false,
-      reason:    'profile_not_found',
-      plan:      '—',
-      status:    'unknown',
-      expiresAt: null,
-      isExpired: false,
+      hasAccess: false, reason: 'profile_not_found',
+      plan: '—', status: 'unknown', expiresAt: null, isExpired: false,
     };
   }
 
@@ -143,18 +136,18 @@ export function getAccessStatus(profile, subscription) {
 
   let reason = 'active';
   if (!active) {
-    if (trialExpired)                              reason = 'trial_expired';
-    else if (profile.status === 'suspended')       reason = 'suspended';
-    else if (profile.status === 'cancelled')       reason = 'cancelled';
-    else if (subscription?.status === 'past_due')  reason = 'payment_failed';
-    else                                           reason = 'no_access';
+    if (trialExpired)                             reason = 'trial_expired';
+    else if (profile.status === 'suspended')      reason = 'suspended';
+    else if (profile.status === 'cancelled')      reason = 'cancelled';
+    else if (subscription?.status === 'past_due') reason = 'payment_failed';
+    else                                          reason = 'no_access';
   }
 
   return {
     hasAccess: active,
     reason,
-    plan:      profile.plan      ?? 'trial',
-    status:    profile.status    ?? 'unknown',
+    plan:      profile.plan       ?? 'trial',
+    status:    profile.status     ?? 'unknown',
     expiresAt: profile.expires_at ?? null,
     isExpired: trialExpired,
   };

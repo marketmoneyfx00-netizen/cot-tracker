@@ -2,9 +2,10 @@ import { useState, useRef, useCallback, useEffect, Component } from "react";
 import { getIndicatorLogic } from './marketLogic.js';
 import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
 import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
+import TooltipInfo from './components/TooltipInfo.jsx';
 import { useAuth } from './components/AuthProvider.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
-import { logout } from './lib/authService.js';
+import { logout, updatePassword } from './lib/authService.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,7 +246,7 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
   // Breakdown items
   const rows = [
     { key: 'Leveraged Flow',    val: breakdown?.leveragedFlow  ?? 0 },
-    { key: 'Divergence',        val: breakdown?.divergence     ?? 0 },
+    { key: 'Divergence',        val: breakdown?.divergence     ?? 0, tip: 'Desacople entre flujo institucional y precio. Puede anticipar reversión o continuidad. Requiere confirmación.' },
     { key: 'Historical Extreme',val: breakdown?.percentile     ?? 0 },
     { key: 'Asset Managers',    val: breakdown?.assetManagers  ?? 0 },
     { key: 'Dealers Filter',    val: breakdown?.dealers        ?? 0 },
@@ -263,49 +264,54 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
       marginBottom: 12,
       boxShadow: `0 0 0 1px ${color}22, 0 4px 20px rgba(0,0,0,0.15)`,
     }}>
-      {/* Header row */}
+      {/* Header */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{
-            width:6, height:6, borderRadius:'50%',
-            background: color, boxShadow: `0 0 6px ${color}`,
-            animation: 'nowPulse 2s ease infinite',
-          }}/>
-          <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:'0.09em'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <div style={{width:6,height:6,borderRadius:'50%',background:color,boxShadow:`0 0 6px ${color}`,flexShrink:0}}/>
+          <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:'0.08em'}}>
             INSTITUTIONAL BIAS ENGINE
           </span>
+          <TooltipInfo text="Motor de sesgo institucional basado en datos COT y flujo macro semanal." align="left"/>
         </div>
         <span style={{fontSize:10,color:T.sub2,background:T.card2,border:`1px solid ${T.border}`,
-          padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em'}}>SEMANAL · HTF</span>
+          padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em',flexShrink:0}}>SEMANAL · HTF</span>
       </div>
 
       {/* Score + Label */}
-      <div style={{display:'flex',alignItems:'center',gap:isMobile?12:20,marginBottom:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:isMobile?14:18,marginBottom:18}}>
+        {/* Circle score */}
         <div style={{
-          width: isMobile ? 56 : 68, height: isMobile ? 56 : 68,
-          borderRadius: '50%',
-          border: `3px solid ${color}`,
+          width: isMobile ? 60 : 72, height: isMobile ? 60 : 72,
+          borderRadius:'50%',
+          border:`2.5px solid ${color}`,
           display:'flex',alignItems:'center',justifyContent:'center',
-          background: `${color}18`,
-          flexShrink: 0,
-          boxShadow: `0 0 16px ${color}40`,
+          background:`${color}14`,
+          flexShrink:0,
+          boxShadow:`0 0 0 4px ${color}18, 0 4px 16px ${color}30`,
         }}>
-          <span style={{fontSize: isMobile ? 24 : 30, fontWeight:800, color, lineHeight:1}}>
+          <span style={{fontSize: isMobile ? 26 : 32, fontWeight:800, color, lineHeight:1, letterSpacing:'-0.5px'}}>
             {score > 0 ? `+${score}` : score}
           </span>
         </div>
-        <div style={{flex:1}}>
-          <div style={{fontSize: isMobile ? 16 : 18, fontWeight:700, color, marginBottom:4}}>{label}</div>
-          <div style={{fontSize: isMobile ? 11 : 12, color:T.sub, lineHeight:1.5}}>{recommendation}</div>
+        {/* Label + meta */}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+            <span style={{fontSize: isMobile ? 15 : 17, fontWeight:700, color, lineHeight:1.2}}>{label}</span>
+            <TooltipInfo text="Sesgo institucional semanal (3–10d). Marca contexto macro, NO dirección inmediata del precio. No usar como señal de entrada." align="center"/>
+          </div>
+          <div style={{fontSize: isMobile ? 11 : 12, color:T.sub, lineHeight:1.55, marginBottom:4}}>{recommendation}</div>
+          <div style={{fontSize:9, color:T.sub2, letterSpacing:'0.04em', fontWeight:500}}>
+            HORIZONTE: SWING 3–10D · NO SEÑAL INMEDIATA
+          </div>
         </div>
       </div>
 
-      {/* Gauge bar — thermometer -5 ◀═══●═══▶ +5 */}
-      <div style={{marginBottom:12}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-          <span style={{fontSize:10,color:T.sub2,fontWeight:700}}>−5</span>
-          <span style={{fontSize:10,color:T.sub2,fontWeight:600,opacity:0.6}}>BEARISH ←  → BULLISH</span>
-          <span style={{fontSize:10,color:T.sub2,fontWeight:700}}>+5</span>
+      {/* Gauge bar */}
+      <div style={{marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+          <span style={{fontSize:9,color:T.sub2,fontWeight:700,letterSpacing:'0.05em'}}>BEARISH −5</span>
+          <span style={{fontSize:9,color:T.sub2,fontWeight:500,opacity:0.5,letterSpacing:'0.08em'}}>HTF BIAS GAUGE</span>
+          <span style={{fontSize:9,color:T.sub2,fontWeight:700,letterSpacing:'0.05em'}}>+5 BULLISH</span>
         </div>
         <div style={{position:'relative',height:10,borderRadius:99,background:trackBg,overflow:'visible'}}>
           {/* Colored fill */}
@@ -380,7 +386,10 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
                 borderBottom: i < rows.length-1 ? `1px solid ${T.border}` : 'none',
                 background: i%2===0 ? 'transparent' : `rgba(255,255,255,${darkMode?'0.02':'0.04'})`,
               }}>
-                <span style={{fontSize:12,color:T.sub,fontWeight:500}}>{r.key}</span>
+                <span style={{fontSize:12,color:T.sub,fontWeight:500,display:'flex',alignItems:'center'}}>
+                  {r.key}
+                  {r.tip && <TooltipInfo text={r.tip} align="left"/>}
+                </span>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   {/* Mini bar for this factor */}
                   <div style={{display:'flex',gap:2,alignItems:'center'}}>
@@ -414,7 +423,10 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
               background: `${color}14`,
               borderTop:`1px solid ${color}30`,
             }}>
-              <span style={{fontSize:12,fontWeight:700,color:T.txt}}>BIAS SCORE</span>
+              <span style={{fontSize:11,fontWeight:700,color:T.txt||T.sub,display:'flex',alignItems:'center',letterSpacing:'0.06em'}}>
+                BIAS SCORE
+                <TooltipInfo text="Sesgo institucional semanal (3–10d). Marca contexto macro, NO dirección inmediata del precio. No usar como señal de entrada." align="left"/>
+              </span>
               <span style={{fontSize:18,fontWeight:800,color,fontVariantNumeric:'tabular-nums'}}>
                 {score > 0 ? `+${score}` : score}
               </span>
@@ -574,54 +586,74 @@ function heatCell(val, type="net") {
   return {background:"rgba(180,180,180,0.08)", color:"#9E9E9E"};
 }
 
+// Unified (i) tooltip — matches TooltipInfo style system-wide
 function InfoTooltip({text}) {
   const [pos, setPos] = useState(null);
-  const TIP_W = 240, TIP_H = 80;
+  const TIP_W = 240;
 
   const handleEnter = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    // Prefer above, fall back below; prefer left-align, fall back right-align
-    const top  = r.top > TIP_H + 12 ? r.top - TIP_H - 8 : r.bottom + 8;
+    const vw = window.innerWidth;
+    const spaceAbove = r.top;
+    const top  = spaceAbove > 100 ? r.top - 8 : r.bottom + 8;
     const left = Math.min(Math.max(r.left - TIP_W/2 + 6, 8), vw - TIP_W - 8);
-    setPos({top, left, above: r.top > TIP_H + 12});
+    setPos({top, left, above: spaceAbove > 100});
+  };
+
+  const handleTap = (e) => {
+    e.stopPropagation();
+    setPos(p => p ? null : (() => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const top  = r.top > 100 ? r.top - 8 : r.bottom + 8;
+      const left = Math.min(Math.max(r.left - TIP_W/2 + 6, 8), vw - TIP_W - 8);
+      return {top, left, above: r.top > 100};
+    })());
   };
 
   return (
-    <span style={{position:"relative", display:"inline-flex", alignItems:"center"}}>
+    <span style={{position:"relative", display:"inline-flex", alignItems:"center", flexShrink:0}}>
       <span
         onMouseEnter={handleEnter}
         onMouseLeave={()=>setPos(null)}
+        onTouchStart={handleTap}
         style={{
           width:13, height:13, borderRadius:"50%",
-          background:"#e5e7eb", color:"#6b7280",
-          fontSize:8, fontWeight:700, fontFamily:"monospace",
+          border:"1.5px solid currentColor",
+          fontSize:8, fontWeight:800,
+          color:"inherit", opacity:0.45,
           display:"inline-flex", alignItems:"center", justifyContent:"center",
           cursor:"help", marginLeft:4, flexShrink:0,
-          border:"1px solid #d1d5db", userSelect:"none",
-        }}>i</span>
+          userSelect:"none", lineHeight:1,
+          transition:"opacity 0.15s",
+        }}
+        onMouseOver={e=>e.currentTarget.style.opacity="0.75"}
+        onMouseOut={e=>e.currentTarget.style.opacity="0.45"}
+      >i</span>
       {pos && (
         <span style={{
           position:"fixed",
-          top: pos.top,
+          top: pos.above ? pos.top - 80 : pos.top,
           left: pos.left,
           width: TIP_W,
-          background:"#1a1d23", color:"#e8eaf0",
-          fontSize:11, lineHeight:1.6, padding:"9px 13px",
-          borderRadius:5, zIndex:99999,
-          boxShadow:"0 6px 24px rgba(0,0,0,0.45)",
-          pointerEvents:"none",
-          whiteSpace:"normal",
+          background:"rgba(20,22,28,0.97)", color:"#e2e8f0",
+          fontSize:11, fontWeight:400, lineHeight:1.55, padding:"8px 10px",
+          borderRadius:8, zIndex:99999,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.35)",
+          pointerEvents:"none", whiteSpace:"normal",
+          maxWidth:"80vw",
+          fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",
         }}>
           {text}
           <span style={{
             position:"absolute",
             ...(pos.above
-              ? {top:"100%", borderTopColor:"#1a1d23", borderBottomColor:"transparent"}
-              : {bottom:"100%", borderBottomColor:"#1a1d23", borderTopColor:"transparent"}
+              ? {top:"100%", borderTop:"5px solid rgba(20,22,28,0.97)", borderBottom:"none"}
+              : {bottom:"100%", borderBottom:"5px solid rgba(20,22,28,0.97)", borderTop:"none"}
             ),
             left:20,
-            border:"5px solid transparent",
+            borderLeft:"5px solid transparent",
+            borderRight:"5px solid transparent",
           }}/>
         </span>
       )}
@@ -946,17 +978,25 @@ function lastSunday(year, month) {
 }
 
 // ─── BILLING / PLAN MODAL ─────────────────────────────────────────────────────
+// Acceso completo en todos los planes de pago — la diferencia es solo el descuento.
+const FULL_ACCESS = [
+  "Dashboard COT institucional",
+  "Bias Engine (score -5/+5)",
+  "Intraday Execution Layer",
+  "Calendario macro enriquecido",
+  "Comunidad Telegram privada",
+];
 const PLANS = [
-  { id: "free",       label: "Free",        price: "0€",    period: "",        color: "#8e8e93", url: null,
-    benefits: ["Dashboard COT básico","Señales semanales","Acceso comunidad"] },
-  { id: "mensual",    label: "Mensual",     price: "19€",   period: "/mes",    color: "#0066cc", url: PLAN_URLS.mensual,
-    benefits: ["Todo lo de Free","Bias Engine institucional","Intraday Execution Layer","Soporte prioritario"] },
-  { id: "trimestral", label: "Trimestral",  price: "49€",   period: "/3 meses",color: "#5856d6", url: PLAN_URLS.trimestral,
-    benefits: ["Todo lo de Mensual","Ahorro del 14%","Análisis macro semanal"] },
-  { id: "semestral",  label: "Semestral",   price: "89€",   period: "/6 meses",color: "#34c759", url: PLAN_URLS.semestral,
-    benefits: ["Todo lo de Trimestral","Ahorro del 22%","Acceso anticipado a nuevas features"] },
-  { id: "anual",      label: "Anual",       price: "149€",  period: "/año",    color: "#ff2d55", url: PLAN_URLS.anual,
-    benefits: ["Todo lo de Semestral","Ahorro del 35%","Badge de miembro fundador","Sesión estratégica 1:1"] },
+  { id: "free",       label: "Free",        price: "0€",   period: "",         color: "#8e8e93", url: null,   saving: null,
+    benefits: ["Dashboard COT básico (solo lectura)","Calendario macro público","Sin acceso al Bias Engine"] },
+  { id: "mensual",    label: "Mensual",     price: "19€",  period: "/mes",     color: "#0066cc", url: PLAN_URLS.mensual,   saving: null,
+    benefits: [...FULL_ACCESS] },
+  { id: "trimestral", label: "Trimestral",  price: "49€",  period: "/3 meses", color: "#5856d6", url: PLAN_URLS.trimestral, saving: "Ahorra 8€ · 14% descuento",
+    benefits: [...FULL_ACCESS] },
+  { id: "semestral",  label: "Semestral",   price: "89€",  period: "/6 meses", color: "#34c759", url: PLAN_URLS.semestral,  saving: "Ahorra 25€ · 22% descuento",
+    benefits: [...FULL_ACCESS] },
+  { id: "anual",      label: "Anual",       price: "149€", period: "/año",     color: "#ff2d55", url: PLAN_URLS.anual,      saving: "Ahorra 79€ · 35% descuento",
+    benefits: [...FULL_ACCESS] },
 ];
 
 function BillingModal({ user, darkMode, onClose }) {
@@ -996,11 +1036,16 @@ function BillingModal({ user, darkMode, onClose }) {
                     ACTUAL
                   </span>
                 )}
-                <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:8 }}>
+                <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:plan.saving?4:8 }}>
                   <span style={{ fontSize:17,fontWeight:700,color:plan.color }}>{plan.label}</span>
                   <span style={{ fontSize:22,fontWeight:800,color:darkMode?"#fff":"#1c1c1e" }}>{plan.price}</span>
                   <span style={{ fontSize:12,color:"#8e8e93" }}>{plan.period}</span>
                 </div>
+                {plan.saving && (
+                  <div style={{ fontSize:11,fontWeight:600,color:plan.color,
+                    background:`${plan.color}18`,padding:"2px 10px",borderRadius:99,
+                    display:"inline-block",marginBottom:8 }}>{plan.saving}</div>
+                )}
                 <ul style={{ margin:"0 0 12px",padding:"0 0 0 16px",listStyle:"none" }}>
                   {plan.benefits.map((b,i) => (
                     <li key={i} style={{ fontSize:12,color:darkMode?"#aeaeb2":"#3c3c43",marginBottom:3,paddingLeft:0 }}>
@@ -1231,11 +1276,133 @@ function SettingsShell({children, onBack, title, onClose, dark}) {
 }
 
 // ─── SETTINGS PANEL (main) ───────────────────────────────────────────────────
+// ─── SECURITY MODAL — create / change password ────────────────────────────────
+function SecurityModal({ darkMode, onClose }) {
+  const [pw1,     setPw1]     = useState("");
+  const [pw2,     setPw2]     = useState("");
+  const [showPw,  setShowPw]  = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const bg  = darkMode ? "#1c1c1e" : "white";
+  const txt = darkMode ? "#fff"    : "#1c1c1e";
+  const sub = "#8e8e93";
+  const bd  = darkMode ? "#3a3a3c" : "#e5e5ea";
+  const inputBg = darkMode ? "#2c2c2e" : "#f9f9fb";
+
+  const validate = () => {
+    if (pw1.length < 8)               return "Mínimo 8 caracteres";
+    if (!/[a-zA-Z]/.test(pw1))        return "Debe incluir al menos una letra";
+    if (!/[0-9]/.test(pw1))           return "Debe incluir al menos un número";
+    if (pw1 !== pw2)                   return "Las contraseñas no coinciden";
+    return null;
+  };
+
+  const handleSave = async () => {
+    const err = validate();
+    if (err) { setError(err); return; }
+    setSaving(true); setError("");
+    const { error: authError } = await updatePassword(pw1);
+    setSaving(false);
+    if (authError) {
+      setError(authError.message || "Error al guardar la contraseña");
+      return;
+    }
+    setSuccess(true);
+    setTimeout(onClose, 2200);
+  };
+
+  return (
+    <div onClick={onClose}
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,
+        display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:bg,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:520,
+          boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
+          animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",paddingBottom:44 }}>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"16px 20px 12px",borderBottom:`1px solid ${bd}` }}>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Contraseña</p>
+          <button onClick={onClose}
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",
+              border:"none",cursor:"pointer",color:sub,fontSize:14 }}>✕</button>
+        </div>
+        <div style={{ padding:"16px 20px" }}>
+          {success ? (
+            <div style={{ textAlign:"center",padding:"24px 0" }}>
+              <div style={{ fontSize:44,marginBottom:12 }}>✅</div>
+              <p style={{ margin:"0 0 4px",fontSize:16,fontWeight:700,color:txt }}>
+                Contraseña actualizada
+              </p>
+              <p style={{ margin:0,fontSize:13,color:sub }}>
+                Ya puedes acceder con tu email y contraseña.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p style={{ margin:"0 0 18px",fontSize:13,color:sub,lineHeight:1.6 }}>
+                Crea una contraseña para acceder sin necesidad de enlace por email.
+                Mínimo 8 caracteres, incluye letra y número.
+              </p>
+              {error && (
+                <div style={{ background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.18)",
+                  borderRadius:10,padding:"9px 13px",marginBottom:14,fontSize:13,color:"#c0392b" }}>
+                  {error}
+                </div>
+              )}
+              <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
+                marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
+                Nueva contraseña
+              </label>
+              <div style={{ position:"relative",marginBottom:12 }}>
+                <input type={showPw?"text":"password"} value={pw1}
+                  onChange={e=>setPw1(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  style={{ width:"100%",padding:"11px 42px 11px 12px",borderRadius:10,
+                    border:`1.5px solid ${bd}`,fontSize:14,color:txt,background:inputBg,
+                    boxSizing:"border-box",fontFamily:"inherit",outline:"none" }}/>
+                <button onClick={()=>setShowPw(v=>!v)}
+                  style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",
+                    background:"none",border:"none",cursor:"pointer",color:sub,fontSize:16,padding:0 }}>
+                  {showPw?"🙈":"👁"}
+                </button>
+              </div>
+              <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
+                marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
+                Confirmar contraseña
+              </label>
+              <input type="password" value={pw2}
+                onChange={e=>setPw2(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleSave()}
+                placeholder="Repite la contraseña"
+                style={{ width:"100%",padding:"11px 12px",borderRadius:10,
+                  border:`1.5px solid ${pw2&&pw1!==pw2?"rgba(255,59,48,0.5)":bd}`,
+                  fontSize:14,color:txt,background:inputBg,
+                  boxSizing:"border-box",fontFamily:"inherit",outline:"none",marginBottom:18 }}/>
+              <button onClick={handleSave} disabled={saving}
+                style={{ width:"100%",padding:"13px",borderRadius:14,border:"none",
+                  cursor:saving?"not-allowed":"pointer",
+                  background:saving?"#c7d9f4":"linear-gradient(135deg,#0055cc,#0077ed)",
+                  color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
+                {saving ? "Guardando…" : "Guardar contraseña"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onClose }) {
   const [section,    setSection]    = useState(null);
   const [showBilling,setShowBilling]= useState(false);
   const [showBug,    setShowBug]    = useState(false);
   const [legalType,  setLegalType]  = useState(null); // "privacy" | "terms"
+  const [showSecurity,setShowSecurity]= useState(false);
   const [notifications, setNotifications] = useState(
     () => { try { return JSON.parse(localStorage.getItem("cot_notif")||"true"); } catch { return true; } }
   );
@@ -1272,6 +1439,9 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
   const planColor = PLAN_COLORS[user?.plan] || "#0066cc";
 
   // ── SUB-MODALS ───────────────────────────────────────────────────────────
+  if (showSecurity) return (
+    <SecurityModal darkMode={darkMode} onClose={()=>setShowSecurity(false)}/>
+  );
   if (showBilling) return (
     <BillingModal user={user} darkMode={darkMode} onClose={()=>setShowBilling(false)}/>
   );
@@ -1404,6 +1574,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         {/* MY ACCOUNT */}
         <SectionTitle title={t.account}/>
         <Row icon="👤" label={t.profile} desc={user?.email} onPress={()=>setSection("profile")}/>
+        <Row icon="🔑" label={lang==="en"?"Password":"Contraseña"} desc={lang==="en"?"Set or change password":"Configura tu contraseña"} onPress={()=>setShowSecurity(true)}/>
         <Row icon="💳" label={t.billing} desc={user?.plan||"Trial"} onPress={()=>setShowBilling(true)}/>
         <Row icon="⬆️" label={t.upgrade} desc={lang==="en"?"Get more features":"Accede a todas las funciones"} onPress={()=>setShowBilling(true)}/>
 
@@ -1445,8 +1616,17 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         <Row icon="📄" label={t.terms}    onPress={()=>setLegalType("terms")}/>
 
         {/* LOGOUT */}
-        <div style={{ padding:"8px 0 48px" }}>
-          <Row icon="🚪" label={t.logout} danger onPress={onLogout}/>
+        <div style={{ padding:"16px 20px 48px", borderTop:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+          <button onClick={onLogout} style={{
+            width:"100%", padding:"13px", borderRadius:14, border:"none",
+            cursor:"pointer",
+            background:darkMode?"rgba(255,59,48,0.12)":"rgba(255,59,48,0.06)",
+            color:"#c0392b", fontSize:14, fontWeight:700,
+            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+            transition:"background 0.2s",
+          }}>
+            🚪 {t.logout}
+          </button>
         </div>
       </div>
     </div>
@@ -2326,10 +2506,7 @@ function CalendarioTab({darkMode, T}) {
               <div style={{fontSize:13,fontWeight:700,color:D.txt}}>Sentimiento & Volatilidad</div>
               <div style={{fontSize:11,color:D.sub,marginTop:2}}>Score: {sentiment.scoreOf5}/5 · {sentiment.highCount} eventos alto impacto hoy</div>
             </div>
-            <div style={{width:24,height:24,borderRadius:'50%',border:`1px solid ${D.border2}`,
-              display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-              <span style={{fontSize:11,color:D.sub}}>i</span>
-            </div>
+            <InfoTooltip text="Este módulo muestra el sentimiento actual del mercado y una estimación de volatilidad basada en VIX y eventos macro de alto impacto. No genera señal directa, solo contexto de riesgo." />
           </div>
 
           {/* Mood */}
@@ -3292,10 +3469,10 @@ function AppInner() {
 
   // user shape for UI compatibility: { email, nombre, plan }
   const user = profile ? {
-    email:  profile.email,
+    email:  profile.email  ?? '',
     nombre: profile.telegram_username || profile.email?.split('@')[0] || 'Usuario',
-    plan:   profile.plan   || 'Trial',
-    status: profile.status || 'trial',
+    plan:   profile.plan   ?? 'Trial',
+    status: profile.status ?? 'active',
   } : null;
   const [pairsData, setPairsData] = useState(null);
   const [source,    setSource]    = useState("");
@@ -3352,6 +3529,8 @@ function AppInner() {
   const textPrimary = darkMode ? "#ffffff"  : "#1c1c1e";
   const textSecondary = "#8e8e93";
   const borderColor = darkMode ? "#2c2c2e"  : "#e5e5ea";
+  const forceResetMode =
+  new URLSearchParams(window.location.search).get('mode') === 'reset-password';
 
   // ── AUTH GATE ──────────────────────────────────────────────────────────────
   if (authLoading) {
@@ -3366,8 +3545,22 @@ function AppInner() {
     );
   }
 
-  if (!authUser) {
-    return <LoginScreen />;
+if (!authUser || forceResetMode) {
+  return <LoginScreen />;
+}
+
+  // Profile still loading (authUser set but profile not yet fetched)
+  // This prevents user.nombre crash during async profile load
+  if (!user) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7' }}>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid #0055cc', borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          <p style={{ fontSize:13, color:'#8e8e93', margin:0 }}>Cargando perfil…</p>
+        </div>
+      </div>
+    );
   }
 
   if (accessStatus && !accessStatus.hasAccess) {
@@ -3395,9 +3588,11 @@ function AppInner() {
   const T = {
     bg:      darkMode?"#0d0d0f":"#f0f2f5",
     card:    darkMode?"#16181c":"#ffffff",
+    card2:   darkMode?"#1e2028":"#f0f2f5",
     border:  darkMode?"#2a2d33":"#dde1e7",
     txt:     darkMode?"#e8eaf0":"#1a1d23",
     sub:     darkMode?"#8b90a0":"#6b7280",
+    sub2:    darkMode?"#5a6070":"#9ca3af",
     accent:  "#0055cc",
     bull:    "#88C999",
     bear:    "#EF9A9A",
@@ -3462,7 +3657,7 @@ function AppInner() {
               <button onClick={()=>setShowSettings(true)} style={{width:28,height:28,borderRadius:"50%",
                 background:T.accent,border:"none",cursor:"pointer",flexShrink:0,
                 display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:11,fontWeight:700,color:"white"}}>{(user?.nombre?.[0] || user?.email?.[0] || "U").toUpperCase()}</span>
+                <span style={{fontSize:11,fontWeight:700,color:"white"}}>{user.nombre[0].toUpperCase()}</span>
               </button>
             </div>
           </div>
@@ -3476,6 +3671,7 @@ function AppInner() {
                 padding:"9px 14px",fontSize:12,fontWeight:mainTab===t.id?600:400,
                 color:mainTab===t.id?T.accent:T.sub,
                 borderBottom:mainTab===t.id?`2px solid ${T.accent}`:"2px solid transparent",
+                fontWeight:mainTab===t.id?700:500,
                 whiteSpace:"nowrap",transition:"all 0.15s",
               }}>{t.label}</button>
             ))}
@@ -3532,7 +3728,7 @@ function AppInner() {
                     INSTITUTIONAL BIAS ENGINE
                   </span>
                   <span style={{flex:1,height:1,background:T.border}}/>
-                  <span style={{fontSize:10,color:T.sub2}}>HTF · Sesgo macro semanal · No es señal de entrada</span>
+                  <span style={{fontSize:9,color:T.sub2,letterSpacing:'0.05em',fontWeight:500}}>HTF · SESGO SEMANAL · NO SEÑAL</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':`repeat(${Math.min(top.length,3)},1fr)`,gap:10}}>
                   {top.map(({pair,bias})=>(
@@ -3576,7 +3772,7 @@ function AppInner() {
                     INTRADAY EXECUTION LAYER
                   </span>
                   <span style={{flex:1,height:1,background:T.border}}/>
-                  <span style={{fontSize:10,color:T.sub}}>Permiso operativo · No genera señales</span>
+                  <span style={{fontSize:9,color:T.sub2,letterSpacing:'0.05em',fontWeight:500}}>PERMISO OPERATIVO · NO GENERA SEÑALES</span>
                 </div>
                 <IntradayExecutionCard
                   biasResult={topBias.bias}
@@ -3593,7 +3789,7 @@ function AppInner() {
 
           {/* Summary bar */}
           <div style={{display:"flex",gap:6,marginBottom:12,padding:"10px 12px",flexWrap:"wrap",
-            background:T.card,border:`1px solid ${T.border}`,borderRadius:6}}>
+            background:T.card,border:`1px solid ${T.border}`,borderRadius:10}}>
             <span style={{fontSize:11,color:T.sub,alignSelf:"center",fontWeight:600,
               letterSpacing:"0.05em",display:isMobile?"none":"inline"}}>SESGO DEL MERCADO:</span>
             {[
@@ -4068,4 +4264,7 @@ function AppInner() {
     </div>
   );
 }
-export default function App() { return <ErrorBoundary><AppInner/></ErrorBoundary>; }
+
+export default function App() { 
+  return <ErrorBoundary><AppInner/></ErrorBoundary>; 
+}
