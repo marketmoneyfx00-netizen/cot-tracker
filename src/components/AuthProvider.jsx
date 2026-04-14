@@ -55,10 +55,11 @@ export function AuthProvider({ children }) {
     }
 
     // Prevent parallel calls
-    if (loadingProfileRef.current) {
-      console.log('[AUTH] loadProfile already in progress — skipping duplicate');
-      return;
-    }
+if (loadingProfileRef.current) {
+  console.log('[AUTH] loadProfile already in progress — skipping duplicate');
+  setLoading(false);
+  return;
+}
     loadingProfileRef.current = true;
 
     try {
@@ -97,22 +98,25 @@ export function AuthProvider({ children }) {
       updateLastLogin(authUser.email).catch(() => {});
       logLoginEvent(p.id ?? authUser.id, true).catch(() => {});
 
-    } catch (err) {
-      // Network/DB error — use fallback, never crash
-      console.error('[AUTH] loadProfile caught error:', err.message);
-      const fallback = {
-        email:             authUser?.email ?? 'unknown',
-        telegram_username: authUser?.email?.split('@')[0] ?? 'Usuario',
-        plan:              'Trial',
-        status:            'active',
-      };
-      setProfile(fallback);
-      setSubscription(null);
-      setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
-    } finally {
-      loadingProfileRef.current = false;
-    }
-  }, []);
+  } catch (err) {
+    // Network/DB error — use fallback, never crash
+    console.error('[AUTH] loadProfile caught error:', err.message);
+
+    const fallback = {
+      email: authUser?.email ?? 'unknown',
+      telegram_username: authUser?.email?.split('@')[0] ?? 'Usuario',
+      plan: 'Trial',
+      status: 'active',
+    };
+
+    setProfile(fallback);
+    setSubscription(null);
+    setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
+
+  } finally {
+    loadingProfileRef.current = false;
+  }
+}, []);
 
   // ── refreshProfile for manual reload ──────────────────────────────────────
   const refreshProfile = useCallback(async () => {
@@ -131,34 +135,45 @@ export function AuthProvider({ children }) {
 const unsubscribe = listenAuthChanges(async (event, newSession) => {
   console.log('[AUTH] Auth event:', event);
 
-  const forceResetMode =
-    new URLSearchParams(window.location.search).get('mode') === 'reset-password';
+  try {
+    const forceResetMode =
+      new URLSearchParams(window.location.search).get('mode') === 'reset-password';
 
-  if (forceResetMode) {
-    console.log('[AUTH] Reset mode detected - skipping session restore');
-    setLoading(false);
-    return;
-  }
+    if (forceResetMode) {
+      console.log('[AUTH] Reset mode detected - skipping session restore');
+      return;
+    }
 
-  const authUser = newSession?.user ?? null;
+    const authUser = newSession?.user ?? null;
 
-  setSession(newSession);
-  setUser(authUser);
+    setSession(newSession);
+    setUser(authUser);
 
-      if (authUser) {
-        console.log('[AUTH] Session active for:', authUser.email);
-        await loadProfile(authUser);
-      } else {
-        console.log('[AUTH] No session — clearing state');
-        setProfile(null);
-        setSubscription(null);
-        setAccessStatus(null);
-      }
+if (authUser) {
+  console.log('[AUTH] Session active for:', authUser.email);
 
-      // Only mark loading:false after first auth event
-      setLoading(false);
-      console.log('[AUTH] Render ready');
-    });
+  // libera UI inmediatamente
+  setLoading(false);
+
+  // carga perfil en background
+  loadProfile(authUser).catch(err => {
+    console.error('[AUTH] background profile load error:', err);
+  });
+
+} else {
+  console.log('[AUTH] No session — clearing state');
+  setProfile(null);
+  setSubscription(null);
+  setAccessStatus(null);
+  setLoading(false);
+}
+
+} catch (err) {
+  console.error('[AUTH] auth callback error:', err);
+} finally {
+  console.log('[AUTH] Render ready');
+}
+})
 
     return () => {
       console.log('[AUTH] Unsubscribing from auth state changes');

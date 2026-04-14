@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react';
-import { loginWithPassword, loginWithEmail, resetPassword, normalizeEmail } from '../lib/authService.js';
+import { loginWithPassword, loginWithEmail, resetPassword, updatePassword, normalizeEmail } from '../lib/authService.js';
 
 // ─── Shared input style ───────────────────────────────────────────────────────
 const inputStyle = {
@@ -67,10 +67,10 @@ function pwStrength(pw) {
 export default function LoginScreen() {
   const initialMode =
     new URLSearchParams(window.location.search).get('mode') === 'reset-password'
-      ? 'forgot'
+      ? 'reset'
       : 'password';
 
-  const [mode, setMode] = useState(initialMode); // 'password' | 'magic_link' | 'forgot'
+  const [mode, setMode] = useState(initialMode); // 'password' | 'magic_link' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -180,13 +180,16 @@ export default function LoginScreen() {
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <Logo />
             {mode === 'password'    && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Bienvenido de nuevo</h1>}
-            {mode === 'magic_link'  && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Acceso por enlace</h1>}
-            {mode === 'forgot'      && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Restablecer contraseña</h1>}
-            <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>
-              {mode === 'password'   && 'Introduce tu email y contraseña'}
-              {mode === 'magic_link' && 'Te enviaremos un enlace seguro'}
-              {mode === 'forgot'     && 'Introduce tu email para recibir el enlace'}
-            </p>
+{mode === 'magic_link'  && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Acceso por enlace</h1>}
+{mode === 'forgot'      && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Restablecer contraseña</h1>}
+{mode === 'reset'       && <h1 style={{ margin: '0 0 5px', fontSize: 23, fontWeight: 700, color: '#1c1c1e', letterSpacing: '-0.4px' }}>Nueva contraseña</h1>}
+
+<p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>
+  {mode === 'password'   && 'Introduce tu email y contraseña'}
+  {mode === 'magic_link' && 'Te enviaremos un enlace seguro'}
+  {mode === 'forgot'     && 'Introduce tu email para recibir el enlace'}
+  {mode === 'reset'      && 'Introduce tu nueva contraseña'}
+</p>
           </div>
 
           {/* Card */}
@@ -296,7 +299,64 @@ export default function LoginScreen() {
                 </button>
               </>
             )}
+            {/* ── RESET MODE ── */}
+            {mode === 'reset' && !success && (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>Nueva contraseña</label>
+                  <input
+                    type={showPw ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Introduce nueva contraseña"
+                    autoComplete="new-password"
+                    style={inputStyle}
+                  />
+                </div>
 
+                <button
+                  className="lsbtn"
+                  onClick={async () => {
+                    if (!password || password.length < 8) {
+                      setError('La contraseña debe tener al menos 8 caracteres.');
+                      return;
+                    }
+
+                    setLoading(true);
+                    setError('');
+
+                    const { error } = await updatePassword(password);
+
+                    setLoading(false);
+
+                    if (error) {
+                      setError(error.message);
+                      return;
+                    }
+
+                    setSuccess('Contraseña actualizada correctamente.');
+                  }}
+                  disabled={loading}
+                  style={{
+                    width: '100%',
+                    padding: '13px',
+                    borderRadius: 14,
+                    border: 'none',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    background: loading
+                      ? '#c7d9f4'
+                      : 'linear-gradient(135deg,#0055cc,#0077ed)',
+                    color: 'white',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    transition: 'all 0.2s',
+                    marginBottom: 14
+                  }}
+                >
+                  {loading ? 'Actualizando...' : 'Guardar nueva contraseña'}
+                </button>
+              </>
+            )}
             {/* ── SUCCESS STATE (any mode) ── */}
             {success && (
               <div style={{ textAlign: 'center', padding: '8px 0' }}>
