@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Planes — COT Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #f2f2f7;
+      min-height: 100vh;
+      padding: 28px 16px 48px;
+      color: #1c1c1e;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #1c1c1e;
+      margin-bottom: 6px;
+      letter-spacing: -0.4px;
+    }
+    .header p {
+      font-size: 14px;
+      color: #8e8e93;
+      line-height: 1.5;
+    }
+
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px 18px 18px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+
+    .plan-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .plan-name  { font-size: 18px; font-weight: 700; }
+    .plan-price { font-size: 26px; font-weight: 800; color: #1c1c1e; letter-spacing: -0.5px; }
+    .plan-period { font-size: 14px; color: #8e8e93; }
+
+    .saving {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 12px;
+      border-radius: 99px;
+      margin: 6px 0 14px;
+    }
+    .no-saving { margin-bottom: 14px; }
+
+    .benefits { list-style: none; margin-bottom: 16px; }
+    .benefits li {
+      font-size: 14px;
+      color: #3c3c43;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.4;
+    }
+    .check { font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+    .cta {
+      display: block;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-weight: 700;
+      color: white;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .cta:active { opacity: 0.82; transform: scale(0.98); }
+
+    .back-row { text-align: center; margin-top: 28px; }
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 14px;
+      color: #8e8e93;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 8px 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Elige tu plan</h1>
+    <p>Acceso completo a COT Tracker &middot; Market Money FX<br/>Cancela cuando quieras.</p>
+  </div>
+
+  <div class="cards">
+
+    <!-- Mensual -->
+    <div class="card">
+      <div class="plan-row">
+        <span class="plan-name" style="color:#0066cc">Mensual</span>
+        <span class="plan-price">19&#x20AC;</span>
+        <span class="plan-period">/mes</span>
+      </div>
+      <div class="no-saving"></div>
+      <ul class="benefits">
+        <li><span class="check" style="color:#0066cc">&#10003;</span> Dashboard COT institucional</li>
+        <li><span class="check" style="color:#0066cc">&#10003;</span> Bias Engine (score -5/+5)</li>
+        <li><span class="check" style="color:#0066cc">&#10003;</span> Intraday Execution Layer</li>
+        <li><span class="check" style="color:#0066cc">&#10003;</span> Calendario macro enriquecido</li>
+        <li><span class="check" style="color:#0066cc">&#10003;</span> Comunidad Telegram privada</li>
+      </ul>
+      <a class="cta" href="https://www.paypal.com/ncp/payment/PAHQ48GCL2GME"
+         target="_blank" rel="noopener noreferrer" style="background:#0066cc">
+        Elegir Mensual &#x2192;
+      </a>
+    </div>
+
+    <!-- Trimestral -->
+    <div class="card">
+      <div class="plan-row">
+        <span class="plan-name" style="color:#5856d6">Trimestral</span>
+        <span class="plan-price">49&#x20AC;</span>
+        <span class="plan-period">/3 meses</span>
+      </div>
+      <span class="saving" style="color:#5856d6;background:rgba(88,86,214,0.10)">
+        Ahorra 8&#x20AC; &middot; 14% descuento
+      </span>
+      <ul class="benefits">
+        <li><span class="check" style="color:#5856d6">&#10003;</span> Dashboard COT institucional</li>
+        <li><span class="check" style="color:#5856d6">&#10003;</span> Bias Engine (score -5/+5)</li>
+        <li><span class="check" style="color:#5856d6">&#10003;</span> Intraday Execution Layer</li>
+        <li><span class="check" style="color:#5856d6">&#10003;</span> Calendario macro enriquecido</li>
+        <li><span class="check" style="color:#5856d6">&#10003;</span> Comunidad Telegram privada</li>
+      </ul>
+      <a class="cta" href="https://www.paypal.com/ncp/payment/56D3KLQFHLHTA"
+         target="_blank" rel="noopener noreferrer" style="background:#5856d6">
+        Elegir Trimestral &#x2192;
+      </a>
+    </div>
+
+    <!-- Semestral -->
+    <div class="card">
+      <div class="plan-row">
+        <span class="plan-name" style="color:#34c759">Semestral</span>
+        <span class="plan-price">89&#x20AC;</span>
+        <span class="plan-period">/6 meses</span>
+      </div>
+      <span class="saving" style="color:#34c759;background:rgba(52,199,89,0.10)">
+        Ahorra 25&#x20AC; &middot; 22% descuento
+      </span>
+      <ul class="benefits">
+        <li><span class="check" style="color:#34c759">&#10003;</span> Dashboard COT institucional</li>
+        <li><span class="check" style="color:#34c759">&#10003;</span> Bias Engine (score -5/+5)</li>
+        <li><span class="check" style="color:#34c759">&#10003;</span> Intraday Execution Layer</li>
+        <li><span class="check" style="color:#34c759">&#10003;</span> Calendario macro enriquecido</li>
+        <li><span class="check" style="color:#34c759">&#10003;</span> Comunidad Telegram privada</li>
+      </ul>
+      <a class="cta" href="https://www.paypal.com/ncp/payment/C6WHM2L785UXA"
+         target="_blank" rel="noopener noreferrer" style="background:#34c759">
+        Elegir Semestral &#x2192;
+      </a>
+    </div>
+
+    <!-- Anual -->
+    <div class="card">
+      <div class="plan-row">
+        <span class="plan-name" style="color:#ff2d55">Anual</span>
+        <span class="plan-price">149&#x20AC;</span>
+        <span class="plan-period">/año</span>
+      </div>
+      <span class="saving" style="color:#ff2d55;background:rgba(255,45,85,0.10)">
+        Ahorra 79&#x20AC; &middot; 35% descuento
+      </span>
+      <ul class="benefits">
+        <li><span class="check" style="color:#ff2d55">&#10003;</span> Dashboard COT institucional</li>
+        <li><span class="check" style="color:#ff2d55">&#10003;</span> Bias Engine (score -5/+5)</li>
+        <li><span class="check" style="color:#ff2d55">&#10003;</span> Intraday Execution Layer</li>
+        <li><span class="check" style="color:#ff2d55">&#10003;</span> Calendario macro enriquecido</li>
+        <li><span class="check" style="color:#ff2d55">&#10003;</span> Comunidad Telegram privada</li>
+      </ul>
+      <a class="cta" href="https://www.paypal.com/ncp/payment/29TJHXYBYHFNY"
+         target="_blank" rel="noopener noreferrer" style="background:#ff2d55">
+        Elegir Anual &#x2192;
+      </a>
+    </div>
+
+  </div>
+
+  <div class="back-row">
+    <button class="back-btn" onclick="history.back()">&#x2190; Volver</button>
+  </div>
+
+</body>
+</html>
