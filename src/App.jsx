@@ -7,7 +7,7 @@ import { buildInterpretation, TOOLTIPS } from './logic/interpretationEngine.js';
 import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
 import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
 import TooltipInfo from './components/TooltipInfo.jsx';
-import { startTwelveData, stopTwelveData } from './services/twelveDataService.js';
+import { startPricePolling, stopPricePolling } from './services/priceService.js';
 import DropZone from './components/DropZone.jsx';
 import SourceCard from './components/SourceCard.jsx';
 import CrossAssetFlow from './components/CrossAssetFlow.jsx';
@@ -3884,8 +3884,8 @@ function AppInner() {
   // ── Precio real de mercado para scoreT ──────────────────────────────────────
   // Inicia polling al montar AppInner. Requiere VITE_TWELVEDATA_API_KEY en .env.
   useEffect(() => {
-    startTwelveData('EUR/USD');
-    return () => stopTwelveData();
+    startPricePolling('EUR/USD');
+return () => stopPricePolling();
   }, []);
 
   const toggleDark = () => { const v=!darkMode; setDarkMode(v); localStorage.setItem("cot_dark",JSON.stringify(v)); };

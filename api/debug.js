@@ -1,8 +1,29 @@
 /**
  * api/debug.js — Diagnóstico completo de todas las fuentes de datos
  * GET https://cot-tracker.vercel.app/api/debug
+ *
+ * PROTEGIDO: requiere header Authorization: Bearer <DEBUG_TOKEN>
+ * o query param ?token=<DEBUG_TOKEN>
+ * Configurar DEBUG_TOKEN en Vercel → Settings → Environment Variables
  */
 export default async function handler(req, res) {
+  // ── Protección por token interno ────────────────────────────────────────────
+  const debugToken = process.env.DEBUG_TOKEN;
+  if (debugToken) {
+    const authHeader = req.headers['authorization'] ?? '';
+    const queryToken = req.query?.token ?? '';
+    const provided   = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : queryToken;
+
+    if (!provided || provided !== debugToken) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  } else {
+    // Si DEBUG_TOKEN no está configurada, el endpoint está desactivado
+    return res.status(404).json({ error: 'Not found' });
+  }
+
   res.setHeader('Access-Control-Allow-Origin','*');
   res.setHeader('Content-Type','application/json');
   const now=new Date(), day=now.getUTCDay()||7;
