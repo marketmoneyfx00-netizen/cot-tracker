@@ -138,7 +138,7 @@ function PermissionBadge({ permission, score, isMobile }) {
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile }) {
+export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile, isPremium = true, onUpgrade }) {
   const [expanded, setExpanded] = useState(false);
 
   const defaultPair = availablePairs?.[0]?.pair ?? '—';
@@ -258,16 +258,47 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
       </div>
 
       {/* ── BREAKDOWN TOGGLE ── */}
-      <button onClick={() => setExpanded(e => !e)} style={{
-        width: '100%', background: 'transparent',
-        border: `1px solid ${expanded ? `${permission.color}50` : T.border}`,
-        borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        color: T.sub, fontSize: 11, fontWeight: 600, transition: 'border-color 0.2s',
-      }}>
-        <span>{expanded ? 'Ocultar desglose' : 'Ver desglose de factores'}</span>
-        <span style={{ fontSize: 8, display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}>▼</span>
-      </button>
+      {isPremium ? (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          width: '100%', background: 'transparent',
+          border: `1px solid ${expanded ? `${permission.color}50` : T.border}`,
+          borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          color: T.sub, fontSize: 11, fontWeight: 600, transition: 'border-color 0.2s',
+        }}>
+          <span>{expanded ? 'Ocultar desglose' : 'Ver desglose de factores'}</span>
+          <span style={{ fontSize: 8, display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}>▼</span>
+        </button>
+      ) : (
+        /* Free users: locked breakdown button → opens billing */
+        <button
+          onClick={onUpgrade}
+          style={{
+            width: '100%',
+            background: darkMode ? 'rgba(0,85,204,0.07)' : 'rgba(0,85,204,0.04)',
+            border: '1px solid rgba(0,85,204,0.2)',
+            borderRadius: 8, padding: '9px 14px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          }}
+        >
+          <div style={{ textAlign:'left' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: darkMode ? '#c8d0e0' : '#1e293b', marginBottom:1 }}>
+              Ver desglose completo 🔒
+            </div>
+            <div style={{ fontSize: 10, color: T.sub }}>
+              Disponible en acceso premium
+            </div>
+          </div>
+          <span style={{
+            flexShrink:0, padding:'6px 12px', borderRadius:7,
+            background:'#0055cc', color:'white',
+            fontSize:10, fontWeight:700, whiteSpace:'nowrap',
+            boxShadow:'0 2px 8px rgba(0,85,204,0.3)',
+          }}>
+            Ver el análisis completo ahora
+          </span>
+        </button>
+      )}
 
       {/* ── BREAKDOWN ── */}
       {expanded && (

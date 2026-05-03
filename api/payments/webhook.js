@@ -1,216 +1,139 @@
-// api/payments/webhook.js
+/**
+ * api/payments/webhook.js — Stripe Webhook Handler (Production)
+ *
+ * Vite + Vercel serverless. Body llega como stream raw.
+ *
+ * Política de errores:
+ *   200 → evento procesado OK (o ignorable legítimamente)
+ *   400 → firma inválida o request malformado (no reintentar)
+ *   500 → fallo de fulfillment → Stripe REINTENTA
+ */
 
-import { verifyPayPalWebhook } from "./verify.js";
-import { fulfillPayment } from "./fulfillment.js";
+import {
+  fulfillFromCheckoutSession,
+  fulfillFromInvoicePaid,
+  handleSubscriptionCancelled,
+} from './fulfillment.js';
 
-// ✅ FIX #1: Ruta corregida — era "../lib/supabase/admin.js" (sin _)
-import { supabaseAdmin, appendLog } from "../_lib/supabase/admin.js";
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end',  ()  => resolve(Buffer.concat(chunks)));
+    req.on('error', e  => reject(e));
+  });
+}
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const secretKey     = process.env.STRIPE_SECRET_KEY;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secretKey || !webhookSecret) {
+    console.error('[webhook] CRITICAL: missing STRIPE env vars');
+    return res.status(500).json({ error: 'Payment system not configured' });
   }
 
+  const sig = req.headers['stripe-signature'];
+  if (!sig) return res.status(400).json({ error: 'Missing signature' });
+
+  let rawBody;
   try {
-    // ── 1. HEADERS ────────────────────────────────────────────
-    const headers = {
-      "paypal-auth-algo":        req.headers["paypal-auth-algo"]        || "",
-      "paypal-cert-url":         req.headers["paypal-cert-url"]         || "",
-      "paypal-transmission-id":  req.headers["paypal-transmission-id"]  || "",
-      "paypal-transmission-sig": req.headers["paypal-transmission-sig"] || "",
-      "paypal-transmission-time":req.headers["paypal-transmission-time"]|| "",
-    };
+    rawBody = await getRawBody(req);
+  } catch (e) {
+    console.error('[webhook] Stream read error:', e.message);
+    return res.status(400).json({ error: 'Failed to read body' });
+  }
 
-    if (!headers["paypal-transmission-id"] || !headers["paypal-transmission-sig"]) {
-      console.warn("[webhook] Missing PayPal headers");
-      return res.status(400).json({ error: "Missing headers" });
-    }
+  const { default: Stripe } = await import('stripe');
+  const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' });
 
-    // ── 2. RAW BODY ───────────────────────────────────────────
-    // Vercel parsea req.body como objeto JSON automáticamente.
-    // Re-serializamos para la verificación de firma de PayPal.
-    const rawBody = JSON.stringify(req.body);
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+  } catch (e) {
+    console.error('[webhook] Invalid signature:', e.message);
+    return res.status(400).json({ error: 'Invalid signature' });
+  }
 
-    if (!req.body || typeof req.body !== "object") {
-      console.warn("[webhook] Empty or invalid body");
-      return res.status(400).json({ error: "Invalid body" });
-    }
+  console.log(`[webhook] ${event.type} | ${event.id} | ${new Date().toISOString()}`);
 
-    // ── 3. VERIFY ─────────────────────────────────────────────
-    // ✅ FIX #2: Envuelto en try/catch para que un fallo de verificación
-    // no crashee toda la función — devuelve 401 limpiamente.
-    let isValid = false;
-    try {
-      isValid = await verifyPayPalWebhook(headers, rawBody);
-    } catch (verifyErr) {
-      console.error("[webhook] Verify threw:", verifyErr.message);
-      // Si PAYPAL_WEBHOOK_ID no está configurado, rechazamos sin crashear
-      return res.status(401).json({ error: "Verification failed" });
-    }
+  try {
+    switch (event.type) {
 
-    if (!isValid) {
-      console.warn("[webhook] Invalid PayPal signature");
-      return res.status(401).json({ error: "Invalid signature" });
-    }
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        console.log(`[webhook] mode=${session.mode} | sub=${session.subscription} | customer=${session.customer} | email=${session.customer_details?.email} | auth_user_id=${session.metadata?.auth_user_id}`);
 
-    // ── 4. EVENT ──────────────────────────────────────────────
-    const event     = req.body;
-    const eventType = event?.event_type;
-    const eventId   = event?.id;
-    const resource  = event?.resource || {};
-
-    if (!eventType) {
-      console.warn("[webhook] Missing event_type");
-      return res.status(400).json({ error: "Missing event_type" });
-    }
-
-    console.log(`[webhook] ${eventType} | ${eventId}`);
-
-    // ── 5. ROUTING ────────────────────────────────────────────
-    switch (eventType) {
-
-      // ── PAGO COMPLETADO ──────────────────────────────────────
-      case "PAYMENT.CAPTURE.COMPLETED": {
-        try {
-          const result = await fulfillPayment({
-            capture:  resource,
-            payer:    event.resource?.payer || {},
-            orderId:
-              resource?.supplementary_data?.related_ids?.order_id ||
-              event.resource?.order_id ||
-              null,
-            rawEvent: event,
-          });
-
-          if (!result.ok) {
-            console.error("[webhook] Fulfillment failed:", result.error);
-          } else if (result.skipped) {
-            console.log("[webhook] Duplicate event — skipped");
-          } else {
-            console.log("[webhook] Payment fulfilled:", result.paymentId);
-          }
-        } catch (err) {
-          console.error("[webhook] Fulfillment error:", err.message);
-          // No re-lanzamos: PayPal necesita un 200 para no reintentar indefinidamente
+        if (session.mode !== 'subscription') {
+          return res.status(200).json({ received: true, note: 'non-subscription session' });
         }
-        break;
+        if (!session.subscription) {
+          console.error('[webhook] No subscription_id in completed session');
+          return res.status(200).json({ received: true, note: 'no subscription id' });
+        }
+
+        const r = await fulfillFromCheckoutSession(session, stripe);
+        if (!r.ok && !r.skipped) {
+          console.error('[webhook] fulfillFromCheckoutSession FAILED:', r.error);
+          return res.status(500).json({ error: r.error }); // → Stripe retry
+        }
+        console.log(`[webhook] checkout OK | payment=${r.paymentId} | skipped=${r.skipped}`);
+        return res.status(200).json({ received: true });
       }
 
-      // ── ORDEN APROBADA ────────────────────────────────────────
-      case "CHECKOUT.ORDER.APPROVED":
-        console.log("[webhook] Order approved — waiting for capture");
-        break;
+      case 'invoice.paid': {
+        const invoice = event.data.object;
+        const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+        console.log(`[webhook] invoice=${invoice.id} | sub=${subId} | reason=${invoice.billing_reason} | customer=${invoice.customer} | auth_user_id=${invoice.subscription_details?.metadata?.auth_user_id}`);
 
-      // ── PAGO DENEGADO ─────────────────────────────────────────
-      case "PAYMENT.CAPTURE.DENIED": {
-        try {
-          const txId = resource.id;
-          if (!txId) break;
-
-          const { data: existing } = await supabaseAdmin
-            .from("payments")
-            .select("id")
-            .eq("provider_transaction_id", txId)
-            .maybeSingle();
-
-          let paymentId = existing?.id;
-
-          if (!paymentId) {
-            const { data: inserted, error: insertErr } = await supabaseAdmin
-              .from("payments")
-              .insert({
-                provider:                "paypal",
-                provider_transaction_id: txId,
-                payer_email:             resource?.payer?.email_address || "unknown",
-                amount:                  parseFloat(resource.amount?.value || "0"),
-                currency:                resource.amount?.currency_code || "EUR",
-                product_name:            "COT Tracker Beta",
-                product_type:            "subscription",
-                status:                  "denied",
-                metadata:                event,
-              })
-              .select("id")
-              .single();
-
-            if (insertErr) {
-              console.error("[webhook] Denied insert error:", insertErr.message);
-            } else {
-              paymentId = inserted?.id;
-            }
-          } else {
-            await supabaseAdmin
-              .from("payments")
-              .update({ status: "denied" })
-              .eq("id", paymentId);
-          }
-
-          if (paymentId) {
-            await appendLog({
-              payment_id: paymentId,
-              action:     "payment_denied",
-              status:     "ok",
-              details:    { tx_id: txId },
-            });
-          }
-        } catch (e) {
-          console.error("[webhook] Denied handler error:", e.message);
+        if (!subId) {
+          return res.status(200).json({ received: true, note: 'non-subscription invoice' });
         }
-        break;
+
+        const r = await fulfillFromInvoicePaid(invoice, stripe);
+        if (!r.ok && !r.skipped) {
+          console.error('[webhook] fulfillFromInvoicePaid FAILED:', r.error);
+          return res.status(500).json({ error: r.error });
+        }
+        console.log(`[webhook] invoice.paid OK | payment=${r.paymentId} | skipped=${r.skipped}`);
+        return res.status(200).json({ received: true });
       }
 
-      // ── REEMBOLSO ─────────────────────────────────────────────
-      case "PAYMENT.CAPTURE.REFUNDED": {
-        try {
-          const originalCaptureId =
-            resource.links?.find((l) => l.rel === "up")?.href?.split("/").pop() ||
-            resource.id;
-
-          if (!originalCaptureId) break;
-
-          const { data: payment } = await supabaseAdmin
-            .from("payments")
-            .select("id")
-            .eq("provider_transaction_id", originalCaptureId)
-            .maybeSingle();
-
-          if (payment?.id) {
-            await supabaseAdmin
-              .from("payments")
-              .update({
-                status:      "refunded",
-                refunded_at: new Date().toISOString(),
-              })
-              .eq("id", payment.id);
-
-            await appendLog({
-              payment_id: payment.id,
-              action:     "refund_received",
-              status:     "ok",
-              details:    {
-                refund_id:        resource.id,
-                original_capture: originalCaptureId,
-              },
-            });
-          } else {
-            console.warn("[webhook] Refund: payment not found for capture", originalCaptureId);
-          }
-        } catch (e) {
-          console.error("[webhook] Refund handler error:", e.message);
-        }
-        break;
+      case 'invoice.payment_failed': {
+        const inv = event.data.object;
+        console.warn(`[webhook] payment_failed | invoice=${inv.id} | sub=${inv.subscription} | attempt=${inv.attempt_count} | next=${inv.next_payment_attempt}`);
+        // Stripe reintenta automáticamente. Si agota reintentos → subscription.deleted.
+        return res.status(200).json({ received: true });
       }
 
-      // ── OTROS EVENTOS ─────────────────────────────────────────
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        console.log(`[webhook] subscription.deleted | sub=${sub.id} | customer=${sub.customer}`);
+
+        const r = await handleSubscriptionCancelled(sub);
+        if (!r.ok) {
+          // No devolvemos 500 en cancelaciones — Stripe no reintentará de forma útil
+          console.error('[webhook] handleSubscriptionCancelled FAILED:', r.error);
+        } else {
+          console.log(`[webhook] cancellation OK | note=${r.note ?? 'none'}`);
+        }
+        return res.status(200).json({ received: true });
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        console.log(`[webhook] charge.refunded | charge=${charge.id}`);
+        return res.status(200).json({ received: true });
+      }
+
       default:
-        console.log("[webhook] Unhandled event type:", eventType);
+        console.log(`[webhook] Unhandled (safe): ${event.type}`);
+        return res.status(200).json({ received: true, note: 'unhandled event' });
     }
-
-    // Siempre devolver 200 — PayPal reintenta si no recibe 2xx
-    return res.status(200).json({ received: true });
 
   } catch (err) {
-    // Este catch solo debería alcanzarse por errores inesperados en el flujo principal
-    console.error("[webhook] Fatal unhandled error:", err.message, err.stack);
-    return res.status(500).json({ error: "Internal error" });
+    console.error(`[webhook] Uncaught error in ${event.type}:`, err.message, err.stack);
+    return res.status(500).json({ error: 'Internal fulfillment error' });
   }
 }

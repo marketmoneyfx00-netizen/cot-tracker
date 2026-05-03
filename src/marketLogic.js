@@ -10,7 +10,14 @@
  *
  * Uso:
  *   const logic = getIndicatorLogic(eventName, currency, actual, forecast, previous)
+ *
+ * EXTENSIÓN v2 — Motor de Inferencia Contextual Multicapa:
+ *   getIndicatorLogic acepta un 6º argumento opcional `calendarEvent`
+ *   (el objeto del evento del API con campos dynamic*).
+ *   Si se proporciona, añade `compositeScore` al objeto de retorno.
+ *   El resultado existente (macroScore) no se modifica.
  */
+import { buildCompositeScore } from './compositeScoreEngine.js';
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 
@@ -495,7 +502,7 @@ function buildExplanation(evType, group, ccy, surprise, delta, surpriseDir_effec
  * @param {any}    previous   - dato anterior
  * @returns {object}          - objeto completo con toda la lógica para el render
  */
-export function getIndicatorLogic(eventName, currency, actual, forecast, previous) {
+export function getIndicatorLogic(eventName, currency, actual, forecast, previous, calendarEvent = null, priceCandles = []) {
   const evType  = detectType(eventName);
   const meta    = TYPE_META[evType] || { group:'PRO_CURRENCY', inverse:false, tier:'low' };
   const group   = meta.group;
@@ -563,6 +570,13 @@ export function getIndicatorLogic(eventName, currency, actual, forecast, previou
 
     // For App.jsx backward-compat
     macroScore: surprise ? { score: biasScore, label: biasLabel, color: biasColor } : null,
+
+    // ── MOTOR DE INFERENCIA CONTEXTUAL MULTICAPA (v2) ──────────────────────
+    // Solo se calcula si hay dato real (surprise) y se pasó el evento del calendario.
+    // El resultado existente (macroScore, biasScore, etc.) NO se modifica.
+    compositeScore: (surprise && calendarEvent)
+      ? buildCompositeScore(biasScore, calendarEvent, evType, surprise.pct, priceCandles)
+      : null,
   };
 }
 

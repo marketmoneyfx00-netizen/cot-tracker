@@ -1,32 +1,13 @@
 /**
- * AuthProvider.jsx — React Auth Context
+ * AuthProvider.jsx — v5 (NUEVOS USUARIOS: retry + onboarding flow)
  *
- * FIX: Eliminado el useEffect de initAuth() que llamaba getCurrentSession()
- * en paralelo con onAuthStateChange, causando lock contention en Supabase v2.
- *
- * En Supabase JS v2, onAuthStateChange dispara INITIAL_SESSION inmediatamente
- * al suscribirse, entregando la sesión actual. No hay necesidad de llamar
- * getSession() por separado — eso era la causa del lock stealing.
- *
- * Flujo correcto (serializado):
- *   onAuthStateChange(INITIAL_SESSION) → setUser → loadProfile → setLoading(false)
- *   onAuthStateChange(SIGNED_IN/OUT)   → setUser → loadProfile/clear
- *
- * ACCESS CONTROL:
- *   El enforcement de acceso (redirect a /pricing o /login) ocurre en
- *   ProtectedRoute, que lee accessStatus del contexto. AuthProvider solo
- *   calcula y expone el estado — nunca redirige ni hace signOut por sí mismo.
- *
- *   Casos que ProtectedRoute maneja:
- *     reason='trial_expired'    → /pricing
- *     reason='suspended'        → /pricing
- *     reason='cancelled'        → /pricing
- *     reason='payment_failed'   → /pricing
- *     reason='profile_not_found' → /login
- *
- *   Casos que AuthProvider resuelve como graceful degradation (no bloquear):
- *     profileError (DB/network error) → hasAccess:true, perfil sintético
- *     catch (excepción inesperada)    → hasAccess:true, perfil sintético
+ * CAMBIOS RESPECTO A v4:
+ *   1. loadProfile pasa authUser completo (no solo id) → accessGuard puede
+ *      crear fila de fallback si el trigger no llegó a tiempo
+ *   2. Para usuarios nuevos (isNewUser), marca accessStatus con hasAccess:true
+ *      y reason:'new_user' para que App.jsx muestre onboarding
+ *   3. Setup mode (?setup=1) se detecta aquí para forzar refreshProfile
+ *      después de que el trigger tenga tiempo de ejecutarse
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -57,117 +38,86 @@ export function AuthProvider({ children }) {
   const [subscription, setSubscription] = useState(null);
   const [accessStatus, setAccessStatus] = useState(null);
 
-  // Serialization guard: prevents simultaneous loadProfile calls
   const loadingProfileRef = useRef(false);
 
-  // ── Load profile + subscription (single serialized entry point) ───────────
+  // ── Load profile con retry (key change: pasa authUser completo) ───────────
   const loadProfile = useCallback(async (authUser) => {
-    if (!authUser?.email) {
-      console.log('[AUTH] No authUser.email — clearing profile');
+    if (!authUser?.id) {
+      console.log('[AUTH] No authUser.id — clearing profile');
       setProfile(null);
       setSubscription(null);
       setAccessStatus(null);
       return;
     }
 
-    // Prevent parallel calls
     if (loadingProfileRef.current) {
       console.log('[AUTH] loadProfile already in progress — skipping duplicate');
-      setLoading(false);
       return;
     }
     loadingProfileRef.current = true;
 
     try {
       console.log('[AUTH] Loading profile for:', authUser.email, '| uid:', authUser.id);
-      // Pass both email (fallback) and auth UID (primary attempt)
-      const { profile: p, error: profileError } = await loadUserProfile(authUser.email, authUser.id);
 
-      // ── CASO 1: Error de red / DB (profileError) ─────────────────────────
-      // No es una confirmación de ausencia — puede ser un error transitorio.
-      // No bloquear: mantener acceso con perfil sintético (graceful degradation).
-      if (profileError) {
-        console.warn('[AUTH] DB/network error loading profile — graceful fallback:', profileError.message);
-        const fallback = {
-          email:             authUser.email,
-          telegram_username: authUser.email.split('@')[0],
-          plan:              'Trial',
-          status:            'active',
-        };
-        setProfile(fallback);
-        setSubscription(null);
-        setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
-        return;
-      }
+      // Pasar authUser completo → accessGuard puede crear fila si trigger tardó
+      const { profile: p, error: profileError } = await loadUserProfile(
+        authUser.id,
+        authUser   // ← NUEVO: objeto completo para fallback
+      );
 
-      // ── CASO 2: Sin registro en users_access (!p, sin error de red) ──────
-      // Confirmado: no existe accessRecord para este usuario.
-      // ProtectedRoute redirigirá a /login basándose en reason='profile_not_found'.
-      // Sin logout aquí — evita race condition tras signup mientras el trigger
-      // de DB aún no ha insertado el perfil.
-      if (!p) {
-        console.warn('[AUTH] No access record found for:', authUser.email);
+      if (profileError || !p) {
+        // Ni retry ni auto-create funcionaron
+        // Marcar como sin acceso — el usuario verá el paywall con opción de soporte
+        console.error('[AUTH] Profile unresolvable for:', authUser.email);
         setProfile(null);
         setSubscription(null);
         setAccessStatus({
           hasAccess: false,
-          reason:    'profile_not_found',
-          plan:      '—',
-          status:    'unknown',
-          expiresAt: null,
-          isExpired: false,
+          plan: 'none',
+          reason: 'profile_not_found',
+          status: 'inactive',
         });
         return;
       }
 
-      // ── CASO 3: Perfil encontrado — calcular status de acceso ─────────────
-      const { subscription: sub } = p?.id
-        ? await loadUserSubscription(p.id)
-        : { subscription: null };
-
-      const status = getAccessStatus(p, sub);
+      const status = getAccessStatus(p);
 
       setProfile(p);
-      setSubscription(sub);
+      setSubscription(null);
       setAccessStatus(status);
 
-      console.log('[AUTH] Profile loaded:', p.email, '| plan:', p.access_type ?? p.plan, '| hasAccess:', status.hasAccess, '| reason:', status.reason);
+      console.log(
+        '[AUTH] Profile loaded:', p.email,
+        '| plan:', p.plan,
+        '| status:', p.status,
+        '| hasAccess:', status.hasAccess,
+        '| onboarding_completed:', p.onboarding_completed
+      );
 
-      // Non-blocking side effects
-      updateLastLogin(authUser.email).catch(() => {});
-      logLoginEvent(p.id ?? authUser.id, true).catch(() => {});
+      // Side effects non-blocking
+      updateLastLogin(authUser.id).catch(() => {});
+      logLoginEvent(authUser.id, true).catch(() => {});
 
     } catch (err) {
-      // Excepción inesperada — graceful degradation, no bloquear
       console.error('[AUTH] loadProfile caught error:', err.message);
-
-      const fallback = {
-        email: authUser?.email ?? 'unknown',
-        telegram_username: authUser?.email?.split('@')[0] ?? 'Usuario',
-        plan: 'Trial',
-        status: 'active',
-      };
-
-      setProfile(fallback);
+      setProfile(null);
       setSubscription(null);
-      setAccessStatus({ hasAccess: true, plan: 'Trial', reason: 'active' });
+      setAccessStatus({ hasAccess: false, plan: 'none', reason: 'db_error', status: 'inactive' });
 
     } finally {
       loadingProfileRef.current = false;
     }
   }, []);
 
-  // ── refreshProfile for manual reload ──────────────────────────────────────
+  // ── refreshProfile ─────────────────────────────────────────────────────────
   const refreshProfile = useCallback(async () => {
     if (user) {
-      loadingProfileRef.current = false; // allow forced refresh
+      loadingProfileRef.current = false;
       await loadProfile(user);
     }
   }, [user, loadProfile]);
 
-  // ── SINGLE auth effect — onAuthStateChange handles EVERYTHING ─────────────
-  // DO NOT add a second useEffect calling getCurrentSession() / getSession().
-  // Supabase v2 fires INITIAL_SESSION on subscribe → eliminates lock contention.
+  // ── SINGLE auth effect ─────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[AUTH] Subscribing to auth state changes');
 
@@ -179,7 +129,8 @@ export function AuthProvider({ children }) {
           new URLSearchParams(window.location.search).get('mode') === 'reset-password';
 
         if (forceResetMode) {
-          console.log('[AUTH] Reset mode detected - skipping session restore');
+          console.log('[AUTH] Reset mode detected — releasing loading gate');
+          setLoading(false);
           return;
         }
 
@@ -190,11 +141,9 @@ export function AuthProvider({ children }) {
 
         if (authUser) {
           console.log('[AUTH] Session active for:', authUser.email);
-
-          // libera UI inmediatamente
           setLoading(false);
 
-          // carga perfil en background
+          // loadProfile incluye retry — maneja race condition del trigger
           loadProfile(authUser).catch(err => {
             console.error('[AUTH] background profile load error:', err);
           });
@@ -205,10 +154,25 @@ export function AuthProvider({ children }) {
           setSubscription(null);
           setAccessStatus(null);
           setLoading(false);
+
+          // Limpiar tokens corruptos
+          try {
+            const storageKey = Object.keys(localStorage).find(
+              k => k.startsWith('sb-') && k.endsWith('-auth-token')
+            );
+            if (storageKey) {
+              const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+              if (!stored?.access_token) {
+                localStorage.removeItem(storageKey);
+                console.log('[AUTH] Cleared stale auth token from storage');
+              }
+            }
+          } catch (e) { /* best-effort */ }
         }
 
       } catch (err) {
         console.error('[AUTH] auth callback error:', err);
+        setLoading(false);
       } finally {
         console.log('[AUTH] Render ready');
       }
@@ -221,7 +185,9 @@ export function AuthProvider({ children }) {
   }, [loadProfile]);
 
   return (
-    <AuthContext.Provider value={{ loading, session, user, profile, subscription, accessStatus, refreshProfile }}>
+    <AuthContext.Provider value={{
+      loading, session, user, profile, subscription, accessStatus, refreshProfile
+    }}>
       {children}
     </AuthContext.Provider>
   );

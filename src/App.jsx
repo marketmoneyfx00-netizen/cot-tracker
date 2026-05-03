@@ -1,17 +1,36 @@
-import { useState, useRef, useCallback, useEffect, Component } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Component } from "react";
 import { getIndicatorLogic } from './marketLogic.js';
+import { usePriceStore }     from './hooks/usePriceStore.js';
+import { buildDecision }     from './logic/decisionEngine.js';
+import { checkAlerts }       from './logic/alertsEngine.js';
+import { buildInterpretation, TOOLTIPS } from './logic/interpretationEngine.js';
 import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
 import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
 import TooltipInfo from './components/TooltipInfo.jsx';
-import { useAuth } from './components/AuthProvider.jsx';
+import { startTwelveData, stopTwelveData } from './services/twelveDataService.js';
+import DropZone from './components/DropZone.jsx';
+import SourceCard from './components/SourceCard.jsx';
+import CrossAssetFlow from './components/CrossAssetFlow.jsx';
+import MarketDecisionLayer from './components/MarketDecisionLayer.jsx';
+import { useAuth } from './context/AuthProvider.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import { logout, updatePassword } from './lib/authService.js';
+import {
+  detectCftcFileType,
+  parseTiffCombined,
+  CROSS_ASSET_FLOW_ASSETS,
+} from './parseTiffCombined.js';
+import { buildTheme, injectCSSVars } from './lib/theme.js';
+import OnboardingModal from './components/onboarding/OnboardingModal.jsx';
+import CreatePasswordModal from './components/CreatePasswordModal.jsx';
+import { useOnboarding } from './hooks/useOnboarding.js';
+import MacroTab from './components/MacroTab.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-// Auth: Supabase (see src/lib/authService.js + src/components/AuthProvider.jsx)
+// Auth: Supabase (see src/lib/authService.js + src/context/AuthProvider.jsx)
 // GAS_URL removed — no longer used for auth
 // STORAGE_KEY removed — session managed by Supabase, not localStorage
 const STORAGE_KEY = "cot_user_registered"; // kept for dark/lang prefs only
@@ -212,7 +231,7 @@ function StrengthDots({strength}) {
   return (
     <div style={{display:"flex",gap:3,alignItems:"center"}}>
       {[1,2,3].map(i=>(
-        <div key={i} style={{width:5,height:5,borderRadius:"50%",background:i<=strength?"#ff9500":"#e5e5ea"}}/>
+        <div key={i} style={{width:5,height:5,borderRadius:"50%",background:i<=strength?"#ff9500":"#dbe4ed"}}/>
       ))}
     </div>
   );
@@ -453,104 +472,11 @@ function MiniSparkline({values,positive}) {
 // ─────────────────────────────────────────────────────────────────────────────
 const PRESETS=[{label:"4 semanas",weeks:4},{label:"2 meses",weeks:8},{label:"3 meses",weeks:13}];
 
-function buildDownloadUrl(from, to) {
-  const base="https://publicreporting.cftc.gov/resource/6dca-aqww.csv";
-  const where=`report_date_as_yyyy_mm_dd between '${from}T00:00:00' and '${to}T23:59:59'`;
-  return `${base}?${new URLSearchParams({"$where":where,"$order":"report_date_as_yyyy_mm_dd DESC","$limit":"500"})}`;
-}
-
-function DownloadPanel() {
-  const [from,setFrom]=useState(weeksAgo(8));
-  const [to,setTo]=useState(today());
-  const [preset,setPreset]=useState(1);
-  const [copied,setCopied]=useState(false);
-  const applyPreset=(weeks,idx)=>{setFrom(weeksAgo(weeks));setTo(today());setPreset(idx);};
-  const dlUrl=buildDownloadUrl(from,to);
-  const copyUrl=()=>{navigator.clipboard.writeText(dlUrl).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});};
-  return (
-    <div style={{background:"white",borderRadius:20,padding:20,boxShadow:"0 2px 12px rgba(0,0,0,0.07)",marginBottom:16}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-        <div style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,#0066cc,#34aadc)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M12 3v13M7 12l5 5 5-5M4 20h16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <p style={{margin:0,fontSize:14,fontWeight:700,color:"#1c1c1e"}}>Descargar del CFTC</p>
-          <p style={{margin:0,fontSize:12,color:"#8e8e93"}}>Elige rango → descarga → arrastra abajo</p>
-        </div>
-      </div>
-      <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
-        {PRESETS.map((p,i)=>(
-          <button key={i} onClick={()=>applyPreset(p.weeks,i)} style={{
-            padding:"6px 14px",borderRadius:99,border:"none",cursor:"pointer",fontSize:12,fontWeight:500,
-            background:preset===i?"#0066cc":"#f2f2f7",color:preset===i?"white":"#3c3c43",transition:"all 0.15s",
-          }}>{p.label}</button>
-        ))}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-        {[["Desde",from,setFrom],["Hasta",to,setTo]].map(([l,v,s])=>(
-          <div key={l}>
-            <label style={{display:"block",fontSize:10,fontWeight:600,color:"#8e8e93",marginBottom:4,letterSpacing:"0.05em",textTransform:"uppercase"}}>{l}</label>
-            <input type="date" value={v} max={today()} onChange={e=>{s(e.target.value);setPreset(null);}}
-              style={{width:"100%",padding:"9px 10px",borderRadius:10,border:"1.5px solid #e5e5ea",fontSize:13,color:"#1c1c1e",background:"#f9f9fb",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-        ))}
-      </div>
-      <a href={dlUrl} target="_blank" rel="noreferrer" style={{
-        display:"block",textAlign:"center",padding:"12px",borderRadius:12,
-        background:"linear-gradient(135deg,#0066cc,#0077ed)",color:"white",
-        fontSize:14,fontWeight:600,textDecoration:"none",boxShadow:"0 3px 12px rgba(0,102,204,0.3)",
-      }}>🔗 Descargar CSV del CFTC</a>
-      <p style={{margin:"10px 0 0",fontSize:11,color:"#aeaeb2",textAlign:"center"}}>
-        Descarga el .csv y arrástralo a la zona de abajo
-      </p>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DROP ZONE
 // ─────────────────────────────────────────────────────────────────────────────
-function DropZone({onFile}) {
-  const [drag,setDrag]=useState(false);
-  const handle=useCallback((file)=>{
-    if (!file) return;
-    const r=new FileReader(); r.onload=e=>onFile(e.target.result,file.name); r.readAsText(file);
-  },[onFile]);
-  return (
-    <div onDragOver={e=>{e.preventDefault();setDrag(true);}}
-      onDragLeave={()=>setDrag(false)}
-      onDrop={e=>{e.preventDefault();setDrag(false);handle(e.dataTransfer.files[0]);}}
-      style={{border:`2px dashed ${drag?"#0066cc":"#d1d1d6"}`,borderRadius:18,padding:"24px 20px",
-        textAlign:"center",background:drag?"rgba(0,102,204,0.04)":"#f9f9fb",transition:"all 0.2s"}}>
-      <input id="cot-csv-input" type="file" accept=".csv,.txt" style={{display:"none"}}
-        onChange={e=>handle(e.target.files[0])}/>
-      <div style={{width:40,height:40,borderRadius:12,background:drag?"rgba(0,102,204,0.1)":"#ededf0",
-        display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M12 16V8M12 8L8 12M12 8L16 12" stroke={drag?"#0066cc":"#8e8e93"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M3 16.5V18.75C3 19.993 4.007 21 5.25 21H18.75C19.993 21 21 19.993 21 18.75V16.5" stroke={drag?"#0066cc":"#8e8e93"} strokeWidth="1.8" strokeLinecap="round"/>
-        </svg>
-      </div>
-      <p style={{margin:"0 0 4px",fontSize:14,fontWeight:600,color:drag?"#0066cc":"#1c1c1e"}}>{drag?"Suelta el archivo":"Arrastra el CSV aquí"}</p>
-      <p style={{margin:"0 0 14px",fontSize:12,color:"#8e8e93"}}>Compatible con TFF y Legacy · .csv .txt</p>
-      <label htmlFor="cot-csv-input" style={{display:"inline-flex",alignItems:"center",gap:8,
-        padding:"11px 22px",borderRadius:10,border:"1.5px solid #0066cc",
-        background:"white",color:"#0066cc",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        Seleccionar archivo CSV
-      </label>
-    </div>
-  );
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HEATMAP + TOOLTIP HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 function heatCell(val, type="net") {
   // type: "long" | "short" | "net"
   if (val == null || isNaN(val)) return {background:"transparent", color:"#9E9E9E"};
@@ -655,7 +581,7 @@ function InfoTooltip({text}) {
   );
 }
 
-const TOOLTIPS = {
+const COT_TOOLTIPS = {
   levLong:  "Contratos de compra abiertos por Hedge Funds y CTAs (Leveraged Money). Un incremento sostenido indica acumulación de posiciones largas.",
   levShort: "Contratos de venta abiertos por Hedge Funds y CTAs (Leveraged Money). Un incremento sostenido indica distribución o posicionamiento bajista.",
   levNet:   "Posición neta de Leveraged Money (Longs - Shorts). Es el indicador principal del Sesgo de Mercado. Positivo = sesgo alcista.",
@@ -666,26 +592,11 @@ const TOOLTIPS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // DETAIL SHEET — vertical table with heatmap, tooltips, no tab selector
 // ─────────────────────────────────────────────────────────────────────────────
-function DetailSheet({pairData, onClose, darkMode = false}) {
+function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
   if (!pairData) return null;
   const {pair, weeks, signal} = pairData;
   // Theme tokens — adapts to dark/light mode
-  const DS = {
-    bg:      darkMode ? '#1c1c1e'   : '#ffffff',
-    card:    darkMode ? '#2c2c2e'   : '#f8f9fc',
-    header:  darkMode ? '#2a2a2c'   : '#f1f5f9',
-    border:  darkMode ? '#3a3a3c'   : '#dde1e7',
-    border2: darkMode ? '#333336'   : '#f0f2f5',
-    txt:     darkMode ? '#e8eaf0'   : '#1a1d23',
-    sub:     darkMode ? '#8e8e93'   : '#6b7280',
-    sub2:    darkMode ? '#636366'   : '#9ca3af',
-    rowHover:darkMode ? 'rgba(255,255,255,0.04)' : '#f0f4ff',
-    reason:  darkMode ? 'rgba(255,255,255,0.06)' : '#f8f9fc',
-    rBorder: darkMode ? '#3a3a3c'   : '#e5e7eb',
-    closeBg: darkMode ? '#3a3a3c'   : '#f0f2f5',
-    latestBg:darkMode ? 'rgba(0,85,204,0.10)' : 'rgba(0,85,204,0.03)',
-    accent:  '#0055cc',
-  };
+  const DS = Tp || buildTheme(darkMode); // Use passed T or build own
   const isTFF = weeks[0]?.format === "tff";
   const rows  = weeks.slice(0, 10);
 
@@ -885,12 +796,12 @@ function DetailSheet({pairData, onClose, darkMode = false}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS PANEL
 // ─────────────────────────────────────────────────────────────────────────────
-// ─── PAYMENT PLAN URLS (one constant per plan for easy updates) ──────────────
-const PLAN_URLS = {
-  mensual:    "https://www.paypal.com/ncp/payment/PAHQ48GCL2GME",
-  trimestral: "https://www.paypal.com/ncp/payment/56D3KLQFHLHTA",
-  semestral:  "https://www.paypal.com/ncp/payment/C6WHM2L785UXA",
-  anual:      "https://www.paypal.com/ncp/payment/29TJHXYBYHFNY",
+// ─── STRIPE PRICE IDs (one constant per plan for easy updates) ───────────────
+const STRIPE_PRICE_IDS = {
+  mensual:    "price_1TQdW7B7QeisGCzWnuzk8SLI",
+  trimestral: "price_1TQdc6B7QeisGCzWYXRSJNGc",
+  semestral:  "price_1TQdfUB7QeisGCzWkhQSRQAE",
+  anual:      "price_1TQdhfB7QeisGCzWEoFsJFhm",
 };
 const CFTC_URL = "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm";
 const TELEGRAM_URL = "https://t.me/COT_TRACKER";
@@ -991,46 +902,96 @@ function lastSunday(year, month) {
 // ─── BILLING / PLAN MODAL ─────────────────────────────────────────────────────
 // Acceso completo en todos los planes de pago — la diferencia es solo el descuento.
 const FULL_ACCESS = [
-  "Dashboard COT institucional",
-  "Bias Engine (score -5/+5)",
-  "Intraday Execution Layer",
-  "Calendario macro enriquecido",
-  "Comunidad Telegram privada",
+  "Dashboard COT institucional completo",
+  "Market Decision Layer — interpretación HTF+LTF",
+  "Cross Asset Flow — FX, Índices y Bonos",
+  "Intraday Execution con desglose de factores",
+  "Bias institucional completo por activo",
+  "Calendario macro enriquecido con análisis de impacto",
+  "Comunidad privada de traders (Telegram)",
 ];
+
+// Beneficios visibles del plan gratuito (corrección: Bias Engine SÍ es visible en free)
+const FREE_BENEFITS = [
+  "Institutional Bias Engine (visión base)",
+  "Dashboard COT básico (lectura)",
+  "Calendario macro público",
+];
+
+// Sección de funciones bloqueadas en free — se muestra como lista de lock
+const FREE_LOCKED = [
+  "Market Decision Layer completo",
+  "Cross Asset Flow completo",
+  "Intraday Execution con desglose",
+  "Comunidad privada Telegram",
+];
+
 const PLANS = [
   { id: "free",       label: "Free",        price: "0€",   period: "",         color: "#8e8e93", url: null,   saving: null,
-    benefits: ["Dashboard COT básico (solo lectura)","Calendario macro público","Sin acceso al Bias Engine"] },
-  { id: "mensual",    label: "Mensual",     price: "19€",  period: "/mes",     color: "#0066cc", url: PLAN_URLS.mensual,   saving: null,
+    benefits: FREE_BENEFITS },
+  { id: "mensual",    label: "Mensual",     price: "24€",  period: "/mes",     color: "#0066cc", priceId: STRIPE_PRICE_IDS.mensual,   saving: null,
     benefits: [...FULL_ACCESS] },
-  { id: "trimestral", label: "Trimestral",  price: "49€",  period: "/3 meses", color: "#5856d6", url: PLAN_URLS.trimestral, saving: "Ahorra 8€ · 14% descuento",
+  { id: "trimestral", label: "Trimestral",  price: "59€",  period: "/3 meses", color: "#5856d6", priceId: STRIPE_PRICE_IDS.trimestral, saving: "Ahorra 13€ · 18% descuento",
     benefits: [...FULL_ACCESS] },
-  { id: "semestral",  label: "Semestral",   price: "89€",  period: "/6 meses", color: "#34c759", url: PLAN_URLS.semestral,  saving: "Ahorra 25€ · 22% descuento",
+  { id: "semestral",  label: "Semestral",   price: "99€",  period: "/6 meses", color: "#34c759", priceId: STRIPE_PRICE_IDS.semestral,  saving: "Ahorra 45€ · 31% descuento",
     benefits: [...FULL_ACCESS] },
-  { id: "anual",      label: "Anual",       price: "149€", period: "/año",     color: "#ff2d55", url: PLAN_URLS.anual,      saving: "Ahorra 79€ · 35% descuento",
+  { id: "anual",      label: "Anual",       price: "169€", period: "/año",     color: "#ff2d55", priceId: STRIPE_PRICE_IDS.anual,      saving: "Ahorra 119€ · 41% descuento",
     benefits: [...FULL_ACCESS] },
 ];
 
-function BillingModal({ user, darkMode, onClose }) {
+function BillingModal({ user, darkMode, onClose, authUserId }) {
   const currentPlan = (user?.plan || "free").toLowerCase();
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
+
+  async function handleStripeCheckout(priceId) {
+    if (checkoutLoading) return;
+    // HARD BLOCK: nunca iniciar checkout sin usuario autenticado identificado
+    console.log('[BillingModal] handleStripeCheckout | authUserId:', authUserId, '| priceId:', priceId);
+    if (!authUserId || typeof authUserId !== 'string' || authUserId.length < 10) {
+      console.error('[BillingModal] BLOCKED: authUserId inválido o ausente:', authUserId);
+      alert('Error: sesión no detectada. Por favor recarga la página e intenta de nuevo.');
+      return;
+    }
+    setCheckoutLoading(priceId);
+    try {
+      const res = await fetch('/api/payments/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId, userId: authUserId, userEmail: user?.email }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('[Stripe] No URL returned:', data);
+        alert('Error al iniciar el pago. Intenta de nuevo.');
+      }
+    } catch (err) {
+      console.error('[Stripe] Checkout error:', err);
+      alert('Error de conexión. Intenta de nuevo.');
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
 
   return (
     <div onClick={onClose}
       style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:400,
         display:"flex", alignItems:"flex-end", justifyContent:"center", backdropFilter:"blur(8px)" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:darkMode?"#1c1c1e":"white", borderRadius:"24px 24px 0 0",
+        style={{ background:darkMode?"#12171f":"#ffffff", borderRadius:"24px 24px 0 0",
           width:"100%", maxWidth:520, maxHeight:"92vh", overflowY:"auto",
           boxShadow:"0 -8px 60px rgba(0,0,0,0.3)", animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
         <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
-        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         {/* Header */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px" }}>
           <div>
-            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>Elige tu plan</p>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Elige tu plan</p>
             <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Plan actual: <strong>{user?.plan || "Trial"}</strong></p>
           </div>
           <button onClick={onClose}
-            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
         </div>
         {/* Plan cards */}
         <div style={{ padding:"0 16px 40px", display:"flex", flexDirection:"column", gap:10 }}>
@@ -1038,8 +999,8 @@ function BillingModal({ user, darkMode, onClose }) {
             const isActive = currentPlan === plan.id || (currentPlan === "trial" && plan.id === "free");
             return (
               <div key={plan.id}
-                style={{ borderRadius:16, border:`2px solid ${isActive ? plan.color : darkMode?"#2c2c2e":"#e5e5ea"}`,
-                  background: isActive ? `${plan.color}10` : darkMode?"#2c2c2e":"#f9f9fb",
+                style={{ borderRadius:16, border:`2px solid ${isActive ? plan.color : darkMode?"#1a2230":"#dbe4ed"}`,
+                  background: isActive ? `${plan.color}10` : darkMode?"#1a2230":"#f8fafc",
                   padding:"14px 16px", position:"relative", overflow:"hidden" }}>
                 {isActive && (
                   <span style={{ position:"absolute",top:10,right:12,fontSize:10,fontWeight:700,
@@ -1049,29 +1010,61 @@ function BillingModal({ user, darkMode, onClose }) {
                 )}
                 <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:plan.saving?4:8 }}>
                   <span style={{ fontSize:17,fontWeight:700,color:plan.color }}>{plan.label}</span>
-                  <span style={{ fontSize:22,fontWeight:800,color:darkMode?"#fff":"#1c1c1e" }}>{plan.price}</span>
+                  <span style={{ fontSize:22,fontWeight:800,color:darkMode?"#e8eaf0":"#111827" }}>{plan.price}</span>
                   <span style={{ fontSize:12,color:"#8e8e93" }}>{plan.period}</span>
+                  {/* Recommended badge for trimestral */}
+                  {plan.id === "trimestral" && !isActive && (
+                    <span style={{ fontSize:9,fontWeight:700,background:"#5856d6",color:"white",
+                      padding:"2px 7px",borderRadius:99,marginLeft:4 }}>MÁS POPULAR</span>
+                  )}
                 </div>
                 {plan.saving && (
                   <div style={{ fontSize:11,fontWeight:600,color:plan.color,
                     background:`${plan.color}18`,padding:"2px 10px",borderRadius:99,
                     display:"inline-block",marginBottom:8 }}>{plan.saving}</div>
                 )}
-                <ul style={{ margin:"0 0 12px",padding:"0 0 0 16px",listStyle:"none" }}>
+                <ul style={{ margin:"0 0 8px",padding:"0 0 0 16px",listStyle:"none" }}>
                   {plan.benefits.map((b,i) => (
-                    <li key={i} style={{ fontSize:12,color:darkMode?"#aeaeb2":"#3c3c43",marginBottom:3,paddingLeft:0 }}>
+                    <li key={i} style={{ fontSize:12,color:darkMode?"#8b90a0":"#64748b",marginBottom:3,paddingLeft:0 }}>
                       <span style={{ color:plan.color,marginRight:6 }}>✓</span>{b}
                     </li>
                   ))}
                 </ul>
-                {plan.url ? (
-                  <a href={plan.url} target="_blank" rel="noreferrer"
-                    style={{ display:"block",textAlign:"center",padding:"10px",borderRadius:12,
+                {/* Free plan: show locked features to create desire */}
+                {plan.id === "free" && (
+                  <>
+                    <div style={{
+                      fontSize:10, fontWeight:700, color:"#ef4444",
+                      letterSpacing:"0.06em", marginBottom:5, marginTop:4,
+                    }}>
+                      BLOQUEADO EN PLAN GRATUITO
+                    </div>
+                    <ul style={{ margin:"0 0 10px",padding:0,listStyle:"none" }}>
+                      {FREE_LOCKED.map((b,i) => (
+                        <li key={i} style={{ fontSize:12,color:darkMode?"#5a6070":"#94a3b8",marginBottom:3,
+                          display:"flex",alignItems:"center",gap:6 }}>
+                          <span style={{ fontSize:10 }}>🔒</span>{b}
+                        </li>
+                      ))}
+                    </ul>
+                    <div style={{
+                      fontSize:10, fontStyle:"italic",
+                      color: darkMode?"#5a6070":"#94a3b8",
+                      borderTop: `1px solid ${darkMode?"#1a2230":"#e2e8f0"}`,
+                      paddingTop:8, marginBottom:4,
+                    }}>
+                      Limitado para análisis completos y toma de decisiones
+                    </div>
+                  </>
+                )}
+                {plan.priceId ? (
+                  <button onClick={() => handleStripeCheckout(plan.priceId)}
+                    style={{ display:"block",width:"100%",textAlign:"center",padding:"10px",borderRadius:12,
                       background:`linear-gradient(135deg,${plan.color},${plan.color}cc)`,
-                      color:"white",fontSize:13,fontWeight:700,textDecoration:"none",
+                      color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",
                       boxShadow:`0 3px 12px ${plan.color}44` }}>
                     Elegir {plan.label} →
-                  </a>
+                  </button>
                 ) : (
                   <div style={{ textAlign:"center",padding:"10px",borderRadius:12,
                     background:darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
@@ -1119,21 +1112,21 @@ function BugReportModal({ user, darkMode, onClose }) {
       style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,
         display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:darkMode?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",
+        style={{ background:darkMode?"#12171f":"#ffffff",borderRadius:"24px 24px 0 0",
           width:"100%",maxWidth:520,boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
           animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",paddingBottom:40 }}>
-        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px",
-          borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
-          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>🐛 Reportar un error</p>
+          borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>🐛 Reportar un error</p>
           <button onClick={onClose}
-            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
         </div>
         <div style={{ padding:"16px 20px" }}>
           {sent ? (
             <div style={{ textAlign:"center",padding:"28px 0" }}>
               <div style={{ fontSize:44,marginBottom:14 }}>✅</div>
-              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>¡Reporte enviado!</p>
+              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>¡Reporte enviado!</p>
               <p style={{ margin:0,fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
                 Reporte enviado correctamente.<br/>Gracias por ayudarnos a mejorar.
               </p>
@@ -1148,16 +1141,16 @@ function BugReportModal({ user, darkMode, onClose }) {
               <input value={subject} onChange={e=>setSubject(e.target.value)}
                 placeholder="Ej: El dropdown no cierra correctamente"
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
-                  border:`1.5px solid ${darkMode?"#3a3a3c":"#e5e5ea"}`,
-                  fontSize:14,color:darkMode?"#fff":"#1c1c1e",background:darkMode?"#2c2c2e":"#f9f9fb",
+                  border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
+                  fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
                   boxSizing:"border-box",fontFamily:"inherit",marginBottom:12,outline:"none" }}/>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
                 letterSpacing:"0.05em",textTransform:"uppercase" }}>Descripción</label>
               <textarea value={desc} onChange={e=>setDesc(e.target.value)}
                 placeholder="Describe el problema con el mayor detalle posible…" rows={4}
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
-                  border:`1.5px solid ${darkMode?"#3a3a3c":"#e5e5ea"}`,
-                  fontSize:14,color:darkMode?"#fff":"#1c1c1e",background:darkMode?"#2c2c2e":"#f9f9fb",
+                  border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
+                  fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
                   resize:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5,outline:"none",
                   marginBottom:14 }}/>
               <button onClick={send} disabled={sending||!desc.trim()}
@@ -1178,8 +1171,8 @@ function BugReportModal({ user, darkMode, onClose }) {
 // ─── PRIVACY / TERMS VIEWS ────────────────────────────────────────────────────
 function LegalView({ type, darkMode, onBack, onClose }) {
   const isPrivacy = type === "privacy";
-  const bg = darkMode ? "#1c1c1e" : "white";
-  const txt = darkMode ? "#e5e5ea" : "#1c1c1e";
+  const bg = darkMode ? "#12171f" : "#ffffff";
+  const txt = darkMode ? "#e8eaf0" : "#111827";
   const sub = "#8e8e93";
   const title = isPrivacy ? "Política de Privacidad" : "Términos y Condiciones";
 
@@ -1191,9 +1184,9 @@ function LegalView({ type, darkMode, onBack, onClose }) {
         style={{ background:bg,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:520,
           maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
           animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
-        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 8px"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 8px"}}/>
         <div style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 20px 16px",
-          borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+          borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onBack}
             style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
             ← Volver
@@ -1206,7 +1199,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
             <>
               <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>1. Datos que recopilamos</h3>
               <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
-                Recopilamos únicamente tu dirección de email para gestionar el acceso a la plataforma. No recopilamos datos financieros, información de pago directa (procesada por PayPal) ni datos de dispositivo más allá del agente de usuario para diagnóstico técnico.
+                Recopilamos únicamente tu dirección de email para gestionar el acceso a la plataforma. No recopilamos datos financieros, información de pago directa (procesada por Stripe) ni datos de dispositivo más allá del agente de usuario para diagnóstico técnico.
               </p>
               <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>2. Uso de los datos</h3>
               <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
@@ -1241,7 +1234,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
               </p>
               <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>3. Suscripción y pagos</h3>
               <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
-                Los pagos se procesan a través de PayPal. Las suscripciones se activan manualmente por el equipo de COT Tracker tras confirmar el pago. No se realizan devoluciones pasados 14 días desde la activación.
+                Los pagos se procesan de forma segura a través de Stripe. El acceso se activa automáticamente tras confirmar el pago. No se realizan devoluciones pasados 14 días desde la activación.
               </p>
               <h3 style={{ fontSize:14,fontWeight:700,margin:"18px 0 6px",color:txt }}>4. Propiedad intelectual</h3>
               <p style={{ fontSize:13,color:sub,lineHeight:1.7,margin:"0 0 12px" }}>
@@ -1266,17 +1259,17 @@ function SettingsShell({children, onBack, title, onClose, dark}) {
       style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
         display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:dark?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:500,
+        style={{ background:dark?"#12171f":"#ffffff",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:500,
           maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
           animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
-        <div style={{ width:36,height:4,borderRadius:99,background:dark?"#3a3a3c":"#d1d1d6",margin:"12px auto 8px"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:dark?"#263041":"#d1d8e1",margin:"12px auto 8px"}}/>
         <div style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 20px 16px",
-          borderBottom:`1px solid ${dark?"#2c2c2e":"#f2f2f7"}` }}>
+          borderBottom:`1px solid ${dark?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onBack}
             style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
             ← Volver
           </button>
-          <span style={{ fontSize:16,fontWeight:700,color:dark?"#fff":"#1c1c1e",flex:1,textAlign:"center",marginRight:40 }}>
+          <span style={{ fontSize:16,fontWeight:700,color:dark?"#e8eaf0":"#111827",flex:1,textAlign:"center",marginRight:40 }}>
             {title}
           </span>
         </div>
@@ -1296,11 +1289,11 @@ function SecurityModal({ darkMode, onClose }) {
   const [error,   setError]   = useState("");
   const [success, setSuccess] = useState(false);
 
-  const bg  = darkMode ? "#1c1c1e" : "white";
-  const txt = darkMode ? "#fff"    : "#1c1c1e";
+  const bg  = darkMode ? "#12171f" : "#ffffff";
+  const txt = darkMode ? "#e8eaf0" : "#111827";
   const sub = "#8e8e93";
-  const bd  = darkMode ? "#3a3a3c" : "#e5e5ea";
-  const inputBg = darkMode ? "#2c2c2e" : "#f9f9fb";
+  const bd  = darkMode ? "#263041" : "#dbe4ed";
+  const inputBg = T?.inputBg || (darkMode ? "#1a2230" : "#f8fafc");
 
   const validate = () => {
     if (pw1.length < 8)               return "Mínimo 8 caracteres";
@@ -1332,12 +1325,12 @@ function SecurityModal({ darkMode, onClose }) {
         style={{ background:bg,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:520,
           boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",
           animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)",paddingBottom:44 }}>
-        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 0"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
           padding:"16px 20px 12px",borderBottom:`1px solid ${bd}` }}>
           <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Contraseña</p>
           <button onClick={onClose}
-            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",
               border:"none",cursor:"pointer",color:sub,fontSize:14 }}>✕</button>
         </div>
         <div style={{ padding:"16px 20px" }}>
@@ -1420,7 +1413,7 @@ function SecurityModal({ darkMode, onClose }) {
 }
 
 
-function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onClose }) {
+function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onClose, authUserId, onRestartOnboarding }) {
   const [section,    setSection]    = useState(null);
   const [showBilling,setShowBilling]= useState(false);
   const [showBug,    setShowBug]    = useState(false);
@@ -1466,7 +1459,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
     <SecurityModal darkMode={darkMode} onClose={()=>setShowSecurity(false)}/>
   );
   if (showBilling) return (
-    <BillingModal user={user} darkMode={darkMode} onClose={()=>setShowBilling(false)}/>
+    <BillingModal user={user} darkMode={darkMode} onClose={()=>setShowBilling(false)} authUserId={authUserId}/>
   );
   if (showBug) return (
     <BugReportModal user={user} darkMode={darkMode} onClose={()=>setShowBug(false)}/>
@@ -1486,7 +1479,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
             boxShadow:`0 4px 20px ${planColor}44` }}>
             <span style={{ fontSize:28,fontWeight:700,color:"white" }}>{(user?.nombre||"U")[0].toUpperCase()}</span>
           </div>
-          <p style={{ margin:"0 0 4px",fontSize:20,fontWeight:700,color:darkMode?"#fff":"#1c1c1e" }}>{user?.nombre}</p>
+          <p style={{ margin:"0 0 4px",fontSize:20,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>{user?.nombre}</p>
           <p style={{ margin:"0 0 10px",fontSize:13,color:"#8e8e93" }}>{user?.email}</p>
           <span style={{ fontSize:11,fontWeight:700,background:`${planColor}22`,color:planColor,padding:"4px 14px",borderRadius:99 }}>
             {user?.plan || "Trial"}
@@ -1498,7 +1491,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
           ["Email", user?.email, "#8e8e93"],
         ].map(([label,val,color])=>(
           <div key={label} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",
-            padding:"14px 0",borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+            padding:"14px 0",borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
             <span style={{ fontSize:13,color:"#8e8e93" }}>{label}</span>
             <span style={{ fontSize:13,fontWeight:600,color:darkMode?"#fff":color }}>{val}</span>
           </div>
@@ -1521,14 +1514,14 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
           {v:"v1.0", date:"Abr 2026", title:"COT Tracker lanzado",        desc:"Primera versión con soporte CSV del CFTC."},
         ].map((item,i)=>(
           <div key={i} style={{ display:"flex",gap:14,padding:"16px 0",
-            borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,alignItems:"flex-start" }}>
+            borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}`,alignItems:"flex-start" }}>
             <div style={{ flexShrink:0,width:58,textAlign:"center" }}>
               <span style={{ fontSize:10,fontWeight:700,background:"rgba(0,102,204,0.1)",color:"#0066cc",
                 padding:"3px 8px",borderRadius:99,display:"block",marginBottom:4,whiteSpace:"nowrap" }}>{item.v}</span>
               <span style={{ fontSize:10,color:"#8e8e93",whiteSpace:"nowrap" }}>{item.date}</span>
             </div>
             <div style={{ flex:1 }}>
-              <p style={{ margin:"0 0 4px",fontSize:13,fontWeight:600,color:darkMode?"#fff":"#1c1c1e" }}>{item.title}</p>
+              <p style={{ margin:"0 0 4px",fontSize:13,fontWeight:600,color:darkMode?"#e8eaf0":"#111827" }}>{item.title}</p>
               <p style={{ margin:0,fontSize:12,color:"#8e8e93",lineHeight:1.6 }}>{item.desc}</p>
             </div>
           </div>
@@ -1542,12 +1535,12 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
     <div onClick={onPress}
       style={{ display:"flex",alignItems:"center",gap:12,padding:"13px 20px",
         cursor:onPress?"pointer":"default",
-        borderBottom:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}`,transition:"background 0.15s" }}
+        borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}`,transition:"background 0.15s" }}
       onMouseEnter={e=>onPress&&(e.currentTarget.style.background=darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.02)")}
       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
       <span style={{ fontSize:18,width:28,textAlign:"center",flexShrink:0 }}>{icon}</span>
       <div style={{ flex:1,minWidth:0 }}>
-        <p style={{ margin:0,fontSize:14,fontWeight:500,color:danger?"#c0392b":darkMode?"#fff":"#1c1c1e" }}>{label}</p>
+        <p style={{ margin:0,fontSize:14,fontWeight:500,color:danger?"#c0392b":darkMode?"#e8eaf0":"#111827" }}>{label}</p>
         {desc&&<p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:1 }}>{desc}</p>}
       </div>
       {right || (onPress && <span style={{ color:"#c7c7cc",fontSize:16 }}>›</span>)}
@@ -1558,10 +1551,10 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
   );
   const Toggle = ({value,onChange}) => (
     <div onClick={onChange}
-      style={{ width:44,height:26,borderRadius:99,background:value?"#34c759":"#d1d1d6",
+      style={{ width:44,height:26,borderRadius:99,background:value?"#34c759":"#d1d8e1",
         position:"relative",cursor:"pointer",transition:"background 0.2s",flexShrink:0 }}>
       <div style={{ position:"absolute",top:3,left:value?20:3,width:20,height:20,borderRadius:"50%",
-        background:"white",boxShadow:"0 1px 4px rgba(0,0,0,0.2)",transition:"left 0.2s" }}/>
+        background:darkMode?"#12171f":"#ffffff",boxShadow:"0 1px 4px rgba(0,0,0,0.2)",transition:"left 0.2s" }}/>
     </div>
   );
 
@@ -1570,19 +1563,19 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
       style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,
         display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:darkMode?"#1c1c1e":"white",borderRadius:"24px 24px 0 0",
+        style={{ background:darkMode?"#12171f":"#ffffff",borderRadius:"24px 24px 0 0",
           width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",
           boxShadow:"0 -8px 60px rgba(0,0,0,0.25)",animation:"slideUp 0.25s cubic-bezier(.4,0,.2,1)" }}>
         <style>{`@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
-        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#3a3a3c":"#d1d1d6",margin:"12px auto 4px"}}/>
+        <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 4px"}}/>
         {/* Header */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 20px 0" }}>
           <div>
-            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#fff":"#1c1c1e",letterSpacing:"-0.3px" }}>Ajustes</p>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827",letterSpacing:"-0.3px" }}>Ajustes</p>
             <p style={{ margin:0,fontSize:12,color:"#8e8e93" }}>{user?.nombre} · {user?.plan||"Trial"}</p>
           </div>
           <button onClick={onClose}
-            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#3a3a3c":"#f2f2f7",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
+            style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
         </div>
         {/* Avatar */}
         <div style={{ display:"flex",justifyContent:"center",padding:"16px 0 8px" }}>
@@ -1610,7 +1603,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
               {["es","en"].map(l=>(
                 <button key={l} onClick={e=>{e.stopPropagation();onLang(l);}}
                   style={{ padding:"4px 10px",borderRadius:99,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
-                    background:lang===l?"#0066cc":"#f2f2f7",color:lang===l?"white":"#3c3c43",transition:"all 0.15s" }}>
+                    background:lang===l?"#0066cc":"#f0f4f8",color:lang===l?"white":"#64748b",transition:"all 0.15s" }}>
                   {l==="es"?"🇪🇸 ES":"🇬🇧 EN"}
                 </button>
               ))}
@@ -1631,6 +1624,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         <Row icon="❓" label={t.help} onPress={()=>window.open(TELEGRAM_URL,"_blank")}/>
         <Row icon="🐛" label={t.bug} onPress={()=>setShowBug(true)}/>
         <Row icon="🚀" label={t.news} onPress={()=>setSection("news")}/>
+        <Row icon="🎓" label={lang==="en"?"Product Tour":"Ver tour de nuevo"} desc={lang==="en"?"Replay the onboarding walkthrough":"Vuelve a ver la guía de inicio"} onPress={()=>{onClose();setTimeout(()=>onRestartOnboarding?.(),50);}}/> 
         <Row icon="💬" label={t.contact} onPress={()=>window.open("mailto:marketmoneyfx00@gmail.com","_blank")}/>
 
         {/* LEGAL */}
@@ -1639,7 +1633,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         <Row icon="📄" label={t.terms}    onPress={()=>setLegalType("terms")}/>
 
         {/* LOGOUT */}
-        <div style={{ padding:"16px 20px 48px", borderTop:`1px solid ${darkMode?"#2c2c2e":"#f2f2f7"}` }}>
+        <div style={{ padding:"16px 20px 48px", borderTop:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onLogout} style={{
             width:"100%", padding:"13px", borderRadius:14, border:"none",
             cursor:"pointer",
@@ -2351,6 +2345,14 @@ function calcSentiment(events) {
 
 // ─── MAIN CALENDARIO COMPONENT ───────────────────────────────────────────────
 function CalendarioTab({darkMode, T}) {
+  // Suscripción reactiva al priceStore — se re-renderiza con cada nueva vela
+  // liveCandles es el valor que se pasa a getIndicatorLogic en el render
+  const liveCandles = usePriceStore(3);
+  // confirmedCandles: excluye la vela en formación (última) para señales estables
+  const confirmedCandles = liveCandles.length > 1
+    ? liveCandles.slice(0, -1)
+    : liveCandles;
+
   const [events,    setEvents]   = useState([]);
   const [loading,   setLoading]  = useState(false);
   const [error,     setError]    = useState(null);
@@ -2375,20 +2377,8 @@ function CalendarioTab({darkMode, T}) {
   }, []);
 
   // Usar el mismo tema que el resto de la app (T viene del AppInner)
-  const D = {
-    bg:      T.bg,
-    card:    T.card,
-    card2:   darkMode ? '#1e2028' : '#f0f2f5',
-    border:  T.border,
-    border2: T.border,
-    txt:     T.txt,
-    sub:     T.sub,
-    sub2:    darkMode ? '#5a6070' : '#9ca3af',
-    accent:  T.accent,
-    bull:    '#22c55e',
-    bear:    '#ef4444',
-    amber:   '#f59e0b',
-  };
+  // D aliases T for legacy compatibility
+  const D = { ...T, bull:'#22c55e', bear:'#ef4444', amber:'#f59e0b' };
 
   // Timezone local del usuario
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -2563,10 +2553,9 @@ function CalendarioTab({darkMode, T}) {
         .ev-row { transition: background 0.1s; }
         .filter-chip { transition: all 0.15s; cursor: pointer; }
         .filter-chip:hover { opacity: 0.85; }
-        * { box-sizing: border-box; }
       `}</style>
 
-      <div style={{maxWidth:1000,margin:'0 auto',padding:isMobile?'12px 10px 80px':'16px 16px 80px',
+      <div style={{maxWidth:1500,margin:'0 auto',padding:isMobile?'12px 10px 80px':'20px 32px 80px',
         overflowX:'hidden',width:'100%'}}>
 
         {/* ── SENTIMENT CARD ─────────────────────────────────────────── */}
@@ -2595,7 +2584,7 @@ function CalendarioTab({darkMode, T}) {
               <div style={{position:'absolute',top:'50%',left:`${sentiment.fg}%`,
                 transform:'translate(-50%,-50%)',
                 width:14,height:14,borderRadius:'50%',
-                background:'white',boxShadow:'0 0 0 2px #0d0f12',
+                background:darkMode?"#12171f":"#ffffff",boxShadow:'0 0 0 2px #0d0f12',
                 transition:'left 0.5s ease'}}/>
             </div>
           </div>
@@ -2623,7 +2612,7 @@ function CalendarioTab({darkMode, T}) {
                 left:`${Math.min(95,Math.max(2,(parseFloat(sentiment.vix)-10)/30*100))}%`,
                 transform:'translate(-50%,-50%)',
                 width:12,height:12,borderRadius:'50%',
-                background:'white',boxShadow:'0 0 0 2px #0d0f12'}}/>
+                background:darkMode?"#12171f":"#ffffff",boxShadow:'0 0 0 2px #0d0f12'}}/>
             </div>
           </div>
         </div>
@@ -3036,10 +3025,15 @@ function CalendarioTab({darkMode, T}) {
                       {/* ── EXPANDED ─────────────────────────────────── */}
                       {isExp&&(()=>{
                         // ── MOTOR DE LÓGICA MACRO (inlined) ──────────
-                        const logic      = getIndicatorLogic(ev.event, ccy, actualVal, ev.estimate, ev.previous);
+                        // 6º arg: ev — objeto completo del calendario (contiene dynamic* para el composite engine)
+                        // 7º arg: confirmedCandles — velas cerradas (excluye la vela en formación)
+                        // Garantiza señal estable: el score solo cambia al cerrar vela, no en cada tick
+                        const priceCandles = confirmedCandles;
+                        const logic      = getIndicatorLogic(ev.event, ccy, actualVal, ev.estimate, ev.previous, ev, priceCandles);
 
                         // ── VALIDATION LOG — remove after QA ─────────
                         if (actualVal !== null) {
+                          console.log('[priceStore READ]', priceCandles);
                           console.log('[logic]', {
                             event:    ev.event,
                             actual:   actualVal,
@@ -3050,20 +3044,27 @@ function CalendarioTab({darkMode, T}) {
                             biasLabel: logic.macroScore?.label,
                             primaryBias: logic.primaryBias,
                             assets: logic.affectedAssets?.map(a => `${a.arrow}${a.asset}`).join(' '),
+                            // v2 composite
+                            compositeScore:   logic.compositeScore?.sesgoCompuesto,
+                            compositeEstado:  logic.compositeScore?.estado,
+                            compositeSemaforo:logic.compositeScore?.semaforo,
+                            fatTail:          logic.compositeScore?.fatTailDetected,
+                            zScore:           logic.compositeScore?.zScore,
                           });
                         }
 
-                        const evType     = logic.evType;
-                        const surprise   = logic.surprise;
-                        const delta      = logic.delta;
-                        const regime     = logic.regime;
-                        const macroScore = logic.macroScore;
-                        const impLvl     = surprise ? getImpactLevel(surprise.pct) : null;
-                        const dynInterp  = logic.explanation;
-                        const horizon    = hasAct && surprise ? logic.horizon    : null;
-                        const confBadge  = hasAct && surprise ? logic.confidence : null;
-                        const assetDirs  = hasAct && surprise ? logic.affectedAssets : null;
-                        const sc         = logic.scenarios;
+                        const evType        = logic.evType;
+                        const surprise      = logic.surprise;
+                        const delta         = logic.delta;
+                        const regime        = logic.regime;
+                        const macroScore    = logic.macroScore;
+                        const compositeScore= logic.compositeScore;  // v2 — puede ser null si no hay dato
+                        const impLvl        = surprise ? getImpactLevel(surprise.pct) : null;
+                        const dynInterp     = logic.explanation;
+                        const horizon       = hasAct && surprise ? logic.horizon    : null;
+                        const confBadge     = hasAct && surprise ? logic.confidence : null;
+                        const assetDirs     = hasAct && surprise ? logic.affectedAssets : null;
+                        const sc            = logic.scenarios;
                         // Acordeón avanzado: clave única por evento
                         const evKey = `${date}-${idx}`;
                         const isAdvOpen = !isMobile || advancedOpen.has(evKey);
@@ -3076,7 +3077,7 @@ function CalendarioTab({darkMode, T}) {
                         <div style={{background:D.card2,borderBottom:`1px solid ${D.border}`,
                           padding:isMobile?'12px 14px 16px':'16px 20px 20px',
                           borderLeft:`3px solid ${stars===3?iCol:stars===2?D.amber+'80':'transparent'}`,
-                          boxSizing:'border-box',width:'100%',overflow:'hidden'}}>
+                          boxSizing:'border-box',width:'100%',overflow:'visible'}}>
 
                           {/* ── BADGE ROW ── */}
                           <div style={{display:'flex',gap:isMobile?5:6,marginBottom:isMobile?12:16,flexWrap:'wrap',alignItems:'center'}}>
@@ -3210,36 +3211,304 @@ function CalendarioTab({darkMode, T}) {
                             </div>
                           </div>
 
-                          {/* ── SESGO FINAL — bloque premium ── */}
-                          {macroScore&&(
-                            <div style={{
-                              background:D.card,borderRadius:isMobile?10:14,padding:isMobile?'12px 14px':'14px 18px',marginBottom:isMobile?10:14,
-                              border:`1px solid ${macroScore.color}45`,
-                              boxShadow:`0 0 24px ${macroScore.color}14, 0 2px 10px rgba(0,0,0,0.18)`}}>
-                              <div style={{display:'flex',alignItems:'center',gap:isMobile?12:16}}>
-                                <div style={{textAlign:'center',flexShrink:0}}>
-                                  <div style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.08em',marginBottom:3}}>SESGO FINAL</div>
-                                  <div style={{fontSize:isMobile?24:30,fontWeight:900,color:macroScore.color,lineHeight:1,letterSpacing:'-1px'}}>
-                                    {macroScore.score>0?'+':''}{macroScore.score}
-                                  </div>
-                                </div>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:isMobile?13:14,fontWeight:800,color:macroScore.color,marginBottom:3}}>{macroScore.label}</div>
-                                  {regime&&<div style={{fontSize:isMobile?10:11,color:D.sub,lineHeight:1.4,marginBottom:isMobile?6:8}}>{regime.desc}</div>}
-                                  <div style={{height:6,background:D.border,borderRadius:99,overflow:'hidden',position:'relative'}}>
-                                    <div style={{position:'absolute',left:'50%',top:0,width:1,height:'100%',background:D.sub2,opacity:0.35}}/>
+                          {/* ── SESGO FINAL — fuente única de verdad: compositeScore ── */}
+                          {(()=>{
+                            // Si hay compositeScore (dato publicado + motor multicapa) → usarlo.
+                            // Si no → fallback al macroScore lineal (sin dato o sin calendarEvent).
+                            if (compositeScore && hasAct) {
+                              const cs = compositeScore;
+                              const esDivergencia = cs.estado === 'DIVERGENCIA';
+                              const esFatTail     = cs.estado === 'FAT_TAIL';
+                              const esCoherente   = cs.estado === 'COHERENTE';
+                              const semColor = cs.semaforo==='VERDE'?'#22c55e':cs.semaforo==='ROJO'?'#ef4444':'#f59e0b';
+
+                              return (
+                                <div style={{marginBottom:isMobile?10:14,borderRadius:isMobile?10:14,
+                                  border:`1px solid ${cs.color}40`,overflow:'visible',
+                                  boxSizing:'border-box',width:'100%'}}>
+
+                                  {/* ── ALERTA PRINCIPAL (divergencia / fat tail) ── */}
+                                  {(esDivergencia||esFatTail)&&(
                                     <div style={{
-                                      position:'absolute',height:'100%',borderRadius:99,
-                                      background:`linear-gradient(90deg,${macroScore.color}88,${macroScore.color})`,
-                                      width:`${Math.abs(macroScore.score)/2}%`,
-                                      left:macroScore.score>=0?'50%':undefined,
-                                      right:macroScore.score<0?'50%':undefined,
-                                    }}/>
+                                      display:'flex',alignItems:'flex-start',gap:10,
+                                      padding:isMobile?'10px 12px':'12px 16px',
+                                      background:'rgba(239,68,68,0.07)',
+                                      borderBottom:'1px solid rgba(239,68,68,0.18)',
+                                    }}>
+                                      <div style={{width:18,height:18,borderRadius:'50%',background:'rgba(239,68,68,0.15)',
+                                        border:'1px solid rgba(239,68,68,0.4)',display:'flex',alignItems:'center',
+                                        justifyContent:'center',flexShrink:0,marginTop:1}}>
+                                        <span style={{fontSize:10,color:'#ef4444',fontWeight:900,lineHeight:1}}>!</span>
+                                      </div>
+                                      <div style={{flex:1,minWidth:0}}>
+                                        <div style={{fontSize:isMobile?11:12,fontWeight:700,color:'#ef4444',marginBottom:3}}>
+                                          {esFatTail?'Extrema volatilidad — evento de cola':'Divergencia detectada'}
+                                        </div>
+                                        <div style={{fontSize:isMobile?10:11,color:'#ef4444',lineHeight:1.5,opacity:0.85}}>
+                                          {esFatTail
+                                            ? `El dato supera ${cs.zScore} desviaciones estándar históricas. Análisis suspendido. Esperar confirmación de estructura.`
+                                            : 'El mercado contradice el dato fundamental. Señal bloqueada — no operar en la dirección del dato.'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ── TARJETA DE SESGO COMPUESTO ── */}
+                                  <div style={{
+                                    display:'flex',alignItems:'center',gap:isMobile?12:16,
+                                    padding:isMobile?'12px 12px':'14px 16px',
+                                    background:darkMode?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.015)',
+                                    borderBottom:`1px solid ${D.border}`,
+                                  }}>
+                                    {/* Número */}
+                                    <div style={{textAlign:'center',flexShrink:0,
+                                      background:cs.color+'14',borderRadius:isMobile?8:10,
+                                      padding:isMobile?'8px 12px':'10px 16px',
+                                      border:`1px solid ${cs.color}30`,
+                                      opacity:cs.bloqueoSenal?0.6:1}}>
+                                      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:2}}>
+                                        <div style={{fontSize:8,fontWeight:700,color:D.sub2,letterSpacing:'0.08em'}}>SESGO FINAL</div>
+                                        <TooltipInfo text={TOOLTIPS.sesgoFinal} align="right"/>
+                                      </div>
+                                      <div style={{fontSize:isMobile?22:28,fontWeight:900,color:cs.color,lineHeight:1,letterSpacing:'-0.5px'}}>
+                                        {cs.sesgoCompuesto>0?'+':''}{cs.sesgoCompuesto}
+                                      </div>
+                                      <div style={{fontSize:9,fontWeight:700,color:cs.color,marginTop:2}}>{cs.label}</div>
+                                    </div>
+
+                                    {/* Estado operativo + barra */}
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                                        <div style={{width:7,height:7,borderRadius:'50%',background:semColor,flexShrink:0}}/>
+                                        <span style={{fontSize:isMobile?10:11,fontWeight:700,color:semColor}}>
+                                          {cs.bloqueoSenal
+                                            ? (esFatTail?'Extrema volatilidad — esperar':'No operar — señal en revisión')
+                                            : esCoherente?'Señal coherente — operar con precaución':'Señal mixta — reducir tamaño'}
+                                        </span>
+                                        {!cs.bloqueoSenal && (
+                                          <TooltipInfo
+                                            text={esCoherente ? TOOLTIPS.senalCoherente : TOOLTIPS.senalMixta}
+                                            align="right"
+                                          />
+                                        )}
+                                      </div>
+                                      {regime&&(
+                                        <div style={{display:'flex',alignItems:'center',gap:3,fontSize:isMobile?9:10,color:D.sub,lineHeight:1.4,marginBottom:6}}>
+                                          <span>{regime.desc}</span>
+                                          <TooltipInfo text={TOOLTIPS.macroLogic} align="right"/>
+                                        </div>
+                                      )}
+                                      {/* Barra central */}
+                                      <div style={{height:5,background:D.border,borderRadius:99,overflow:'hidden',position:'relative'}}>
+                                        <div style={{position:'absolute',left:'50%',top:0,width:1,height:'100%',background:D.sub2,opacity:0.3}}/>
+                                        <div style={{position:'absolute',height:'100%',borderRadius:99,
+                                          background:cs.color,
+                                          width:`${Math.abs(cs.sesgoCompuesto)/2}%`,
+                                          left:cs.sesgoCompuesto>=0?'50%':undefined,
+                                          right:cs.sesgoCompuesto<0?'50%':undefined,
+                                          transition:'width 0.4s ease',
+                                        }}/>
+                                      </div>
+                                      {/* Tags */}
+                                      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+                                        {cs.pricedIn&&(
+                                          <span style={{fontSize:9,padding:'2px 7px',borderRadius:99,
+                                            background:'rgba(245,158,11,0.10)',border:'1px solid rgba(245,158,11,0.25)',
+                                            color:'#f59e0b',fontWeight:600}}>
+                                            Dato descontado −{Math.round(cs.coefDescuento*100)}%
+                                          </span>
+                                        )}
+                                        {cs.zScore!==null&&(
+                                          <span style={{fontSize:9,padding:'2px 7px',borderRadius:99,
+                                            background:D.card,border:`1px solid ${D.border}`,color:D.sub2}}>
+                                            z={cs.zScore}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* ── DESGLOSE PROFESIONAL F / C / T ── */}
+                                  <div style={{padding:isMobile?'10px 12px':'12px 16px',display:'flex',flexDirection:'column',gap:7}}>
+                                    {[
+                                      {key:'F',label:'Fundamental',pct:cs.desglose.F.weight*100|0,score:cs.scoreF,
+                                        tipKey:'factorF'},
+                                      {key:'C',label:'Contextual', pct:cs.desglose.C.weight*100|0,score:cs.scoreC,
+                                        tipKey:'factorC'},
+                                      {key:'T',label:'Técnico',    pct:cs.desglose.T.weight*100|0,score:cs.scoreT,
+                                        tipKey:'factorT'},
+                                    ].map(({key,label,pct,score,tipKey})=>{
+                                      const barColor = score>0?'#22c55e':score<0?'#ef4444':'rgba(107,114,128,0.4)';
+                                      const txtColor = score>0?'#22c55e':score<0?'#ef4444':D.sub2;
+                                      const absPct   = Math.min(Math.abs(score)/2, 50);
+                                      return (
+                                        <div key={key}>
+                                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+                                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                              <span style={{fontSize:9,fontWeight:700,color:D.sub2,
+                                                background:D.card,border:`1px solid ${D.border}`,
+                                                borderRadius:4,padding:'1px 5px',letterSpacing:'0.03em'}}>{key}</span>
+                                              <span style={{fontSize:10,color:D.sub}}>{label}</span>
+                                              <span style={{fontSize:9,color:D.sub2,opacity:0.7}}>{pct}%</span>
+                                              <TooltipInfo
+                                                text={typeof TOOLTIPS[tipKey] === 'function'
+                                                  ? TOOLTIPS[tipKey](pct)
+                                                  : TOOLTIPS[tipKey]}
+                                                align="right"
+                                              />
+                                            </div>
+                                            <span style={{fontSize:11,fontWeight:700,color:txtColor,
+                                              fontVariantNumeric:'tabular-nums'}}>
+                                              {score>0?'+':''}{score}
+                                            </span>
+                                          </div>
+                                          <div style={{height:4,background:D.border,borderRadius:99,overflow:'hidden',position:'relative'}}>
+                                            <div style={{position:'absolute',left:'50%',top:0,width:1,height:'100%',background:D.sub2,opacity:0.25}}/>
+                                            <div style={{position:'absolute',height:'100%',borderRadius:99,background:barColor,
+                                              width:`${absPct}%`,
+                                              left:score>=0?'50%':undefined,
+                                              right:score<0?'50%':undefined,
+                                              transition:'width 0.4s ease',
+                                            }}/>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    <div style={{fontSize:12,color:D.sub2,opacity:0.85,marginTop:4,fontFamily:'monospace',letterSpacing:'0.3px'}}>
+                                      {cs.desglose.formula}
+                                    </div>
+                                    {/* ── DECISIÓN OPERATIVA + INTERPRETACIÓN + ACCIÓN ── */}
+                                    {(()=>{
+                                      const decision = buildDecision({
+                                        totalScore: cs.sesgoCompuesto,
+                                        scoreT:     cs.scoreT,
+                                        scoreF:     cs.scoreF,
+                                      });
+                                      const alerts = checkAlerts({
+                                        decision,
+                                        scoreT: cs.scoreT,
+                                      });
+                                      alerts.forEach(a => console.log('🚨 ALERT:', a.message));
+
+                                      const interp = buildInterpretation({
+                                        sesgoCompuesto: cs.sesgoCompuesto,
+                                        scoreF:         cs.scoreF,
+                                        scoreC:         cs.scoreC,
+                                        scoreT:         cs.scoreT,
+                                      });
+
+                                      const isCompresion = decision.type === 'no_confirmation';
+
+                                      return (
+                                        <>
+                                          {/* Decisión principal */}
+                                          <div style={{
+                                            background: '#f8fafc',
+                                            border: '1px solid #e2e8f0',
+                                            padding: '12px',
+                                            borderRadius: '8px',
+                                            marginTop: '10px',
+                                          }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                              {decision.message}
+                                            </div>
+                                            <div style={{ display:'flex', alignItems:'center', gap:4, fontSize: '12px', marginTop: 4, opacity: 0.7 }}>
+                                              <span>{decision.sub}</span>
+                                              {isCompresion && <TooltipInfo text={TOOLTIPS.compresion} align="right"/>}
+                                            </div>
+                                          </div>
+
+                                          {/* 🧠 Lectura clara */}
+                                          <div style={{
+                                            marginTop: 10,
+                                            padding: '10px 12px',
+                                            borderRadius: 8,
+                                            background: darkMode?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)',
+                                            border: `1px solid ${D.border}`,
+                                          }}>
+                                            <div style={{fontSize:10,fontWeight:700,color:D.sub2,letterSpacing:'0.07em',marginBottom:5}}>
+                                              🧠 LECTURA CLARA
+                                            </div>
+                                            <p style={{margin:0,fontSize:11,color:D.sub,lineHeight:1.6}}>
+                                              {interp.reading}
+                                            </p>
+                                          </div>
+
+                                          {/* 📌 Qué haría un trader profesional */}
+                                          <div style={{
+                                            marginTop: 8,
+                                            padding: '10px 12px',
+                                            borderRadius: 8,
+                                            background: darkMode?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)',
+                                            border: `1px solid ${D.border}`,
+                                          }}>
+                                            <div style={{fontSize:10,fontWeight:700,color:D.sub2,letterSpacing:'0.07em',marginBottom:6}}>
+                                              📌 QUÉ HARÍA UN TRADER PROFESIONAL
+                                            </div>
+                                            <ul style={{margin:0,padding:'0 0 0 14px',listStyle:'disc'}}>
+                                              {interp.actions.map((a,i) => (
+                                                <li key={i} style={{fontSize:11,color:D.sub,lineHeight:1.6,marginBottom:2}}>
+                                                  {a}
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+
+                                  {/* ── BLOQUEO DE DECISIÓN ── */}
+                                  {cs.bloqueoSenal&&(
+                                    <div style={{
+                                      padding:isMobile?'8px 12px':'10px 16px',
+                                      borderTop:`1px solid rgba(239,68,68,0.18)`,
+                                      background:'rgba(239,68,68,0.04)',
+                                      display:'flex',alignItems:'center',gap:8,
+                                    }}>
+                                      <div style={{width:6,height:6,borderRadius:1,background:'#ef4444',flexShrink:0}}/>
+                                      <span style={{fontSize:10,color:'#ef4444',fontWeight:600}}>
+                                        Bloqueada — {esFatTail?'extrema volatilidad':'divergencia detectada'}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                </div>
+                              );
+                            }
+
+                            // Fallback: macroScore lineal (sin dato publicado o sin calendarEvent)
+                            if (!macroScore) return null;
+                            return (
+                              <div style={{
+                                background:D.card,borderRadius:isMobile?10:14,
+                                padding:isMobile?'12px 14px':'14px 18px',marginBottom:isMobile?10:14,
+                                border:`1px solid ${macroScore.color}45`,
+                                boxShadow:`0 0 24px ${macroScore.color}14, 0 2px 10px rgba(0,0,0,0.18)`}}>
+                                <div style={{display:'flex',alignItems:'center',gap:isMobile?12:16}}>
+                                  <div style={{textAlign:'center',flexShrink:0}}>
+                                    <div style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.08em',marginBottom:3}}>SESGO ESTIMADO</div>
+                                    <div style={{fontSize:isMobile?24:30,fontWeight:900,color:macroScore.color,lineHeight:1,letterSpacing:'-1px'}}>
+                                      {macroScore.score>0?'+':''}{macroScore.score}
+                                    </div>
+                                  </div>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:isMobile?13:14,fontWeight:800,color:macroScore.color,marginBottom:3}}>{macroScore.label}</div>
+                                    {regime&&<div style={{fontSize:isMobile?10:11,color:D.sub,lineHeight:1.4,marginBottom:isMobile?6:8}}>{regime.desc}</div>}
+                                    <div style={{height:6,background:D.border,borderRadius:99,overflow:'hidden',position:'relative'}}>
+                                      <div style={{position:'absolute',left:'50%',top:0,width:1,height:'100%',background:D.sub2,opacity:0.35}}/>
+                                      <div style={{position:'absolute',height:'100%',borderRadius:99,
+                                        background:macroScore.color,
+                                        width:`${Math.abs(macroScore.score)/2}%`,
+                                        left:macroScore.score>=0?'50%':undefined,
+                                        right:macroScore.score<0?'50%':undefined,
+                                      }}/>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* ── ACORDEÓN MÓVIL: "Ver análisis avanzado" ── */}
                           {isMobile&&(
@@ -3409,30 +3678,46 @@ function CalendarioTab({darkMode, T}) {
                           )}
 
                           {/* ── DECISIÓN RÁPIDA ── */}
-                          {hasAct&&macroScore&&sc&&assetDirs&&(
-                            <div style={{marginTop:isMobile?8:12,
-                              background:macroScore.score>20?'linear-gradient(135deg,rgba(34,197,94,0.09),rgba(34,197,94,0.04))':macroScore.score<-20?'linear-gradient(135deg,rgba(239,68,68,0.09),rgba(239,68,68,0.04))':'linear-gradient(135deg,rgba(245,158,11,0.09),rgba(245,158,11,0.04))',
-                              border:`1px solid ${macroScore.color}45`,borderRadius:isMobile?10:14,padding:isMobile?'12px 12px':'14px 16px',
-                              boxShadow:`0 0 24px ${macroScore.color}10`,boxSizing:'border-box',width:'100%'}}>
-                              <div style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.12em',marginBottom:isMobile?8:10}}>⚡ DECISIÓN RÁPIDA</div>
-                              {isMobile ? (
-                                /* Mobile: score encima, activos + ventana debajo en row */
-                                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          {hasAct&&sc&&assetDirs&&(()=>{
+                            // Usar compositeScore como fuente si está disponible; fallback a macroScore
+                            const displayScore = compositeScore ?? macroScore;
+                            if (!displayScore) return null;
+                            const val   = compositeScore ? compositeScore.sesgoCompuesto : macroScore.score;
+                            const lbl   = compositeScore ? compositeScore.label          : macroScore.label;
+                            const col   = compositeScore ? compositeScore.color          : macroScore.color;
+                            const bloqueado = compositeScore?.bloqueoSenal ?? false;
+
+                            return (
+                              <div style={{marginTop:isMobile?8:12,
+                                border:`1px solid ${bloqueado?'rgba(239,68,68,0.35)':col+'45'}`,
+                                borderRadius:isMobile?10:14,padding:isMobile?'12px 12px':'14px 16px',
+                                background:bloqueado?'rgba(239,68,68,0.04)':val>20?'rgba(34,197,94,0.05)':val<-20?'rgba(239,68,68,0.05)':'rgba(245,158,11,0.05)',
+                                boxSizing:'border-box',width:'100%',opacity:bloqueado?0.75:1}}>
+                                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:isMobile?8:10}}>
+                                  <span style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.12em'}}>⚡ DECISIÓN RÁPIDA</span>
+                                  {bloqueado&&(
+                                    <span style={{fontSize:9,fontWeight:700,color:'#ef4444',
+                                      background:'rgba(239,68,68,0.10)',border:'1px solid rgba(239,68,68,0.25)',
+                                      borderRadius:99,padding:'2px 8px'}}>
+                                      Bloqueada — {compositeScore?.estado==='FAT_TAIL'?'extrema volatilidad':'divergencia'}
+                                    </span>
+                                  )}
+                                </div>
+                                {isMobile ? (
                                   <div style={{display:'flex',alignItems:'center',gap:10}}>
-                                    <div style={{textAlign:'center',background:macroScore.color+'15',borderRadius:8,
-                                      padding:'6px 12px',border:`1px solid ${macroScore.color}30`,flexShrink:0}}>
-                                      <div style={{fontSize:20,fontWeight:900,color:macroScore.color,lineHeight:1}}>
-                                        {macroScore.score>0?'+':''}{macroScore.score}
-                                      </div>
-                                      <div style={{fontSize:9,fontWeight:700,color:macroScore.color,marginTop:1}}>{macroScore.label}</div>
+                                    <div style={{textAlign:'center',background:col+'15',borderRadius:8,
+                                      padding:'6px 12px',border:`1px solid ${col}30`,flexShrink:0,
+                                      opacity:bloqueado?0.5:1}}>
+                                      <div style={{fontSize:20,fontWeight:900,color:col,lineHeight:1}}>{val>0?'+':''}{val}</div>
+                                      <div style={{fontSize:9,fontWeight:700,color:col,marginTop:1}}>{lbl}</div>
                                     </div>
                                     <div style={{flex:1,minWidth:0}}>
                                       <div style={{fontSize:8,color:D.sub2,letterSpacing:'0.06em',marginBottom:4}}>ACTIVOS</div>
-                                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                                        {assetDirs.map(({asset,arrow,col})=>(
-                                          <span key={asset} style={{fontSize:10,fontWeight:800,color:col,
-                                            background:col==='#22c55e'?'rgba(34,197,94,0.12)':col==='#ef4444'?'rgba(239,68,68,0.12)':'rgba(139,144,160,0.10)',
-                                            border:`1px solid ${col}25`,padding:'2px 7px',borderRadius:6,whiteSpace:'nowrap'}}>
+                                      <div style={{display:'flex',flexWrap:'wrap',gap:4,opacity:bloqueado?0.4:1,pointerEvents:bloqueado?'none':'auto'}}>
+                                        {assetDirs.map(({asset,arrow,col:ac})=>(
+                                          <span key={asset} style={{fontSize:10,fontWeight:800,color:ac,
+                                            background:ac==='#22c55e'?'rgba(34,197,94,0.12)':ac==='#ef4444'?'rgba(239,68,68,0.12)':'rgba(139,144,160,0.10)',
+                                            border:`1px solid ${ac}25`,padding:'2px 7px',borderRadius:6,whiteSpace:'nowrap'}}>
                                             {arrow} {asset}
                                           </span>
                                         ))}
@@ -3444,38 +3729,35 @@ function CalendarioTab({darkMode, T}) {
                                       {confBadge&&<div style={{fontSize:8,fontWeight:600,color:confBadge.color,marginTop:2}}>{confBadge.label}</div>}
                                     </div>
                                   </div>
-                                </div>
-                              ) : (
-                                /* Desktop: grid 3 columnas */
-                                <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:12,alignItems:'center'}}>
-                                  <div style={{textAlign:'center',background:macroScore.color+'15',borderRadius:10,
-                                    padding:'8px 14px',border:`1px solid ${macroScore.color}30`}}>
-                                    <div style={{fontSize:24,fontWeight:900,color:macroScore.color,lineHeight:1,letterSpacing:'-0.5px'}}>
-                                      {macroScore.score>0?'+':''}{macroScore.score}
+                                ) : (
+                                  <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:12,alignItems:'center'}}>
+                                    <div style={{textAlign:'center',background:col+'15',borderRadius:10,
+                                      padding:'8px 14px',border:`1px solid ${col}30`,opacity:bloqueado?0.5:1}}>
+                                      <div style={{fontSize:24,fontWeight:900,color:col,lineHeight:1,letterSpacing:'-0.5px'}}>{val>0?'+':''}{val}</div>
+                                      <div style={{fontSize:10,fontWeight:700,color:col,marginTop:2}}>{lbl}</div>
                                     </div>
-                                    <div style={{fontSize:10,fontWeight:700,color:macroScore.color,marginTop:2}}>{macroScore.label}</div>
-                                  </div>
-                                  <div>
-                                    <div style={{fontSize:8,color:D.sub2,letterSpacing:'0.06em',marginBottom:5}}>ACTIVOS</div>
-                                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                                      {assetDirs.map(({asset,arrow,col})=>(
-                                        <span key={asset} style={{fontSize:11,fontWeight:800,color:col,
-                                          background:col==='#22c55e'?'rgba(34,197,94,0.12)':col==='#ef4444'?'rgba(239,68,68,0.12)':'rgba(139,144,160,0.10)',
-                                          border:`1px solid ${col}25`,padding:'3px 8px',borderRadius:6,whiteSpace:'nowrap'}}>
-                                          {arrow} {asset}
-                                        </span>
-                                      ))}
+                                    <div style={{opacity:bloqueado?0.4:1}}>
+                                      <div style={{fontSize:8,color:D.sub2,letterSpacing:'0.06em',marginBottom:5}}>ACTIVOS</div>
+                                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                                        {assetDirs.map(({asset,arrow,col:ac})=>(
+                                          <span key={asset} style={{fontSize:11,fontWeight:800,color:ac,
+                                            background:ac==='#22c55e'?'rgba(34,197,94,0.12)':ac==='#ef4444'?'rgba(239,68,68,0.12)':'rgba(139,144,160,0.10)',
+                                            border:`1px solid ${ac}25`,padding:'3px 8px',borderRadius:6,whiteSpace:'nowrap'}}>
+                                            {arrow} {asset}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div style={{textAlign:'right',flexShrink:0}}>
+                                      <div style={{fontSize:8,color:D.sub2,letterSpacing:'0.06em',marginBottom:4}}>VENTANA</div>
+                                      <div style={{fontSize:12,fontWeight:800,color:D.txt}}>{horizon?.immediate||'5–15 min'}</div>
+                                      {confBadge&&<div style={{fontSize:9,fontWeight:600,color:confBadge.color,marginTop:2}}>{confBadge.label}</div>}
                                     </div>
                                   </div>
-                                  <div style={{textAlign:'right',flexShrink:0}}>
-                                    <div style={{fontSize:8,color:D.sub2,letterSpacing:'0.06em',marginBottom:4}}>VENTANA</div>
-                                    <div style={{fontSize:12,fontWeight:800,color:D.txt}}>{horizon?.immediate||'5–15 min'}</div>
-                                    {confBadge&&<div style={{fontSize:9,fontWeight:600,color:confBadge.color,marginTop:2}}>{confBadge.label}</div>}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Sin escenario */}
                           {!sc&&(
@@ -3534,26 +3816,57 @@ class ErrorBoundary extends Component {
   }
 }
 
+
 function AppInner() {
   // ── Supabase Auth (replaces localStorage session) ──────────────────────────
-  const { loading: authLoading, user: authUser, profile, accessStatus } = useAuth();
+  const { loading: authLoading, user: authUser, profile, accessStatus, refreshProfile } = useAuth();
 
   // user shape for UI compatibility: { email, nombre, plan }
   const user = profile ? {
+    id:     authUser?.id ?? null,       // auth.users.id — required for Stripe checkout
     email:  profile.email  ?? '',
     nombre: profile.telegram_username || profile.email?.split('@')[0] || 'Usuario',
-    plan:   profile.access_type ?? profile.plan ?? 'Trial',
-    status: profile.status ?? 'active',
+    plan:   profile.plan_id ?? profile.plan ?? 'Trial',
+    status: profile.status ?? 'inactive',
   } : null;
+
+  // ── PAYWALL: isPremium gate ────────────────────────────────────────────────
+  // 'paid' plans (mensual/trimestral/semestral/anual) unlock restricted modules.
+  // 'free', 'trial', 'none', 'inactive' → soft-lock applied.
+  const _planLower = (profile?.plan ?? profile?.plan_id ?? 'free').toLowerCase();
+  const isPremium = !['free', 'trial', 'none', 'inactive', ''].includes(_planLower);
+
+  // App-level billing trigger used by paywall overlays inside gated components.
+  const [showBillingApp, setShowBillingApp] = useState(false);
+  const openBilling = useCallback(() => setShowBillingApp(true), []);
+
   const [pairsData, setPairsData] = useState(null);
   const [source,    setSource]    = useState("");
+  // ── TIFF Combined dataset (parallel, never overwrites Futures Only) ────────
+  const [combinedData,  setCombinedData]  = useState(null); // parseTiffCombined() result
+  const [sourceCombined,setSourceCombined]= useState("");
+  const [errorCombined, setErrorCombined] = useState(null);
   const [error,     setError]     = useState(null);
   const [tab,       setTab]       = useState("fx");
   const [sort,      setSort]      = useState({col:"signal",dir:-1});
   const [detail,    setDetail]    = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  // Show "create password" modal after first magic link login
+  const [showCreatePassword, setShowCreatePassword] = useState(
+    () => new URLSearchParams(window.location.search).get('setup') === '1'
+  );
+
+  // ── Stripe return handling ─────────────────────────────────────────────────
+  // When Stripe redirects back to /?checkout=success, we show a banner and
+  // trigger an access refresh so the user sees their plan activated immediately.
+  const [checkoutResult, setCheckoutResult] = useState(
+    () => new URLSearchParams(window.location.search).get('checkout') ?? null
+  );
   const [darkMode,  setDarkMode]  = useState(()=>{ try{return JSON.parse(localStorage.getItem("cot_dark")||"false");}catch{return false;} });
   const [lang,      setLang]      = useState(()=>{ try{return localStorage.getItem("cot_lang")||"es";}catch{return "es";} });
+
+  // ── THEME — must be defined before any T.xxx usage including early returns ─
+  const T = buildTheme(darkMode);
   const [mainTab,   setMainTab]   = useState("calendario");
   const [tooltip,   setTooltip]   = useState(null);
   const [tooltipX,  setTooltipX]  = useState(0);
@@ -3565,10 +3878,48 @@ function AppInner() {
     window.addEventListener('resize',h);
     return ()=>window.removeEventListener('resize',h);
   },[]);
+  // Sync CSS custom properties with current theme
+  useEffect(() => { injectCSSVars(darkMode); }, [darkMode]);
+
+  // ── Precio real de mercado para scoreT ──────────────────────────────────────
+  // Inicia polling al montar AppInner. Requiere VITE_TWELVEDATA_API_KEY en .env.
+  useEffect(() => {
+    startTwelveData('EUR/USD');
+    return () => stopTwelveData();
+  }, []);
 
   const toggleDark = () => { const v=!darkMode; setDarkMode(v); localStorage.setItem("cot_dark",JSON.stringify(v)); };
   const changeLang = (l) => { setLang(l); localStorage.setItem("cot_lang",l); };
   const handleLogout = async () => { await logout(); setPairsData(null); setShowSettings(false); };
+
+  // ── Handle Stripe return (?checkout=success / ?checkout=cancelled) ─────────
+  useEffect(() => {
+    if (!checkoutResult) return;
+    // Clean the URL immediately so a page refresh doesn't re-trigger
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+
+    if (checkoutResult === 'success') {
+      // Webhook may take a few seconds — poll for access up to ~10s
+      let attempts = 0;
+      const maxAttempts = 5;
+      const poll = async () => {
+        attempts++;
+        await refreshProfile();
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 2000);
+        }
+      };
+      poll();
+    }
+    // 'cancelled': just clean the URL param, state already set to 'cancelled'
+    // The render above skips 'cancelled' (no screen shown), app continues normally.
+    // Clear the state here so the render doesn't loop on 'cancelled'.
+    if (checkoutResult === 'cancelled') {
+      setCheckoutResult(null);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // (intentionally runs once on mount to handle the redirect return)
 
   const handleFile = useCallback((text, name) => {
     setError(null);
@@ -3594,22 +3945,123 @@ function AppInner() {
     } catch(e) { setError(e.message); }
   },[]);
 
-  // ── THEME VARS (must be before any early returns) ──────────────────────────
-  const bg          = darkMode ? "#000"     : "#f2f2f7";
-  const cardBg      = darkMode ? "#1c1c1e"  : "white";
-  const textPrimary = darkMode ? "#ffffff"  : "#1c1c1e";
-  const textSecondary = "#8e8e93";
-  const borderColor = darkMode ? "#2c2c2e"  : "#e5e5ea";
-  const forceResetMode =
-  new URLSearchParams(window.location.search).get('mode') === 'reset-password';
+  // ── COMBINED HANDLER (independent — zero impact on Futures Only) ───────────
+  const handleFileCombined = useCallback((text, name) => {
+    setErrorCombined(null);
+    try {
+      // Guard: reject Futures Only files loaded in the wrong slot
+      const fileType = detectCftcFileType(text);
+      if (fileType === "futures_only") {
+        throw new Error(
+          "Este archivo es Futures Only, no Combined. " +
+          "Cárgalo en la primera sección (Futures Only)."
+        );
+      }
+      if (fileType === "unknown") {
+        throw new Error(
+          "Formato no reconocido. Asegúrate de usar el archivo " +
+          "TFF Futures and Options Combined del CFTC."
+        );
+      }
+      const dataset = parseTiffCombined(text);
+      if (!dataset || dataset.assetCount === 0) {
+        throw new Error("No se encontraron activos reconocibles en el archivo Combined.");
+      }
+      setCombinedData(dataset);
+      setSourceCombined(name);
+    } catch(e) { setErrorCombined(e.message); }
+  }, []);
+
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+  const onboarding = useOnboarding(profile);
+
+  // ?setup=1 → first magic link login → force-show onboarding even if
+  // the profile hasn't loaded yet or onboarding_completed flag is stale.
+  // FIX: was defined nowhere, causing CreatePassword + Onboarding to never
+  // appear after a magic link redirect.
+  const forceSetup = new URLSearchParams(window.location.search).get('setup') === '1';
+  const shouldShowOnboarding = onboarding.show || (forceSetup && profile && !profile.onboarding_completed);
+
+  console.log('[onboarding] state:', {
+    show: onboarding.show,
+    forceSetup,
+    shouldShowOnboarding,
+    onboarding_completed: profile?.onboarding_completed ?? 'no profile yet',
+  });
+
+  // ── useMemo hooks — MUST be here before any early returns ─────────────────
+  const SIGNAL_ORDER = {buy:0, sell:1, wait:2, indecision:3};
+  const fxPairs = useMemo(
+    () => (pairsData || []).filter(p => p.cat === "fx"),
+    [pairsData]
+  );
+  const displayPairs = useMemo(() =>
+    [...fxPairs].sort((a, b) => {
+      if (sort.col === "signal") return sort.dir * (SIGNAL_ORDER[a.signal.signal] - SIGNAL_ORDER[b.signal.signal]);
+      if (sort.col === "net")    return sort.dir * (b.latest.smartNet - a.latest.smartNet);
+      if (sort.col === "pair")   return sort.dir * a.pair.localeCompare(b.pair);
+      return 0;
+    }),
+    [fxPairs, sort]
+  );
+
+  const _resetParams    = new URLSearchParams(window.location.search);
+  const forceResetMode  = _resetParams.get('mode')  === 'reset-password';
+  const resetLinkError  = _resetParams.get('error') ?? _resetParams.get('error_code');
+  // True when the user arrived at /?mode=reset-password with an error param —
+  // i.e. the reset link was expired or already used.
+  const isExpiredResetLink = forceResetMode && !!resetLinkError;
 
   // ── AUTH GATE ──────────────────────────────────────────────────────────────
+
+  // Show expired-link screen BEFORE the loading check so it renders
+  // immediately — AuthProvider still unblocks loading in reset mode,
+  // but on very slow networks this screen should appear without waiting.
+  if (isExpiredResetLink) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', background: '#0b0f14',
+        fontFamily: "-apple-system,'SF Pro Text',Helvetica,sans-serif",
+        padding: '0 24px',
+      }}>
+        <div style={{ textAlign: 'center', maxWidth: 340, width: '100%' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px', fontSize: 26,
+          }}>⏱</div>
+          <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 700, color: '#e8eaf0' }}>
+            El enlace expiró o ya fue usado
+          </h2>
+          <p style={{ margin: '0 0 28px', fontSize: 14, color: '#8b90a0', lineHeight: 1.65 }}>
+            Los enlaces de restablecimiento solo son válidos por 60 minutos
+            y se invalidan tras el primer uso. Solicita uno nuevo.
+          </p>
+          <button
+            onClick={() => window.location.replace('/')}
+            style={{
+              display: 'block', width: '100%',
+              padding: '13px', borderRadius: 12, border: 'none',
+              background: '#0055cc', color: 'white',
+              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+              minHeight: 44, WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            Solicitar nuevo enlace
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7' }}>
         <div style={{ textAlign:'center' }}>
           <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid #0066cc', borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           <p style={{ fontSize:13, color:'#8e8e93', margin:0 }}>Verificando acceso…</p>
         </div>
       </div>
@@ -3620,6 +4072,42 @@ if (!authUser || forceResetMode) {
   return <LoginScreen />;
 }
 
+  // ── Checkout success screen (Stripe redirect return) ─────────────────────
+  // Shown when user lands on /?checkout=success after paying.
+  // The useEffect above polls refreshProfile() every 2s up to 5 times.
+  // 'cancelled' param: just clear — no screen needed, user is still logged in.
+  if (checkoutResult === 'success') {
+    return (
+      <div style={{ minHeight:'100vh', background: darkMode ? '#0d0d0f' : '#f2f2f7',
+        display:'flex', alignItems:'center', justifyContent:'center', padding:24,
+        fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif" }}>
+        <div style={{ background: darkMode ? '#1a1a1f' : 'white', borderRadius:20,
+          padding:'40px 32px', maxWidth:400, width:'100%', textAlign:'center',
+          boxShadow:'0 4px 24px rgba(0,0,0,0.12)' }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>✅</div>
+          <h2 style={{ color: darkMode ? '#e8eaf0' : '#1c1c1e', fontSize:22,
+            fontWeight:800, marginBottom:8 }}>
+            ¡Pago completado!
+          </h2>
+          <p style={{ color:'#8e8e93', fontSize:14, lineHeight:1.6, marginBottom:24 }}>
+            Activando tu acceso… esto tarda unos segundos.<br/>
+            Recibirás un email con tu recibo.
+          </p>
+          <div style={{ width:32, height:32, border:'3px solid #0055cc',
+            borderTopColor:'transparent', borderRadius:'50%',
+            animation:'spin 0.8s linear infinite', margin:'0 auto 24px' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <button
+            onClick={() => { setCheckoutResult(null); refreshProfile(); }}
+            style={{ background:'none', border:'none', color:'#8e8e93', fontSize:13,
+              cursor:'pointer', textDecoration:'underline' }}>
+            Entrar ahora →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // accessStatus===null → loadProfile() aún en curso (background async).
   // Bloquear dashboard hasta que el acceso esté resuelto.
   if (accessStatus === null) {
@@ -3627,7 +4115,7 @@ if (!authUser || forceResetMode) {
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7' }}>
         <div style={{ textAlign:'center' }}>
           <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid #0055cc', borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          
           <p style={{ fontSize:13, color:'#8e8e93', margin:0 }}>Validando acceso…</p>
         </div>
       </div>
@@ -3639,7 +4127,7 @@ if (!authUser || forceResetMode) {
   if (accessStatus && !accessStatus.hasAccess) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7', fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif" }}>
-        <div style={{ textAlign:'center', maxWidth:400, padding:'32px 24px', background:'white', borderRadius:20, boxShadow:'0 2px 20px rgba(0,0,0,0.1)' }}>
+        <div style={{ textAlign:'center', maxWidth:400, padding:'32px 24px', background:darkMode?"#12171f":"#ffffff", borderRadius:20, boxShadow:'0 2px 20px rgba(0,0,0,0.1)' }}>
           <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
           <h2 style={{ margin:'0 0 8px', fontSize:20, fontWeight:700, color:'#1c1c1e' }}>Acceso no disponible</h2>
           <p style={{ margin:'0 0 20px', fontSize:14, color:'#8e8e93', lineHeight:1.6 }}>
@@ -3695,47 +4183,25 @@ if (!authUser || forceResetMode) {
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7' }}>
         <div style={{ textAlign:'center' }}>
           <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid #0055cc', borderTopColor:'transparent', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          
           <p style={{ fontSize:13, color:'#8e8e93', margin:0 }}>Cargando perfil…</p>
         </div>
       </div>
     );
   }
 
-  // Terminal color palette
-  const T = {
-    bg:      darkMode?"#0d0d0f":"#f0f2f5",
-    card:    darkMode?"#16181c":"#ffffff",
-    card2:   darkMode?"#1e2028":"#f0f2f5",
-    border:  darkMode?"#2a2d33":"#dde1e7",
-    txt:     darkMode?"#e8eaf0":"#1a1d23",
-    sub:     darkMode?"#8b90a0":"#6b7280",
-    sub2:    darkMode?"#5a6070":"#9ca3af",
-    accent:  "#0055cc",
-    bull:    "#88C999",
-    bear:    "#EF9A9A",
-    bullTxt: "#2e7d4f",
-    bearTxt: "#b71c1c",
-    header:  darkMode?"#1a1d24":"#f8f9fc",
-  };
+
 
 
   // ── DASHBOARD ──────────────────────────────────────────────────────────────
   const TABS = [
     {id:"calendario", label:"📅 Calendario"},
     {id:"sesgos",     label:"Dashboard COT"},
+    {id:"macro",      label:"🌐 Macro"},
     {id:"historico",  label:"Tabla Histórica"},
     {id:"importar",   label:"📁 Importar CSV"},
     {id:"cuenta",     label:"Ajustes"},
   ];
-  const SIGNAL_ORDER={buy:0,sell:1,wait:2,indecision:3};
-  const fxPairs=(pairsData||[]).filter(p=>p.cat==="fx");
-  const displayPairs=[...fxPairs].sort((a,b)=>{
-    if (sort.col==="signal") return sort.dir*(SIGNAL_ORDER[a.signal.signal]-SIGNAL_ORDER[b.signal.signal]);
-    if (sort.col==="net")    return sort.dir*(b.latest.smartNet-a.latest.smartNet);
-    if (sort.col==="pair")   return sort.dir*a.pair.localeCompare(b.pair);
-    return 0;
-  });
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
   const sells=displayPairs.filter(p=>p.signal.signal==="sell").length;
   const handleSort=(col)=>setSort(s=>s.col===col?{col,dir:s.dir*-1}:{col,dir:-1});
@@ -3745,14 +4211,57 @@ if (!authUser || forceResetMode) {
   return (
     <div style={{fontFamily:"'Inter','SF Pro Text',Helvetica,sans-serif",background:T.bg,
       minHeight:"100vh",overflowX:"hidden",maxWidth:"100vw",boxSizing:"border-box"}}>
-      {detail&&<DetailSheet pairData={detail} onClose={()=>setDetail(null)} darkMode={darkMode}/>}
+
+      {/* ── CREATE PASSWORD MODAL (first magic link login via ?setup=1) ── */}
+      {/* FIX: was gated on !onboarding.show — but onboarding.show starts false */}
+      {/* while profile loads async, so both modals were always mutually blocked. */}
+      {/* Now: CreatePassword takes priority when showCreatePassword=true.       */}
+      {showCreatePassword && profile && (
+        <CreatePasswordModal
+          profile={profile}
+          onDone={() => {
+            setShowCreatePassword(false);
+            // After password set → show onboarding if not yet completed.
+            // FIX: was calling onboarding.reset() which does an async DB write
+            // before setShow(true) — if the write fails, modal never appears.
+            // Now: force show directly via reset(), but also clear completedRef
+            // by calling it unconditionally (reset() already guards with auth_user_id).
+            if (!profile.onboarding_completed) {
+              onboarding.reset();
+            }
+          }}
+        />
+      )}
+
+      {/* ── ONBOARDING MODAL ── */}
+      {/* FIX: was gated on !showCreatePassword — correct — but also required  */}
+      {/* onboarding.show which starts false while profile is loading.          */}
+      {/* Now: uses shouldShowOnboarding which includes forceSetup fallback.    */}
+      {shouldShowOnboarding && profile && !showCreatePassword && (
+        <OnboardingModal
+          profile={profile}
+          onComplete={(market) => onboarding.complete(market)}
+        />
+      )}
+
+      {detail&&<DetailSheet pairData={detail} onClose={()=>setDetail(null)} darkMode={darkMode} T={T}/>}
+      {showBillingApp && (
+        <BillingModal
+          user={user}
+          darkMode={darkMode}
+          onClose={() => setShowBillingApp(false)}
+          authUserId={authUser?.id ?? null}
+        />
+      )}
       {showSettings&&<SettingsPanel user={user} darkMode={darkMode} lang={lang}
         onDarkMode={toggleDark} onLang={changeLang} onLogout={handleLogout}
-        onClose={()=>setShowSettings(false)}/>}
+        onClose={()=>setShowSettings(false)}
+        onRestartOnboarding={onboarding.reset}
+        authUserId={authUser?.id ?? null}/>}
 
       {/* ── HEADER ── */}
       <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:10}}>
-        <div style={{maxWidth:960,margin:"0 auto",padding:"0 12px"}}>
+        <div style={{maxWidth:1500,margin:"0 auto",padding:"0 20px"}}>
           {/* Top bar */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:48}}>
             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
@@ -3805,13 +4314,18 @@ if (!authUser || forceResetMode) {
         <CalendarioTab darkMode={darkMode} T={T} lang={lang}/>
       )}
 
+      {/* ── TAB: MACRO ── */}
+      {mainTab==="macro"&&(
+        <MacroTab darkMode={darkMode} T={T} isMobile={isMobile}/>
+      )}
+
       {/* ── TAB 2: DASHBOARD COT ── */}
-      {mainTab==="sesgos"&&!pairsData&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:"60px 20px",textAlign:"center"}}>
+      {mainTab==="sesgos"&&!pairsData&&!combinedData&&(
+        <div style={{maxWidth:1500,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
           <div style={{fontSize:40,marginBottom:16}}>📊</div>
           <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:T.txt}}>Importa un archivo CSV del CFTC</h2>
           <p style={{margin:"0 0 24px",fontSize:14,color:T.sub,lineHeight:1.6}}>
-            El Dashboard de Activos se activa cuando cargas el informe semanal del CFTC.
+            El Dashboard se activa con cualquiera de las dos fuentes CFTC.
           </p>
           <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
             cursor:"pointer",background:T.accent,color:"white",fontSize:14,fontWeight:700}}>
@@ -3819,8 +4333,23 @@ if (!authUser || forceResetMode) {
           </button>
         </div>
       )}
-      {mainTab==="sesgos"&&pairsData&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"12px":"20px"}}>
+
+      {mainTab==="sesgos"&&(pairsData||combinedData)&&(
+        <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"12px":"28px 32px"}}>
+
+          {/* ── MARKET DECISION LAYER ─────────────────────────────────────── */}
+          {pairsData&&fxPairs.length>0&&(
+            <div style={{marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:"0.1em"}}>
+                  MARKET DECISION LAYER
+                </span>
+                <span style={{flex:1,height:1,background:T.border}}/>
+                <span style={{fontSize:9,color:T.sub2,letterSpacing:"0.05em",fontWeight:500}}>INTERPRETACIÓN · HTF+LTF · AUTO</span>
+              </div>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={T} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
+            </div>
+          )}
 
           {/* ── INSTITUTIONAL BIAS ENGINE CARDS ─────────────────────────── */}
           {(()=>{
@@ -3862,8 +4391,22 @@ if (!authUser || forceResetMode) {
             );
           })()}
 
+          {/* ── INSTITUTIONAL CROSS ASSET FLOW ─────────────────────────── */}
+          {combinedData && (
+            <div style={{marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:"#8b5cf6",letterSpacing:"0.1em"}}>
+                  CROSS ASSET FLOW
+                </span>
+                <span style={{flex:1,height:1,background:T.border}}/>
+                <span style={{fontSize:9,color:T.sub2,letterSpacing:"0.05em",fontWeight:500}}>COMBINED · FX + ÍNDICES + BONOS</span>
+              </div>
+              <CrossAssetFlow combinedData={combinedData} darkMode={darkMode} T={T} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
+            </div>
+          )}
+
           {/* ── INTRADAY EXECUTION LAYER ──────────────────────────────────── */}
-          {(()=>{
+          {pairsData&&(()=>{
             // Build availablePairs: all fxPairs with their precomputed bias
             const availablePairs = (fxPairs||[]).map(p=>{
               if(!p) return null;
@@ -3900,13 +4443,198 @@ if (!authUser || forceResetMode) {
                   darkMode={darkMode}
                   T={T}
                   isMobile={isMobile}
+                  isPremium={isPremium}
+                  onUpgrade={openBilling}
                 />
               </div>
             );
           })()}
 
+          {/* Summary bar, column headers, pair rows and methodology footer
+              → moved to Tabla Histórica tab */}
+
+        </div>
+      )}
+
+      {/* ── TAB 3: TABLA HISTÓRICA ── */}
+      {mainTab==="historico"&&!pairsData&&(
+        <div style={{maxWidth:1500,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:16}}>📈</div>
+          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:T.txt}}>Sin datos históricos</h2>
+          <p style={{margin:"0 0 24px",fontSize:14,color:T.sub,lineHeight:1.6}}>Importa un CSV del CFTC para ver la evolución histórica semanal.</p>
+          <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
+            cursor:"pointer",background:T.accent,color:"white",fontSize:14,fontWeight:700}}>
+            Ir a Importar CSV →
+          </button>
+        </div>
+      )}
+      {mainTab==="historico"&&pairsData&&(
+        <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
+          <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <h2 style={{margin:0,fontSize:14,fontWeight:700,color:T.txt,letterSpacing:"0.01em"}}>Tabla Histórica de Datos</h2>
+              <p style={{margin:"3px 0 0",fontSize:11,color:T.sub}}>
+                Posicionamiento Dinero Inteligente (CFTC) · Leveraged Money · Un par por fila · Columnas por semana
+              </p>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,padding:"3px 8px"}}>
+                Últimas {histRows} semanas
+              </span>
+              {histRows<8&&(
+                <button onClick={()=>setHistRows(h=>Math.min(h+2,8))} style={{
+                  fontSize:10,color:T.accent,border:`1px solid ${T.border}`,borderRadius:3,
+                  padding:"3px 8px",background:"none",cursor:"pointer"
+                }}>+ Semanas</button>
+              )}
+              {histRows>2&&(
+                <button onClick={()=>setHistRows(h=>Math.max(h-2,2))} style={{
+                  fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,
+                  padding:"3px 8px",background:"none",cursor:"pointer"
+                }}>– Semanas</button>
+              )}
+            </div>
+          </div>
+
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:4,overflow:"auto"}}>
+            {/* Dynamic header: Par | Sesgo | Net W0 | Net W-1 | Net W-2 ... | Tendencia */}
+            <div style={{
+              display:"grid",
+              gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
+              background:T.header,borderBottom:`1px solid ${T.border}`,
+              minWidth: 140+120+(histRows*110)+90,
+            }}>
+              {["Par","Sesgo de Mercado",
+                ...Array.from({length:histRows},(_,i)=>i===0?"Contratos Netos (Actual)":`Contratos Netos (-${i})`),
+                "Tendencia"
+              ].map((col,i)=>(
+                <div key={i} style={{
+                  fontSize:9,fontWeight:700,color:T.sub,
+                  letterSpacing:"0.07em",textTransform:"uppercase",
+                  textAlign:i<=1?"left":"right",
+                  padding:i===0?"8px 8px 8px 16px":"8px",
+                  borderRight:i===0||i===1?`1px solid ${T.border}`:"none",
+                  display:i<=1?"flex":"flex",
+                  alignItems:"center",
+                  justifyContent:i<=1?"flex-start":"flex-end",
+                  gap:3,
+                }}>
+                  {col}
+                  {i===2&&<InfoTooltip text={COT_TOOLTIPS.levNet}/>}
+                </div>
+              ))}
+            </div>
+
+            {/* One row per pair */}
+            {fxPairs.map((p,rowIdx)=>{
+              const isBull=p.signal.signal==="buy";
+              const isBear=p.signal.signal==="sell";
+              const cfg=SIGNAL_CFG[p.signal.signal]||SIGNAL_CFG.wait;
+              // Get net values for each week slot
+              const netValues=Array.from({length:histRows},(_,i)=>
+                p.weeks[i]?.smartNet ?? null
+              );
+              // Trend: sum of week-over-week changes across visible window
+              const changes = netValues.slice(0,-1).map((v,i)=>
+                v!=null&&netValues[i+1]!=null ? v-netValues[i+1] : 0
+              );
+              const trendSum = changes.reduce((a,b)=>a+b,0);
+
+              return (
+                <div key={p.pair}
+                  onClick={()=>setDetail(p)}
+                  style={{
+                    display:"grid",
+                    gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
+                    borderBottom:rowIdx<fxPairs.length-1?`1px solid ${T.border}`:"none",
+                    background:rowIdx%2===0?T.card:T.header,
+                    cursor:"pointer",
+                    transition:"background 0.1s",
+                    minWidth:140+120+(histRows*110)+90,
+                  }}
+                  onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#eef1f6"}
+                  onMouseLeave={e=>e.currentTarget.style.background=rowIdx%2===0?T.card:T.header}
+                >
+                  {/* Par name */}
+                  <div style={{
+                    padding:"10px 8px 10px 16px",
+                    borderRight:`1px solid ${T.border}`,
+                    display:"flex",alignItems:"center",
+                    borderLeft:`3px solid ${isBull?"#88C999":isBear?"#EF9A9A":T.border}`,
+                  }}>
+                    <span style={{fontSize:13,fontWeight:700,color:T.txt,fontFamily:"monospace"}}>{p.pair}</span>
+                  </div>
+
+                  {/* Sesgo badge */}
+                  <div style={{
+                    padding:"0 8px",display:"flex",alignItems:"center",
+                    borderRight:`1px solid ${T.border}`,
+                  }}>
+                    <span style={{
+                      fontSize:10,fontWeight:700,
+                      color:isBull?"#2e7d4f":isBear?"#b71c1c":T.sub,
+                      background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"transparent",
+                      padding:"2px 6px",borderRadius:2,
+                    }}>{cfg.icon} {cfg.label}</span>
+                  </div>
+
+                  {/* Net values per week — with heatmap */}
+                  {netValues.map((val,wIdx)=>{
+                    const prev = netValues[wIdx+1];
+                    const chg = val!=null&&prev!=null ? val-prev : null;
+                    const heat = heatCell(val, "net");
+                    return (
+                      <div key={wIdx} style={{
+                        padding:"8px",textAlign:"right",
+                        background:heat.background,
+                        borderLeft:wIdx===0?`1px solid ${T.border}`:"none",
+                        borderRight:`1px solid rgba(0,0,0,0.03)`,
+                        transition:"background 0.15s",
+                      }}>
+                        <div style={{
+                          fontSize:12,fontWeight:700,fontFamily:"monospace",
+                          fontVariantNumeric:"tabular-nums",
+                          color:heat.color,
+                        }}>
+                          {val==null?"—":val.toLocaleString("en-US",{signDisplay:"exceptZero"})}
+                        </div>
+                        {chg!=null&&(
+                          <div style={{
+                            fontSize:9,fontFamily:"monospace",marginTop:1,
+                            color:chg>0?"#2e7d4f":chg<0?"#b71c1c":"#9E9E9E",
+                          }}>
+                            {chg>0?"▲":"▼"} {Math.abs(chg).toLocaleString("en-US")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Tendencia */}
+                  <div style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${T.border}`}}>
+                    <div style={{
+                      fontSize:11,fontWeight:700,fontFamily:"monospace",
+                      color:trendSum>0?"#2e7d4f":trendSum<0?"#b71c1c":"#9E9E9E",
+                    }}>
+                      {trendSum>0?"▲":trendSum<0?"▼":"–"} {Math.abs(trendSum).toLocaleString("en-US")}
+                    </div>
+                    <div style={{fontSize:9,color:T.sub,marginTop:1}}>
+                      {changes.length} sem.
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p style={{textAlign:"center",fontSize:10,color:T.sub,marginTop:10,letterSpacing:"0.03em"}}>
+            Haz clic en cualquier par para ver el desglose semanal completo ·
+            Fuente: CFTC.gov · Leveraged Money · Datos procesados localmente
+          </p>
+
+          {/* ── SESGO DE MERCADO (tabla de pares COT) ── */}
           {/* Summary bar */}
-          <div style={{display:"flex",gap:6,marginBottom:12,padding:"10px 12px",flexWrap:"wrap",
+          {pairsData&&<div style={{display:"flex",gap:6,marginBottom:12,marginTop:24,padding:"10px 12px",flexWrap:"wrap",
             background:T.card,border:`1px solid ${T.border}`,borderRadius:10}}>
             <span style={{fontSize:11,color:T.sub,alignSelf:"center",fontWeight:600,
               letterSpacing:"0.05em",display:isMobile?"none":"inline"}}>SESGO DEL MERCADO:</span>
@@ -3921,11 +4649,11 @@ if (!authUser || forceResetMode) {
             {!isMobile&&<span style={{marginLeft:"auto",fontSize:10,color:T.sub,alignSelf:"center"}}>
               Datos Importados según CFTC · Posicionamiento Dinero Inteligente
             </span>}
-          </div>
+          </div>}
 
           {/* Column headers — solo desktop */}
-          {!isMobile&&(
-          <div style={{display:"grid",gridTemplateColumns:"160px 1fr 110px 110px 90px 32px",
+          {pairsData&&!isMobile&&(
+          <div style={{display:"grid",gridTemplateColumns:"200px 1fr 130px 130px 100px 32px",
             gap:0,padding:"6px 16px",marginBottom:4}}>
             {[["pair","Par Divisa"],["net","Contratos Netos LM"],["signal","Sesgo de Mercado"],[null,"Evolución WoW"],[null,""]].map(([c,l],i)=>(
               <div key={i} onClick={()=>c&&handleSort(c)}
@@ -3939,7 +4667,7 @@ if (!authUser || forceResetMode) {
           )}
 
           {/* Pair rows */}
-          <div style={{display:"flex",flexDirection:"column",gap:isMobile?8:2}}>
+          {pairsData&&<div style={{display:"flex",flexDirection:"column",gap:isMobile?8:2}}>
             {displayPairs.map((p,i)=>{
               const {latest,weeks,signal}=p;
               if (!latest||!weeks||!signal) return null;
@@ -3957,7 +4685,7 @@ if (!authUser || forceResetMode) {
                     padding: isMobile ? "12px 14px" : "10px 16px",
                     display: isMobile ? "flex" : "grid",
                     flexDirection: isMobile ? "column" : undefined,
-                    gridTemplateColumns: isMobile ? undefined : "160px 1fr 110px 110px 90px 32px",
+                    gridTemplateColumns: isMobile ? undefined : "200px 1fr 130px 130px 100px 32px",
                     gap: isMobile ? 6 : 0,
                     alignItems: isMobile ? undefined : "center",
                     cursor:"pointer",
@@ -4092,10 +4820,10 @@ if (!authUser || forceResetMode) {
                 </div>
               );
             })}
-          </div>
+          </div>}
 
           {/* Methodology footer */}
-          <div style={{marginTop:16,padding:"12px 16px",
+          {pairsData&&<div style={{marginTop:16,padding:"12px 16px",
             background:T.card,border:`1px solid ${T.border}`,borderRadius:4}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
               <div>
@@ -4116,246 +4844,76 @@ if (!authUser || forceResetMode) {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── TAB 3: TABLA HISTÓRICA ── */}
-      {mainTab==="historico"&&!pairsData&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:"60px 20px",textAlign:"center"}}>
-          <div style={{fontSize:40,marginBottom:16}}>📈</div>
-          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:T.txt}}>Sin datos históricos</h2>
-          <p style={{margin:"0 0 24px",fontSize:14,color:T.sub,lineHeight:1.6}}>Importa un CSV del CFTC para ver la evolución histórica semanal.</p>
-          <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
-            cursor:"pointer",background:T.accent,color:"white",fontSize:14,fontWeight:700}}>
-            Ir a Importar CSV →
-          </button>
-        </div>
-      )}
-      {mainTab==="historico"&&pairsData&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:"20px"}}>
-          <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <h2 style={{margin:0,fontSize:14,fontWeight:700,color:T.txt,letterSpacing:"0.01em"}}>Tabla Histórica de Datos</h2>
-              <p style={{margin:"3px 0 0",fontSize:11,color:T.sub}}>
-                Posicionamiento Dinero Inteligente (CFTC) · Leveraged Money · Un par por fila · Columnas por semana
-              </p>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,padding:"3px 8px"}}>
-                Últimas {histRows} semanas
-              </span>
-              {histRows<8&&(
-                <button onClick={()=>setHistRows(h=>Math.min(h+2,8))} style={{
-                  fontSize:10,color:T.accent,border:`1px solid ${T.border}`,borderRadius:3,
-                  padding:"3px 8px",background:"none",cursor:"pointer"
-                }}>+ Semanas</button>
-              )}
-              {histRows>2&&(
-                <button onClick={()=>setHistRows(h=>Math.max(h-2,2))} style={{
-                  fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,
-                  padding:"3px 8px",background:"none",cursor:"pointer"
-                }}>– Semanas</button>
-              )}
-            </div>
-          </div>
-
-          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:4,overflow:"auto"}}>
-            {/* Dynamic header: Par | Sesgo | Net W0 | Net W-1 | Net W-2 ... | Tendencia */}
-            <div style={{
-              display:"grid",
-              gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-              background:T.header,borderBottom:`1px solid ${T.border}`,
-              minWidth: 140+120+(histRows*110)+90,
-            }}>
-              {["Par","Sesgo de Mercado",
-                ...Array.from({length:histRows},(_,i)=>i===0?"Contratos Netos (Actual)":`Contratos Netos (-${i})`),
-                "Tendencia"
-              ].map((col,i)=>(
-                <div key={i} style={{
-                  fontSize:9,fontWeight:700,color:T.sub,
-                  letterSpacing:"0.07em",textTransform:"uppercase",
-                  textAlign:i<=1?"left":"right",
-                  padding:i===0?"8px 8px 8px 16px":"8px",
-                  borderRight:i===0||i===1?`1px solid ${T.border}`:"none",
-                  display:i<=1?"flex":"flex",
-                  alignItems:"center",
-                  justifyContent:i<=1?"flex-start":"flex-end",
-                  gap:3,
-                }}>
-                  {col}
-                  {i===2&&<InfoTooltip text={TOOLTIPS.levNet}/>}
-                </div>
-              ))}
-            </div>
-
-            {/* One row per pair */}
-            {fxPairs.map((p,rowIdx)=>{
-              const isBull=p.signal.signal==="buy";
-              const isBear=p.signal.signal==="sell";
-              const cfg=SIGNAL_CFG[p.signal.signal]||SIGNAL_CFG.wait;
-              // Get net values for each week slot
-              const netValues=Array.from({length:histRows},(_,i)=>
-                p.weeks[i]?.smartNet ?? null
-              );
-              // Trend: sum of week-over-week changes across visible window
-              const changes = netValues.slice(0,-1).map((v,i)=>
-                v!=null&&netValues[i+1]!=null ? v-netValues[i+1] : 0
-              );
-              const trendSum = changes.reduce((a,b)=>a+b,0);
-
-              return (
-                <div key={p.pair}
-                  onClick={()=>setDetail(p)}
-                  style={{
-                    display:"grid",
-                    gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-                    borderBottom:rowIdx<fxPairs.length-1?`1px solid ${T.border}`:"none",
-                    background:rowIdx%2===0?T.card:T.header,
-                    cursor:"pointer",
-                    transition:"background 0.1s",
-                    minWidth:140+120+(histRows*110)+90,
-                  }}
-                  onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#eef1f6"}
-                  onMouseLeave={e=>e.currentTarget.style.background=rowIdx%2===0?T.card:T.header}
-                >
-                  {/* Par name */}
-                  <div style={{
-                    padding:"10px 8px 10px 16px",
-                    borderRight:`1px solid ${T.border}`,
-                    display:"flex",alignItems:"center",
-                    borderLeft:`3px solid ${isBull?"#88C999":isBear?"#EF9A9A":T.border}`,
-                  }}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.txt,fontFamily:"monospace"}}>{p.pair}</span>
-                  </div>
-
-                  {/* Sesgo badge */}
-                  <div style={{
-                    padding:"0 8px",display:"flex",alignItems:"center",
-                    borderRight:`1px solid ${T.border}`,
-                  }}>
-                    <span style={{
-                      fontSize:10,fontWeight:700,
-                      color:isBull?"#2e7d4f":isBear?"#b71c1c":T.sub,
-                      background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"transparent",
-                      padding:"2px 6px",borderRadius:2,
-                    }}>{cfg.icon} {cfg.label}</span>
-                  </div>
-
-                  {/* Net values per week — with heatmap */}
-                  {netValues.map((val,wIdx)=>{
-                    const prev = netValues[wIdx+1];
-                    const chg = val!=null&&prev!=null ? val-prev : null;
-                    const heat = heatCell(val, "net");
-                    return (
-                      <div key={wIdx} style={{
-                        padding:"8px",textAlign:"right",
-                        background:heat.background,
-                        borderLeft:wIdx===0?`1px solid ${T.border}`:"none",
-                        borderRight:`1px solid rgba(0,0,0,0.03)`,
-                        transition:"background 0.15s",
-                      }}>
-                        <div style={{
-                          fontSize:12,fontWeight:700,fontFamily:"monospace",
-                          fontVariantNumeric:"tabular-nums",
-                          color:heat.color,
-                        }}>
-                          {val==null?"—":val.toLocaleString("en-US",{signDisplay:"exceptZero"})}
-                        </div>
-                        {chg!=null&&(
-                          <div style={{
-                            fontSize:9,fontFamily:"monospace",marginTop:1,
-                            color:chg>0?"#2e7d4f":chg<0?"#b71c1c":"#9E9E9E",
-                          }}>
-                            {chg>0?"▲":"▼"} {Math.abs(chg).toLocaleString("en-US")}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Tendencia */}
-                  <div style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${T.border}`}}>
-                    <div style={{
-                      fontSize:11,fontWeight:700,fontFamily:"monospace",
-                      color:trendSum>0?"#2e7d4f":trendSum<0?"#b71c1c":"#9E9E9E",
-                    }}>
-                      {trendSum>0?"▲":trendSum<0?"▼":"–"} {Math.abs(trendSum).toLocaleString("en-US")}
-                    </div>
-                    <div style={{fontSize:9,color:T.sub,marginTop:1}}>
-                      {changes.length} sem.
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <p style={{textAlign:"center",fontSize:10,color:T.sub,marginTop:10,letterSpacing:"0.03em"}}>
-            Haz clic en cualquier par para ver el desglose semanal completo ·
-            Fuente: CFTC.gov · Leveraged Money · Datos procesados localmente
-          </p>
+          </div>}
         </div>
       )}
 
       {/* ── TAB 4: IMPORTAR CSV ── */}
       {mainTab==="importar"&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:"24px 20px"}}>
-          <div style={{marginBottom:20}}>
-            <h2 style={{margin:"0 0 4px",fontSize:14,fontWeight:700,color:T.txt}}>Importar Datos CFTC</h2>
+        <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"14px":"28px 32px"}}>
+          {/* Page header */}
+          <div style={{marginBottom:22}}>
+            <h2 style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:T.txt,letterSpacing:"-0.2px"}}>
+              Importar Datos CFTC
+            </h2>
             <p style={{margin:0,fontSize:11,color:T.sub}}>
-              Posicionamiento Dinero Inteligente (CFTC) · Informe TFF · Leveraged Money · Publicado cada viernes 21:30h CET
+              Dos fuentes independientes · TFF Futures Only + Combined · Publicado cada viernes 21:30h CET
             </p>
           </div>
-          {error&&(
-            <div style={{background:"rgba(239,154,154,0.12)",border:"1px solid rgba(239,154,154,0.4)",borderRadius:4,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#b71c1c",lineHeight:1.5,fontFamily:"monospace"}}>
-              ERROR: {error}
-            </div>
-          )}
-          {pairsData&&(
-            <div style={{background:"rgba(136,201,153,0.1)",border:"1px solid rgba(136,201,153,0.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:18}}>✅</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#2e7d4f"}}>Datos cargados: {source}</div>
-                <div style={{fontSize:11,color:T.sub}}>{pairsData.length} pares · Haz clic en "Dashboard COT" para verlos</div>
-              </div>
-              <button onClick={()=>setMainTab("sesgos")} style={{padding:"8px 16px",borderRadius:8,border:"none",
-                cursor:"pointer",background:"#2e7d4f",color:"white",fontSize:12,fontWeight:700}}>
-                Ver Dashboard →
-              </button>
-            </div>
-          )}
-          <style>{`.import-grid{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:12px}@media(max-width:700px){.import-grid{grid-template-columns:1fr}}.import-card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}`}</style>
-          <div className="import-grid" style={{"--c":T.card,"--b":T.border}}>
-            <div className="import-card">
-              <p style={{margin:"0 0 4px",fontSize:12,fontWeight:700,color:T.txt,textTransform:"uppercase",letterSpacing:"0.05em"}}>📥 Descargar Informe CFTC</p>
-              <p style={{margin:0,fontSize:12,color:T.sub,lineHeight:1.6}}>
-                Accede al informe oficial. Busca:<br/>
-                <span style={{fontFamily:"monospace",fontSize:11,background:darkMode?"#2a2d33":"#f0f2f5",padding:"1px 4px",borderRadius:2}}>Traders in Financial Futures</span><br/>
-                → Futures Only → 2026 (Text) → Descomprime el .zip
-              </p>
-              <a href="https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"
-                target="_blank" rel="noreferrer"
-                style={{display:"block",textAlign:"center",padding:"10px",borderRadius:8,
-                  border:`1px solid ${T.border}`,color:T.txt,fontSize:12,fontWeight:600,textDecoration:"none"}}>
-                Ir a CFTC.gov →
-              </a>
-            </div>
-            <DropZone onFile={(text,name)=>{handleFile(text,name);setMainTab("sesgos");}}/>
-            <div className="import-card">
-              <p style={{margin:"0 0 4px",fontSize:12,fontWeight:700,color:T.txt,textTransform:"uppercase",letterSpacing:"0.05em"}}>▶ Video Tutorial</p>
-              <p style={{margin:0,fontSize:12,color:T.sub,lineHeight:1.6}}>
-                Guía paso a paso para descargar el CSV del CFTC y cargarlo correctamente.
-              </p>
-              <a href="https://www.youtube.com/@MarketMoneyFX" target="_blank" rel="noreferrer"
-                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px",
-                  borderRadius:8,border:`1px solid ${T.border}`,color:T.txt,fontSize:12,fontWeight:600,textDecoration:"none"}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{color:"#c0392b"}}><path d="M8 5v14l11-7z"/></svg>
-                Ver tutorial →
-              </a>
-            </div>
-          </div>
-          <p style={{textAlign:"center",fontSize:10,color:T.sub,marginTop:14}}>
+
+          {/* Futures Only */}
+          <SourceCard
+            title="Traders in Financial Futures — Futures Only"
+            subtitle="Fuente principal · Bias Engine · Intraday Execution · Tabla FX"
+            badge="ACTIVO"
+            accentColor={T.accent}
+            loaded={!!pairsData}
+            loadedLabel={`${pairsData?.length||0} pares · ${source}`}
+            loadedSub="Dashboard COT activo"
+            error={error}
+            onViewDashboard={()=>setMainTab("sesgos")}
+            downloadUrl="https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"
+            downloadNote="→ Futures Only → 2026 (Text)"
+            dropId="cot-fut-only-input"
+            dropHint="Futures Only · .csv .txt"
+            dropLoaded={!!pairsData}
+            onFile={(text,name)=>{handleFile(text,name);setMainTab("sesgos");}}
+            whatTitle="¿Qué aporta?"
+            whatDesc="Activa el Dashboard COT principal con sesgo institucional semanal en divisas."
+            badges={["EURUSD","GBPUSD","USDJPY","DXY","AUDUSD","NZDUSD","USDCAD","USDCHF"]}
+            modules={["Bias Engine · Swing Trading","Intraday Execution Layer","FX Table · 8 pares","Market Decision Layer"]}
+            darkMode={darkMode}
+            T={T}
+            isMobile={isMobile}
+          />
+
+          {/* Combined */}
+          <SourceCard
+            title="Traders in Financial Futures — Futures and Options Combined"
+            subtitle="Cross Asset Flow · FX + Índices + Bonos · Exposición institucional completa"
+            badge="NUEVO"
+            accentColor="#8b5cf6"
+            loaded={!!combinedData}
+            loadedLabel={`${combinedData?.assetCount||0} activos · ${sourceCombined}`}
+            loadedSub={combinedData?`${combinedData.byGroup.fx?.length||0} FX · ${combinedData.byGroup.index?.length||0} índices · ${combinedData.byGroup.bonds?.length||0} bonos`:undefined}
+            error={errorCombined}
+            onViewDashboard={()=>setMainTab("sesgos")}
+            downloadUrl="https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"
+            downloadNote="→ Futures and Options → 2026 (Text)"
+            dropId="cot-combined-input"
+            dropHint="FinComYY.txt · Futures and Options"
+            dropLoaded={!!combinedData}
+            onFile={(text,name)=>handleFileCombined(text,name)}
+            whatTitle="¿Qué aporta?"
+            whatDesc="Añade opciones al flujo de futuros. Detecta rotaciones institucionales cross-asset."
+            badges={["SP500","NAS100","US10Y","US2Y","EURUSD","DXY","GBPUSD","USDJPY"]}
+            modules={["Cross Asset Flow","Rotaciones institucionales","Índices + Bonos","Flujo opciones incluido"]}
+            darkMode={darkMode}
+            T={T}
+            isMobile={isMobile}
+          />
+
+          <p style={{textAlign:"center",fontSize:10,color:T.sub2,marginTop:6,letterSpacing:"0.02em"}}>
             Datos procesados localmente · No se envía información a ningún servidor · Fuente: CFTC.gov
           </p>
         </div>
@@ -4363,7 +4921,7 @@ if (!authUser || forceResetMode) {
 
       {/* ── TAB 5: AJUSTES ── */}
       {mainTab==="cuenta"&&(
-        <div style={{maxWidth:960,margin:"0 auto",padding:"20px"}}>
+        <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
           <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:4,padding:"24px"}}>
             <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:T.txt}}>Ajustes de Cuenta</h2>
             <p style={{margin:"0 0 20px",fontSize:11,color:T.sub}}>Gestiona tu perfil, plan de suscripción y preferencias</p>
@@ -4377,9 +4935,8 @@ if (!authUser || forceResetMode) {
 
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; border: 0; outline: 0; }
-        body { background: ${T.bg}; }
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        body { background: ${T.bg}; color: ${T.txt}; }
       `}</style>
     </div>
   );

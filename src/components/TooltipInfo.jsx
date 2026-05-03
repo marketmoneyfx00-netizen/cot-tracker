@@ -1,152 +1,137 @@
 /**
- * TooltipInfo.jsx — Lightweight (i) tooltip component
+ * TooltipInfo.jsx — Portal-based tooltip
  *
- * Desktop: shows on hover.
- * Mobile: shows/hides on tap. Closes on outside tap.
- *
- * ZERO layout impact: inline-flex, does not affect parent flex rows or widths.
- * No external libraries.
- *
- * CHANGES:
- * - Icon reduced ~40%: 18px → 11px
- * - Premium style: white bg, blue border, blue text, hover light-blue bg
- * - Popover changed: white bg, soft gray border, comfortable padding, max-width 280px
- * - Click to open/close (in addition to hover)
+ * Renders via createPortal → document.body, completely outside the DOM tree.
+ * Uses position:fixed + getBoundingClientRect() — immune to overflow:hidden,
+ * stacking contexts, transforms, or any ancestor layout constraint.
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
-/**
- * @param {string}  text        - Tooltip body text
- * @param {'left'|'right'|'center'} [align='center'] - Preferred horizontal alignment
- */
 export default function TooltipInfo({ text, align = 'center' }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [open, setOpen]   = useState(false);
+  const [pos,  setPos]    = useState({ top: 0, left: 0 });
+  const iconRef = useRef(null);
+
+  // Recalculate position every time the tooltip opens
+  const updatePos = () => {
+    if (!iconRef.current) return;
+    const rect = iconRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 8, left: rect.left });
+  };
 
   // Close on outside click/tap
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    const close = (e) => {
+      if (iconRef.current && !iconRef.current.contains(e.target)) setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('touchstart', close);
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('touchstart', close);
     };
   }, [open]);
 
-  const alignStyle = {
-    left:   { left: 0, transform: 'none' },
-    right:  { right: 0, transform: 'none' },
-    center: { left: '50%', transform: 'translateX(-50%)' },
-  }[align] || { left: '50%', transform: 'translateX(-50%)' };
+  // Reposition on scroll/resize while open
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePos();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [open]);
+
+  const handleMouseEnter = () => { updatePos(); setOpen(true); };
+  const handleMouseLeave = () => setOpen(false);
+  const handleTouch      = (e) => { e.preventDefault(); updatePos(); setOpen(o => !o); };
+  const handleClick      = () => { updatePos(); setOpen(o => !o); };
+
+  // Clamp left so tooltip never overflows viewport right edge
+  const TOOLTIP_W = 260;
+  const clampedLeft = Math.min(
+    pos.left,
+    (typeof window !== 'undefined' ? window.innerWidth : 800) - TOOLTIP_W - 12
+  );
+
+  const tooltip = open ? createPortal(
+    <div
+      style={{
+        position:    'fixed',
+        top:         pos.top,
+        left:        clampedLeft,
+        zIndex:      99999,
+        width:       TOOLTIP_W,
+        maxWidth:    'calc(100vw - 24px)',
+        background:  '#ffffff',
+        color:       '#111827',
+        fontSize:    12,
+        lineHeight:  1.5,
+        padding:     '8px 10px',
+        borderRadius: 6,
+        border:      '1px solid rgba(0,0,0,0.08)',
+        boxShadow:   '0 8px 20px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.08)',
+        pointerEvents: 'none',
+        whiteSpace:  'normal',
+        wordBreak:   'break-word',
+        letterSpacing: '0.01em',
+        fontFamily:  "-apple-system,'SF Pro Text',Helvetica,sans-serif",
+      }}
+    >
+      {text}
+    </div>,
+    document.body
+  ) : null;
 
   return (
-    <span
-      ref={ref}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        position: 'relative',
-        verticalAlign: 'middle',
-        marginLeft: 4,
-        flexShrink: 0,
-      }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onTouchStart={(e) => { e.preventDefault(); setOpen(o => !o); }}
-    >
-      {/* (i) icon — 40% smaller than previous 18px */}
+    <>
       <span
+        ref={iconRef}
         aria-label="Info"
-        onClick={() => setOpen(o => !o)}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouch}
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
+          display:        'inline-flex',
+          alignItems:     'center',
           justifyContent: 'center',
-          width: 11,
-          height: 11,
-          borderRadius: '50%',
-          border: '1px solid #2563eb',
-          fontSize: 7,
-          fontWeight: 800,
-          color: '#2563eb',
-          background: '#ffffff',
-          cursor: 'pointer',
-          lineHeight: 1,
-          userSelect: 'none',
-          flexShrink: 0,
-          marginLeft: 4,
-          boxShadow: '0 1px 3px rgba(37,99,235,0.15)',
-          transition: 'background 0.15s, box-shadow 0.15s',
+          width:          13,
+          height:         13,
+          borderRadius:   '50%',
+          border:         '1px solid #2563eb',
+          fontSize:       8,
+          fontWeight:     800,
+          color:          '#2563eb',
+          background:     '#ffffff',
+          cursor:         'pointer',
+          lineHeight:     1,
+          userSelect:     'none',
+          flexShrink:     0,
+          marginLeft:     6,
+          verticalAlign:  'middle',
+          boxShadow:      '0 1px 3px rgba(37,99,235,0.15)',
+          transition:     'background 0.15s, box-shadow 0.15s',
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.background = '#eff6ff';
-          e.currentTarget.style.boxShadow = '0 1px 4px rgba(37,99,235,0.25)';
+          handleMouseEnter();
+          e.currentTarget.style.background  = '#eff6ff';
+          e.currentTarget.style.boxShadow   = '0 1px 4px rgba(37,99,235,0.25)';
         }}
         onMouseLeave={e => {
-          e.currentTarget.style.background = '#ffffff';
-          e.currentTarget.style.boxShadow = '0 1px 3px rgba(37,99,235,0.15)';
+          handleMouseLeave();
+          e.currentTarget.style.background  = '#ffffff';
+          e.currentTarget.style.boxShadow   = '0 1px 3px rgba(37,99,235,0.15)';
         }}
       >
         i
       </span>
-
-      {/* Premium popover — white bg, soft border, comfortable padding */}
-      {open && (
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            ...alignStyle,
-            zIndex: 999,
-            width: 280,
-            maxWidth: '80vw',
-            background: '#ffffff',
-            color: '#374151',
-            fontSize: 12,
-            fontWeight: 400,
-            lineHeight: 1.6,
-            padding: '12px 14px',
-            borderRadius: 10,
-            border: '1px solid #e5e7eb',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)',
-            pointerEvents: 'none',
-            whiteSpace: 'normal',
-            letterSpacing: '0.01em',
-            fontFamily: "-apple-system,'SF Pro Text',Helvetica,sans-serif",
-          }}
-        >
-          {text}
-          {/* Caret */}
-          <span style={{
-            position: 'absolute',
-            bottom: -6,
-            left: align === 'left' ? 10 : align === 'right' ? 'auto' : '50%',
-            right: align === 'right' ? 10 : 'auto',
-            transform: align === 'center' ? 'translateX(-50%)' : 'none',
-            width: 0, height: 0,
-            borderLeft: '5px solid transparent',
-            borderRight: '5px solid transparent',
-            borderTop: '5px solid #e5e7eb',
-          }}/>
-          {/* Inner caret (white fill) */}
-          <span style={{
-            position: 'absolute',
-            bottom: -5,
-            left: align === 'left' ? 10 : align === 'right' ? 'auto' : '50%',
-            right: align === 'right' ? 10 : 'auto',
-            transform: align === 'center' ? 'translateX(-50%)' : 'none',
-            width: 0, height: 0,
-            borderLeft: '5px solid transparent',
-            borderRight: '5px solid transparent',
-            borderTop: '5px solid #ffffff',
-          }}/>
-        </span>
-      )}
-    </span>
+      {tooltip}
+    </>
   );
 }
