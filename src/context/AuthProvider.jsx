@@ -1,20 +1,33 @@
 /**
- * AuthProvider.jsx — v5 (NUEVOS USUARIOS: retry + onboarding flow)
+ * AuthProvider.jsx — v8 (DETERMINISTA)
  *
- * CAMBIOS RESPECTO A v4:
- *   1. loadProfile pasa authUser completo (no solo id) → accessGuard puede
- *      crear fila de fallback si el trigger no llegó a tiempo
- *   2. Para usuarios nuevos (isNewUser), marca accessStatus con hasAccess:true
- *      y reason:'new_user' para que App.jsx muestre onboarding
- *   3. Setup mode (?setup=1) se detecta aquí para forzar refreshProfile
- *      después de que el trigger tenga tiempo de ejecutarse
+ * Sin callback onRealProfile. Sin synthetic prolongado.
+ *
+ * Si accessGuard devuelve profile=null (DB caída, RPC no deployado):
+ *   → accessStatus.reason = 'db_error'
+ *   → App.jsx muestra pantalla de error de conexión con botón Reintentar
+ *   → NO se bloquea como paywall
+ *   → NO se da acceso falso
+ *
+ * Para nuevos usuarios vía magic link:
+ *   AuthCallback garantizó la fila antes de llegar aquí.
+ *   loadProfile encuentra la fila en el intento 0.
+ *   profile nunca es null para usuarios que pasaron por AuthCallback.
+ *
+ * Para re-logins con contraseña:
+ *   La fila existe desde el primer login.
+ *   profile nunca es null.
+ *
+ * El único caso donde profile=null es un error real de DB.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import {
+  createContext, useContext, useEffect,
+  useState, useCallback, useRef
+} from 'react';
 import { listenAuthChanges, logLoginEvent, updateLastLogin } from '../lib/authService.js';
-import { loadUserProfile, loadUserSubscription, getAccessStatus } from '../lib/accessGuard.js';
+import { loadUserProfile, getAccessStatus } from '../lib/accessGuard.js';
 
-// ─── CONTEXT ──────────────────────────────────────────────────────────────────
 const AuthContext = createContext({
   loading:        true,
   session:        null,
@@ -29,7 +42,6 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// ─── PROVIDER ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [loading,      setLoading]      = useState(true);
   const [session,      setSession]      = useState(null);
@@ -39,11 +51,12 @@ export function AuthProvider({ children }) {
   const [accessStatus, setAccessStatus] = useState(null);
 
   const loadingProfileRef = useRef(false);
+  const initializedRef    = useRef(false);
+  const userRef           = useRef(null);
 
-  // ── Load profile con retry (key change: pasa authUser completo) ───────────
+  // ── loadProfile ────────────────────────────────────────────────────────────
   const loadProfile = useCallback(async (authUser) => {
     if (!authUser?.id) {
-      console.log('[AUTH] No authUser.id — clearing profile');
       setProfile(null);
       setSubscription(null);
       setAccessStatus(null);
@@ -51,7 +64,7 @@ export function AuthProvider({ children }) {
     }
 
     if (loadingProfileRef.current) {
-      console.log('[AUTH] loadProfile already in progress — skipping duplicate');
+      console.log('[AUTH] loadProfile already running — skipping');
       return;
     }
     loadingProfileRef.current = true;
@@ -59,29 +72,26 @@ export function AuthProvider({ children }) {
     try {
       console.log('[AUTH] Loading profile for:', authUser.email, '| uid:', authUser.id);
 
-      // Pasar authUser completo → accessGuard puede crear fila si trigger tardó
-      const { profile: p, error: profileError } = await loadUserProfile(
-        authUser.id,
-        authUser   // ← NUEVO: objeto completo para fallback
-      );
+      const { profile: p, error } = await loadUserProfile(authUser.id, authUser);
 
-      if (profileError || !p) {
-        // Ni retry ni auto-create funcionaron
-        // Marcar como sin acceso — el usuario verá el paywall con opción de soporte
-        console.error('[AUTH] Profile unresolvable for:', authUser.email);
+      if (error || !p) {
+        // DB caída o RPC no deployado — error de infraestructura real
+        console.error('[AUTH] DB error loading profile for:', authUser.email, error?.message);
         setProfile(null);
         setSubscription(null);
+        // reason='db_error' → App.jsx muestra pantalla de error con retry
+        // NO 'hasAccess:true' — queremos que el usuario vea el error
+        // y pueda reintentar, no que entre con estado inconsistente
         setAccessStatus({
           hasAccess: false,
-          plan: 'none',
-          reason: 'profile_not_found',
-          status: 'inactive',
+          reason:    'db_error',
+          plan:      'none',
+          status:    'error',
         });
         return;
       }
 
       const status = getAccessStatus(p);
-
       setProfile(p);
       setSubscription(null);
       setAccessStatus(status);
@@ -94,16 +104,19 @@ export function AuthProvider({ children }) {
         '| onboarding_completed:', p.onboarding_completed
       );
 
-      // Side effects non-blocking
+      // Side effects (fire-and-forget)
       updateLastLogin(authUser.id).catch(() => {});
       logLoginEvent(authUser.id, true).catch(() => {});
 
     } catch (err) {
-      console.error('[AUTH] loadProfile caught error:', err.message);
+      console.error('[AUTH] loadProfile exception:', err.message);
       setProfile(null);
-      setSubscription(null);
-      setAccessStatus({ hasAccess: false, plan: 'none', reason: 'db_error', status: 'inactive' });
-
+      setAccessStatus({
+        hasAccess: false,
+        reason:    'db_error',
+        plan:      'none',
+        status:    'error',
+      });
     } finally {
       loadingProfileRef.current = false;
     }
@@ -111,13 +124,14 @@ export function AuthProvider({ children }) {
 
   // ── refreshProfile ─────────────────────────────────────────────────────────
   const refreshProfile = useCallback(async () => {
-    if (user) {
+    const currentUser = userRef.current;
+    if (currentUser) {
       loadingProfileRef.current = false;
-      await loadProfile(user);
+      await loadProfile(currentUser);
     }
-  }, [user, loadProfile]);
+  }, [loadProfile]);
 
-  // ── SINGLE auth effect ─────────────────────────────────────────────────────
+  // ── Auth state listener ────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[AUTH] Subscribing to auth state changes');
 
@@ -125,31 +139,38 @@ export function AuthProvider({ children }) {
       console.log('[AUTH] Auth event:', event);
 
       try {
-        const forceResetMode =
-          new URLSearchParams(window.location.search).get('mode') === 'reset-password';
-
-        if (forceResetMode) {
-          console.log('[AUTH] Reset mode detected — releasing loading gate');
+        if (new URLSearchParams(window.location.search).get('mode') === 'reset-password') {
           setLoading(false);
           return;
         }
 
         const authUser = newSession?.user ?? null;
-
+        userRef.current = authUser;
         setSession(newSession);
         setUser(authUser);
 
         if (authUser) {
-          console.log('[AUTH] Session active for:', authUser.email);
-          setLoading(false);
+          const isFirstInit = !initializedRef.current;
+          initializedRef.current = true;
 
-          // loadProfile incluye retry — maneja race condition del trigger
-          loadProfile(authUser).catch(err => {
-            console.error('[AUTH] background profile load error:', err);
-          });
+          if (isFirstInit) {
+            // Primera inicialización: esperar perfil completo antes de mostrar UI.
+            // Elimina el flash spinner → app con accessStatus=null.
+            await loadProfile(authUser);
+            setLoading(false);
+          } else {
+            // Evento posterior (TOKEN_REFRESHED, etc.)
+            // Si ya tenemos perfil: no recargar innecesariamente.
+            setLoading(false);
+            if (!profile) {
+              loadingProfileRef.current = false;
+              loadProfile(authUser).catch(console.error);
+            }
+          }
 
         } else {
-          console.log('[AUTH] No session — clearing state');
+          initializedRef.current = true;
+          userRef.current = null;
           setProfile(null);
           setSubscription(null);
           setAccessStatus(null);
@@ -157,31 +178,29 @@ export function AuthProvider({ children }) {
 
           // Limpiar tokens corruptos
           try {
-            const storageKey = Object.keys(localStorage).find(
+            const key = Object.keys(localStorage).find(
               k => k.startsWith('sb-') && k.endsWith('-auth-token')
             );
-            if (storageKey) {
-              const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            if (key) {
+              const stored = JSON.parse(localStorage.getItem(key) || '{}');
               if (!stored?.access_token) {
-                localStorage.removeItem(storageKey);
-                console.log('[AUTH] Cleared stale auth token from storage');
+                localStorage.removeItem(key);
+                console.log('[AUTH] Cleared stale token');
               }
             }
-          } catch (e) { /* best-effort */ }
+          } catch { /* best-effort */ }
         }
 
       } catch (err) {
-        console.error('[AUTH] auth callback error:', err);
+        console.error('[AUTH] event error:', err);
         setLoading(false);
       } finally {
         console.log('[AUTH] Render ready');
       }
     });
 
-    return () => {
-      console.log('[AUTH] Unsubscribing from auth state changes');
-      unsubscribe();
-    };
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadProfile]);
 
   return (

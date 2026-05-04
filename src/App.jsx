@@ -3865,8 +3865,8 @@ function AppInner() {
   const [darkMode,  setDarkMode]  = useState(()=>{ try{return JSON.parse(localStorage.getItem("cot_dark")||"false");}catch{return false;} });
   const [lang,      setLang]      = useState(()=>{ try{return localStorage.getItem("cot_lang")||"es";}catch{return "es";} });
 
-  // ── THEME — must be defined before any T.xxx usage including early returns ─
-  const T = buildTheme(darkMode);
+  // ── THEME — must be defined before any _thm.xxx usage including early returns ─
+  const _thm = buildTheme(darkMode);
   const [mainTab,   setMainTab]   = useState("calendario");
   const [tooltip,   setTooltip]   = useState(null);
   const [tooltipX,  setTooltipX]  = useState(0);
@@ -4122,9 +4122,53 @@ if (!authUser || forceResetMode) {
     );
   }
 
-  // Access denied — checked BEFORE !user so that profile_not_found doesn't
-  // get stuck in the spinner indefinitely.
-  if (accessStatus && !accessStatus.hasAccess) {
+  // Error de conexión DB — mostrar pantalla de reintento específica.
+  // Esto solo ocurre si la DB está caída o el RPC no está deployado.
+  // NO es un paywall — el usuario puede tener cuenta de pago.
+  if (accessStatus?.reason === 'db_error') {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
+        background:'#f2f2f7', fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif" }}>
+        <div style={{ textAlign:'center', maxWidth:380, padding:'32px 24px',
+          background:'#ffffff', borderRadius:20, boxShadow:'0 2px 20px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize:40, marginBottom:16 }}>🔌</div>
+          <h2 style={{ margin:'0 0 8px', fontSize:18, fontWeight:700, color:'#1c1c1e' }}>
+            Error de conexión
+          </h2>
+          <p style={{ margin:'0 0 24px', fontSize:13, color:'#8e8e93', lineHeight:1.6 }}>
+            No pudimos verificar tu perfil. Tu cuenta está intacta —
+            esto es un problema temporal de conexión.
+          </p>
+          <button
+            onClick={() => refreshProfile()}
+            style={{ display:'block', width:'100%', padding:'12px 20px',
+              background:'#0055cc', color:'white', border:'none',
+              borderRadius:10, fontSize:14, fontWeight:600, cursor:'pointer', marginBottom:10 }}
+          >
+            Reintentar
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{ display:'block', width:'100%', padding:'12px 20px',
+              background:'none', border:'1px solid #e5e5ea',
+              borderRadius:10, fontSize:13, color:'#8e8e93', cursor:'pointer' }}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Bloqueo real: solo para cuentas suspendidas o expiradas activamente.
+  const _isHardBlocked = accessStatus &&
+    !accessStatus.hasAccess &&
+    (accessStatus.reason === 'suspended' ||
+     accessStatus.reason === 'trial_expired' ||
+     accessStatus.reason === 'cancelled' ||
+     accessStatus.reason === 'expired');
+
+  if (_isHardBlocked) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f2f2f7', fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif" }}>
         <div style={{ textAlign:'center', maxWidth:400, padding:'32px 24px', background:darkMode?"#12171f":"#ffffff", borderRadius:20, boxShadow:'0 2px 20px rgba(0,0,0,0.1)' }}>
@@ -4135,7 +4179,9 @@ if (!authUser || forceResetMode) {
               ? 'Tu período de prueba ha expirado. Elige un plan para continuar.'
               : accessStatus.reason === 'suspended'
               ? 'Tu cuenta está suspendida. Contacta soporte.'
-              : 'No tienes un plan activo. Contacta soporte o elige un plan.'}
+              : accessStatus.reason === 'cancelled'
+              ? 'Tu suscripción fue cancelada. Elige un plan para reactivar.'
+              : 'Acceso no disponible. Contacta soporte.'}
           </p>
           <div style={{ display:'flex', gap:'12px', justifyContent:'center', marginTop:'20px' }}>
   {(accessStatus.reason === 'trial_expired' || accessStatus.reason === 'no_access') && (
@@ -4209,7 +4255,7 @@ if (!authUser || forceResetMode) {
 
 
   return (
-    <div style={{fontFamily:"'Inter','SF Pro Text',Helvetica,sans-serif",background:T.bg,
+    <div style={{fontFamily:"'Inter','SF Pro Text',Helvetica,sans-serif",background:_thm.bg,
       minHeight:"100vh",overflowX:"hidden",maxWidth:"100vw",boxSizing:"border-box"}}>
 
       {/* ── CREATE PASSWORD MODAL (first magic link login via ?setup=1) ── */}
@@ -4244,7 +4290,7 @@ if (!authUser || forceResetMode) {
         />
       )}
 
-      {detail&&<DetailSheet pairData={detail} onClose={()=>setDetail(null)} darkMode={darkMode} T={T}/>}
+      {detail&&<DetailSheet pairData={detail} onClose={()=>setDetail(null)} darkMode={darkMode} T={_thm}/>}
       {showBillingApp && (
         <BillingModal
           user={user}
@@ -4260,29 +4306,29 @@ if (!authUser || forceResetMode) {
         authUserId={authUser?.id ?? null}/>}
 
       {/* ── HEADER ── */}
-      <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:10}}>
+      <div style={{background:_thm.card,borderBottom:`1px solid ${_thm.border}`,position:"sticky",top:0,zIndex:10}}>
         <div style={{maxWidth:1500,margin:"0 auto",padding:"0 20px"}}>
           {/* Top bar */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:48}}>
             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-              <div style={{width:26,height:26,borderRadius:6,background:T.accent,flexShrink:0,
+              <div style={{width:26,height:26,borderRadius:6,background:_thm.accent,flexShrink:0,
                 display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                   <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span style={{fontSize:14,fontWeight:700,color:T.txt,whiteSpace:"nowrap"}}>COT Tracker</span>
-              <span style={{fontSize:10,color:T.sub,padding:"1px 6px",border:`1px solid ${T.border}`,
+              <span style={{fontSize:14,fontWeight:700,color:_thm.txt,whiteSpace:"nowrap"}}>COT Tracker</span>
+              <span style={{fontSize:10,color:_thm.sub,padding:"1px 6px",border:`1px solid ${_thm.border}`,
                 borderRadius:3,letterSpacing:"0.03em",display:"none",
                 "@media(min-width:600px)":{display:"inline"}}}>
                 CFTC · LM · TFF
               </span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-              {source&&<span style={{fontSize:10,color:T.sub,maxWidth:100,overflow:"hidden",
+              {source&&<span style={{fontSize:10,color:_thm.sub,maxWidth:100,overflow:"hidden",
                 textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{source}</span>}
               <button onClick={()=>setShowSettings(true)} style={{width:28,height:28,borderRadius:"50%",
-                background:T.accent,border:"none",cursor:"pointer",flexShrink:0,
+                background:_thm.accent,border:"none",cursor:"pointer",flexShrink:0,
                 display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:11,fontWeight:700,color:"white"}}>{user.nombre[0].toUpperCase()}</span>
               </button>
@@ -4296,8 +4342,8 @@ if (!authUser || forceResetMode) {
               <button key={t.id} onClick={()=>setMainTab(t.id)} style={{
                 background:"none",border:"none",cursor:"pointer",flexShrink:0,
                 padding:"9px 14px",fontSize:12,fontWeight:mainTab===t.id?600:400,
-                color:mainTab===t.id?T.accent:T.sub,
-                borderBottom:mainTab===t.id?`2px solid ${T.accent}`:"2px solid transparent",
+                color:mainTab===t.id?_thm.accent:_thm.sub,
+                borderBottom:mainTab===t.id?`2px solid ${_thm.accent}`:"2px solid transparent",
                 fontWeight:mainTab===t.id?700:500,
                 whiteSpace:"nowrap",transition:"all 0.15s",
               }}>{t.label}</button>
@@ -4307,28 +4353,28 @@ if (!authUser || forceResetMode) {
       </div>
 
       {/* ── COT WEEKLY BANNER ── */}
-      <COTWeeklyBanner darkMode={darkMode} T={T}/>
+      <COTWeeklyBanner darkMode={darkMode} T={_thm}/>
 
       {/* ── TAB 1: CALENDARIO ── */}
       {mainTab==="calendario"&&(
-        <CalendarioTab darkMode={darkMode} T={T} lang={lang}/>
+        <CalendarioTab darkMode={darkMode} T={_thm} lang={lang}/>
       )}
 
       {/* ── TAB: MACRO ── */}
       {mainTab==="macro"&&(
-        <MacroTab darkMode={darkMode} T={T} isMobile={isMobile}/>
+        <MacroTab darkMode={darkMode} T={_thm} isMobile={isMobile}/>
       )}
 
       {/* ── TAB 2: DASHBOARD COT ── */}
       {mainTab==="sesgos"&&!pairsData&&!combinedData&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
           <div style={{fontSize:40,marginBottom:16}}>📊</div>
-          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:T.txt}}>Importa un archivo CSV del CFTC</h2>
-          <p style={{margin:"0 0 24px",fontSize:14,color:T.sub,lineHeight:1.6}}>
+          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:_thm.txt}}>Importa un archivo CSV del CFTC</h2>
+          <p style={{margin:"0 0 24px",fontSize:14,color:_thm.sub,lineHeight:1.6}}>
             El Dashboard se activa con cualquiera de las dos fuentes CFTC.
           </p>
           <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
-            cursor:"pointer",background:T.accent,color:"white",fontSize:14,fontWeight:700}}>
+            cursor:"pointer",background:_thm.accent,color:"white",fontSize:14,fontWeight:700}}>
             Ir a Importar CSV →
           </button>
         </div>
@@ -4341,13 +4387,13 @@ if (!authUser || forceResetMode) {
           {pairsData&&fxPairs.length>0&&(
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:"0.1em"}}>
+                <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
                   MARKET DECISION LAYER
                 </span>
-                <span style={{flex:1,height:1,background:T.border}}/>
-                <span style={{fontSize:9,color:T.sub2,letterSpacing:"0.05em",fontWeight:500}}>INTERPRETACIÓN · HTF+LTF · AUTO</span>
+                <span style={{flex:1,height:1,background:_thm.border}}/>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>INTERPRETACIÓN · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={T} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
             </div>
           )}
 
@@ -4371,18 +4417,18 @@ if (!authUser || forceResetMode) {
             return (
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                  <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:'0.1em'}}>
+                  <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
                     INSTITUTIONAL BIAS ENGINE
                   </span>
-                  <span style={{flex:1,height:1,background:T.border}}/>
-                  <span style={{fontSize:9,color:T.sub2,letterSpacing:'0.05em',fontWeight:500}}>HTF · SESGO SEMANAL · NO SEÑAL</span>
+                  <span style={{flex:1,height:1,background:_thm.border}}/>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>HTF · SESGO SEMANAL · NO SEÑAL</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':`repeat(${Math.min(top.length,3)},1fr)`,gap:10}}>
                   {top.map(({pair,bias})=>(
                     bias && (
                       <div key={pair}>
-                        <div style={{fontSize:10,fontWeight:700,color:T.sub,letterSpacing:'0.08em',marginBottom:6,textAlign:'center'}}>{pair}</div>
-                        <InstitutionalBiasCard biasResult={bias} darkMode={darkMode} T={T} isMobile={isMobile}/>
+                        <div style={{fontSize:10,fontWeight:700,color:_thm.sub,letterSpacing:'0.08em',marginBottom:6,textAlign:'center'}}>{pair}</div>
+                        <InstitutionalBiasCard biasResult={bias} darkMode={darkMode} T={_thm} isMobile={isMobile}/>
                       </div>
                     )
                   ))}
@@ -4398,10 +4444,10 @@ if (!authUser || forceResetMode) {
                 <span style={{fontSize:10,fontWeight:700,color:"#8b5cf6",letterSpacing:"0.1em"}}>
                   CROSS ASSET FLOW
                 </span>
-                <span style={{flex:1,height:1,background:T.border}}/>
-                <span style={{fontSize:9,color:T.sub2,letterSpacing:"0.05em",fontWeight:500}}>COMBINED · FX + ÍNDICES + BONOS</span>
+                <span style={{flex:1,height:1,background:_thm.border}}/>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>COMBINED · FX + ÍNDICES + BONOS</span>
               </div>
-              <CrossAssetFlow combinedData={combinedData} darkMode={darkMode} T={T} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
+              <CrossAssetFlow combinedData={combinedData} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
             </div>
           )}
 
@@ -4429,11 +4475,11 @@ if (!authUser || forceResetMode) {
             return (
               <div style={{marginBottom:4}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                  <span style={{fontSize:10,fontWeight:700,color:T.accent,letterSpacing:'0.1em'}}>
+                  <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
                     INTRADAY EXECUTION LAYER
                   </span>
-                  <span style={{flex:1,height:1,background:T.border}}/>
-                  <span style={{fontSize:9,color:T.sub2,letterSpacing:'0.05em',fontWeight:500}}>PERMISO OPERATIVO · NO GENERA SEÑALES</span>
+                  <span style={{flex:1,height:1,background:_thm.border}}/>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>PERMISO OPERATIVO · NO GENERA SEÑALES</span>
                 </div>
                 <IntradayExecutionCard
                   biasResult={topBias.bias}
@@ -4441,7 +4487,7 @@ if (!authUser || forceResetMode) {
                   sentimentData={sentimentData}
                   riskData={riskData}
                   darkMode={darkMode}
-                  T={T}
+                  T={_thm}
                   isMobile={isMobile}
                   isPremium={isPremium}
                   onUpgrade={openBilling}
@@ -4460,10 +4506,10 @@ if (!authUser || forceResetMode) {
       {mainTab==="historico"&&!pairsData&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
           <div style={{fontSize:40,marginBottom:16}}>📈</div>
-          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:T.txt}}>Sin datos históricos</h2>
-          <p style={{margin:"0 0 24px",fontSize:14,color:T.sub,lineHeight:1.6}}>Importa un CSV del CFTC para ver la evolución histórica semanal.</p>
+          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:_thm.txt}}>Sin datos históricos</h2>
+          <p style={{margin:"0 0 24px",fontSize:14,color:_thm.sub,lineHeight:1.6}}>Importa un CSV del CFTC para ver la evolución histórica semanal.</p>
           <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
-            cursor:"pointer",background:T.accent,color:"white",fontSize:14,fontWeight:700}}>
+            cursor:"pointer",background:_thm.accent,color:"white",fontSize:14,fontWeight:700}}>
             Ir a Importar CSV →
           </button>
         </div>
@@ -4472,36 +4518,36 @@ if (!authUser || forceResetMode) {
         <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
           <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <h2 style={{margin:0,fontSize:14,fontWeight:700,color:T.txt,letterSpacing:"0.01em"}}>Tabla Histórica de Datos</h2>
-              <p style={{margin:"3px 0 0",fontSize:11,color:T.sub}}>
+              <h2 style={{margin:0,fontSize:14,fontWeight:700,color:_thm.txt,letterSpacing:"0.01em"}}>Tabla Histórica de Datos</h2>
+              <p style={{margin:"3px 0 0",fontSize:11,color:_thm.sub}}>
                 Posicionamiento Dinero Inteligente (CFTC) · Leveraged Money · Un par por fila · Columnas por semana
               </p>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,padding:"3px 8px"}}>
+              <span style={{fontSize:10,color:_thm.sub,border:`1px solid ${_thm.border}`,borderRadius:3,padding:"3px 8px"}}>
                 Últimas {histRows} semanas
               </span>
               {histRows<8&&(
                 <button onClick={()=>setHistRows(h=>Math.min(h+2,8))} style={{
-                  fontSize:10,color:T.accent,border:`1px solid ${T.border}`,borderRadius:3,
+                  fontSize:10,color:_thm.accent,border:`1px solid ${_thm.border}`,borderRadius:3,
                   padding:"3px 8px",background:"none",cursor:"pointer"
                 }}>+ Semanas</button>
               )}
               {histRows>2&&(
                 <button onClick={()=>setHistRows(h=>Math.max(h-2,2))} style={{
-                  fontSize:10,color:T.sub,border:`1px solid ${T.border}`,borderRadius:3,
+                  fontSize:10,color:_thm.sub,border:`1px solid ${_thm.border}`,borderRadius:3,
                   padding:"3px 8px",background:"none",cursor:"pointer"
                 }}>– Semanas</button>
               )}
             </div>
           </div>
 
-          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:4,overflow:"auto"}}>
+          <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4,overflow:"auto"}}>
             {/* Dynamic header: Par | Sesgo | Net W0 | Net W-1 | Net W-2 ... | Tendencia */}
             <div style={{
               display:"grid",
               gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-              background:T.header,borderBottom:`1px solid ${T.border}`,
+              background:_thm.header,borderBottom:`1px solid ${_thm.border}`,
               minWidth: 140+120+(histRows*110)+90,
             }}>
               {["Par","Sesgo de Mercado",
@@ -4509,11 +4555,11 @@ if (!authUser || forceResetMode) {
                 "Tendencia"
               ].map((col,i)=>(
                 <div key={i} style={{
-                  fontSize:9,fontWeight:700,color:T.sub,
+                  fontSize:9,fontWeight:700,color:_thm.sub,
                   letterSpacing:"0.07em",textTransform:"uppercase",
                   textAlign:i<=1?"left":"right",
                   padding:i===0?"8px 8px 8px 16px":"8px",
-                  borderRight:i===0||i===1?`1px solid ${T.border}`:"none",
+                  borderRight:i===0||i===1?`1px solid ${_thm.border}`:"none",
                   display:i<=1?"flex":"flex",
                   alignItems:"center",
                   justifyContent:i<=1?"flex-start":"flex-end",
@@ -4546,33 +4592,33 @@ if (!authUser || forceResetMode) {
                   style={{
                     display:"grid",
                     gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-                    borderBottom:rowIdx<fxPairs.length-1?`1px solid ${T.border}`:"none",
-                    background:rowIdx%2===0?T.card:T.header,
+                    borderBottom:rowIdx<fxPairs.length-1?`1px solid ${_thm.border}`:"none",
+                    background:rowIdx%2===0?_thm.card:_thm.header,
                     cursor:"pointer",
                     transition:"background 0.1s",
                     minWidth:140+120+(histRows*110)+90,
                   }}
                   onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#eef1f6"}
-                  onMouseLeave={e=>e.currentTarget.style.background=rowIdx%2===0?T.card:T.header}
+                  onMouseLeave={e=>e.currentTarget.style.background=rowIdx%2===0?_thm.card:_thm.header}
                 >
                   {/* Par name */}
                   <div style={{
                     padding:"10px 8px 10px 16px",
-                    borderRight:`1px solid ${T.border}`,
+                    borderRight:`1px solid ${_thm.border}`,
                     display:"flex",alignItems:"center",
-                    borderLeft:`3px solid ${isBull?"#88C999":isBear?"#EF9A9A":T.border}`,
+                    borderLeft:`3px solid ${isBull?"#88C999":isBear?"#EF9A9A":_thm.border}`,
                   }}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.txt,fontFamily:"monospace"}}>{p.pair}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:_thm.txt,fontFamily:"monospace"}}>{p.pair}</span>
                   </div>
 
                   {/* Sesgo badge */}
                   <div style={{
                     padding:"0 8px",display:"flex",alignItems:"center",
-                    borderRight:`1px solid ${T.border}`,
+                    borderRight:`1px solid ${_thm.border}`,
                   }}>
                     <span style={{
                       fontSize:10,fontWeight:700,
-                      color:isBull?"#2e7d4f":isBear?"#b71c1c":T.sub,
+                      color:isBull?"#2e7d4f":isBear?"#b71c1c":_thm.sub,
                       background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"transparent",
                       padding:"2px 6px",borderRadius:2,
                     }}>{cfg.icon} {cfg.label}</span>
@@ -4587,7 +4633,7 @@ if (!authUser || forceResetMode) {
                       <div key={wIdx} style={{
                         padding:"8px",textAlign:"right",
                         background:heat.background,
-                        borderLeft:wIdx===0?`1px solid ${T.border}`:"none",
+                        borderLeft:wIdx===0?`1px solid ${_thm.border}`:"none",
                         borderRight:`1px solid rgba(0,0,0,0.03)`,
                         transition:"background 0.15s",
                       }}>
@@ -4611,14 +4657,14 @@ if (!authUser || forceResetMode) {
                   })}
 
                   {/* Tendencia */}
-                  <div style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${T.border}`}}>
+                  <div style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${_thm.border}`}}>
                     <div style={{
                       fontSize:11,fontWeight:700,fontFamily:"monospace",
                       color:trendSum>0?"#2e7d4f":trendSum<0?"#b71c1c":"#9E9E9E",
                     }}>
                       {trendSum>0?"▲":trendSum<0?"▼":"–"} {Math.abs(trendSum).toLocaleString("en-US")}
                     </div>
-                    <div style={{fontSize:9,color:T.sub,marginTop:1}}>
+                    <div style={{fontSize:9,color:_thm.sub,marginTop:1}}>
                       {changes.length} sem.
                     </div>
                   </div>
@@ -4627,7 +4673,7 @@ if (!authUser || forceResetMode) {
             })}
           </div>
 
-          <p style={{textAlign:"center",fontSize:10,color:T.sub,marginTop:10,letterSpacing:"0.03em"}}>
+          <p style={{textAlign:"center",fontSize:10,color:_thm.sub,marginTop:10,letterSpacing:"0.03em"}}>
             Haz clic en cualquier par para ver el desglose semanal completo ·
             Fuente: CFTC.gov · Leveraged Money · Datos procesados localmente
           </p>
@@ -4635,18 +4681,18 @@ if (!authUser || forceResetMode) {
           {/* ── SESGO DE MERCADO (tabla de pares COT) ── */}
           {/* Summary bar */}
           {pairsData&&<div style={{display:"flex",gap:6,marginBottom:12,marginTop:24,padding:"10px 12px",flexWrap:"wrap",
-            background:T.card,border:`1px solid ${T.border}`,borderRadius:10}}>
-            <span style={{fontSize:11,color:T.sub,alignSelf:"center",fontWeight:600,
+            background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:10}}>
+            <span style={{fontSize:11,color:_thm.sub,alignSelf:"center",fontWeight:600,
               letterSpacing:"0.05em",display:isMobile?"none":"inline"}}>SESGO DEL MERCADO:</span>
             {[
-              {label:`${buys} Sesgo Alcista`,   color:T.bullTxt, bg:"rgba(136,201,153,0.12)"},
-              {label:`${sells} Sesgo Bajista`,  color:T.bearTxt, bg:"rgba(239,154,154,0.12)"},
-              {label:`${displayPairs.length-buys-sells} Neutro/Div.`, color:T.sub, bg:"rgba(180,180,180,0.08)"},
+              {label:`${buys} Sesgo Alcista`,   color:_thm.bullTxt, bg:"rgba(136,201,153,0.12)"},
+              {label:`${sells} Sesgo Bajista`,  color:_thm.bearTxt, bg:"rgba(239,154,154,0.12)"},
+              {label:`${displayPairs.length-buys-sells} Neutro/Div.`, color:_thm.sub, bg:"rgba(180,180,180,0.08)"},
             ].map(p=>(
               <span key={p.label} style={{fontSize:12,fontWeight:600,color:p.color,background:p.bg,
                 padding:"4px 10px",borderRadius:3}}>{p.label}</span>
             ))}
-            {!isMobile&&<span style={{marginLeft:"auto",fontSize:10,color:T.sub,alignSelf:"center"}}>
+            {!isMobile&&<span style={{marginLeft:"auto",fontSize:10,color:_thm.sub,alignSelf:"center"}}>
               Datos Importados según CFTC · Posicionamiento Dinero Inteligente
             </span>}
           </div>}
@@ -4657,7 +4703,7 @@ if (!authUser || forceResetMode) {
             gap:0,padding:"6px 16px",marginBottom:4}}>
             {[["pair","Par Divisa"],["net","Contratos Netos LM"],["signal","Sesgo de Mercado"],[null,"Evolución WoW"],[null,""]].map(([c,l],i)=>(
               <div key={i} onClick={()=>c&&handleSort(c)}
-                style={{fontSize:10,fontWeight:700,color:sort.col===c?T.accent:T.sub,
+                style={{fontSize:10,fontWeight:700,color:sort.col===c?_thm.accent:_thm.sub,
                   letterSpacing:"0.07em",textTransform:"uppercase",cursor:c?"pointer":"default",
                   userSelect:"none",textAlign:i===0?"left":"right",paddingRight:i===0?0:8}}>
                 {l}{c&&sortArrow(c)}
@@ -4678,9 +4724,9 @@ if (!authUser || forceResetMode) {
               return (
                 <div key={p.pair}
                   style={{
-                    background:T.card,
-                    border:`1px solid ${T.border}`,
-                    borderLeft:`3px solid ${isBull?T.bull:isBear?T.bear:T.border}`,
+                    background:_thm.card,
+                    border:`1px solid ${_thm.border}`,
+                    borderLeft:`3px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
                     borderRadius: isMobile ? 10 : 4,
                     padding: isMobile ? "12px 14px" : "10px 16px",
                     display: isMobile ? "flex" : "grid",
@@ -4694,7 +4740,7 @@ if (!authUser || forceResetMode) {
                     animationDelay:`${i*0.03}s`,
                   }}
                   onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#f8f9fc"}
-                  onMouseLeave={e=>e.currentTarget.style.background=T.card}
+                  onMouseLeave={e=>e.currentTarget.style.background=_thm.card}
                   onClick={()=>setDetail(p)}
                 >
                   {isMobile ? (
@@ -4703,24 +4749,24 @@ if (!authUser || forceResetMode) {
                       {/* Par + WHY */}
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                          <span style={{fontSize:15,fontWeight:700,color:T.txt}}>{p.pair}</span>
-                          <span style={{fontSize:9,color:T.accent,border:`1px solid ${T.accent}`,
+                          <span style={{fontSize:15,fontWeight:700,color:_thm.txt}}>{p.pair}</span>
+                          <span style={{fontSize:9,color:_thm.accent,border:`1px solid ${_thm.accent}`,
                             borderRadius:2,padding:"1px 4px",fontWeight:600}}>WHY</span>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:13,fontWeight:700,color:isBull?T.bullTxt:isBear?T.bearTxt:T.sub}}>
+                          <span style={{fontSize:13,fontWeight:700,color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub}}>
                             {fK(latest.smartNet)}
                           </span>
-                          <span style={{fontSize:11,color:trend>0?T.bullTxt:trend<0?T.bearTxt:T.sub}}>
+                          <span style={{fontSize:11,color:trend>0?_thm.bullTxt:trend<0?_thm.bearTxt:_thm.sub}}>
                             {trend!==0?(trend>0?"▲ ":"▼ ")+fK(Math.abs(trend))+" sem.":""}
                           </span>
                         </div>
                       </div>
                       {/* Sesgo badge */}
                       <span style={{fontSize:11,fontWeight:700,flexShrink:0,
-                        color:isBull?T.bullTxt:isBear?T.bearTxt:T.sub,
+                        color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
                         background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"rgba(180,180,180,0.08)",
-                        border:`1px solid ${isBull?T.bull:isBear?T.bear:T.border}`,
+                        border:`1px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
                         padding:"5px 10px",borderRadius:6}}>
                         {cfg.icon} {cfg.label}
                       </span>
@@ -4732,7 +4778,7 @@ if (!authUser || forceResetMode) {
                   {/* Pair name + tooltip trigger */}
                   <div style={{position:"relative"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.txt,letterSpacing:"0.02em",fontVariantNumeric:"tabular-nums"}}>{p.pair}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:_thm.txt,letterSpacing:"0.02em",fontVariantNumeric:"tabular-nums"}}>{p.pair}</span>
                       <span
                         onMouseEnter={(e)=>{
                           e.stopPropagation();
@@ -4742,7 +4788,7 @@ if (!authUser || forceResetMode) {
                           setTooltip(p.pair);
                         }}
                         onMouseLeave={()=>setTooltip(null)}
-                        style={{fontSize:9,color:T.accent,border:`1px solid ${T.accent}`,borderRadius:2,
+                        style={{fontSize:9,color:_thm.accent,border:`1px solid ${_thm.accent}`,borderRadius:2,
                           padding:"1px 4px",cursor:"help",fontWeight:600,letterSpacing:"0.05em",flexShrink:0}}>
                         WHY
                       </span>
@@ -4773,21 +4819,21 @@ if (!authUser || forceResetMode) {
                   {/* Net position bar */}
                   <div style={{paddingRight:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,height:4,background:T.border,borderRadius:99,overflow:"hidden",minWidth:60}}>
+                      <div style={{flex:1,height:4,background:_thm.border,borderRadius:99,overflow:"hidden",minWidth:60}}>
                         <div style={{
                           width:`${Math.min(100,Math.abs(latest.smartPctL-50)*2)}%`,
                           height:"100%",
-                          background:isBull?T.bull:isBear?T.bear:"#BDBDBD",
+                          background:isBull?_thm.bull:isBear?_thm.bear:"#BDBDBD",
                           marginLeft:latest.smartNet<0?0:`${Math.max(0,50-(latest.smartPctL-50))}%`,
                           borderRadius:99,
                         }}/>
                       </div>
-                      <span style={{fontSize:12,fontWeight:700,color:isBull?T.bullTxt:isBear?T.bearTxt:T.sub,
+                      <span style={{fontSize:12,fontWeight:700,color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
                         fontVariantNumeric:"tabular-nums",minWidth:52,textAlign:"right"}}>
                         {fK(latest.smartNet)}
                       </span>
                     </div>
-                    <div style={{fontSize:10,color:trend>0?T.bullTxt:trend<0?T.bearTxt:T.sub,marginTop:3,textAlign:"right"}}>
+                    <div style={{fontSize:10,color:trend>0?_thm.bullTxt:trend<0?_thm.bearTxt:_thm.sub,marginTop:3,textAlign:"right"}}>
                       {trend!==0?(trend>0?"▲ ":"▼ ")+fK(Math.abs(trend))+" sem.":"sin cambio"}
                     </div>
                   </div>
@@ -4795,15 +4841,15 @@ if (!authUser || forceResetMode) {
                   {/* Sesgo badge */}
                   <div style={{textAlign:"right",paddingRight:8}}>
                     <span style={{display:"inline-block",fontSize:10,fontWeight:700,
-                      color:isBull?T.bullTxt:isBear?T.bearTxt:T.sub,
+                      color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
                       background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"rgba(180,180,180,0.08)",
-                      border:`1px solid ${isBull?T.bull:isBear?T.bear:T.border}`,
+                      border:`1px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
                       padding:"3px 8px",borderRadius:3,letterSpacing:"0.04em"}}>
                       {cfg.icon} {cfg.label}
                     </span>
-                    <div style={{fontSize:9,color:T.sub,marginTop:3,letterSpacing:"0.04em"}}>
+                    <div style={{fontSize:9,color:_thm.sub,marginTop:3,letterSpacing:"0.04em"}}>
                       Fuerza: {["·","·","·"].map((d,i)=>(
-                        <span key={i} style={{color:i<signal.strength?T.accent:T.border}}>{d} </span>
+                        <span key={i} style={{color:i<signal.strength?_thm.accent:_thm.border}}>{d} </span>
                       ))}
                     </div>
                   </div>
@@ -4814,7 +4860,7 @@ if (!authUser || forceResetMode) {
                   </div>
 
                   {/* Arrow */}
-                  <div style={{textAlign:"right",color:T.sub,fontSize:12}}>›</div>
+                  <div style={{textAlign:"right",color:_thm.sub,fontSize:12}}>›</div>
                   </>
                   )}
                 </div>
@@ -4824,12 +4870,12 @@ if (!authUser || forceResetMode) {
 
           {/* Methodology footer */}
           {pairsData&&<div style={{marginTop:16,padding:"12px 16px",
-            background:T.card,border:`1px solid ${T.border}`,borderRadius:4}}>
+            background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
               <div>
-                <span style={{fontSize:10,fontWeight:700,color:T.sub,letterSpacing:"0.07em",textTransform:"uppercase"}}>Metodología</span>
-                <p style={{margin:"4px 0 0",fontSize:11,color:T.sub,lineHeight:1.6}}>
-                  Posicionamiento Dinero Inteligente (CFTC) basado en el grupo <strong style={{color:T.txt}}>Leveraged Money</strong> del informe TFF.
+                <span style={{fontSize:10,fontWeight:700,color:_thm.sub,letterSpacing:"0.07em",textTransform:"uppercase"}}>Metodología</span>
+                <p style={{margin:"4px 0 0",fontSize:11,color:_thm.sub,lineHeight:1.6}}>
+                  Posicionamiento Dinero Inteligente (CFTC) basado en el grupo <strong style={{color:_thm.txt}}>Leveraged Money</strong> del informe TFF.
                   Sesgo de Mercado confirmado requiere ≥3 informes CFTC consecutivos en la misma dirección.
                 </p>
               </div>
@@ -4853,10 +4899,10 @@ if (!authUser || forceResetMode) {
         <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"14px":"28px 32px"}}>
           {/* Page header */}
           <div style={{marginBottom:22}}>
-            <h2 style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:T.txt,letterSpacing:"-0.2px"}}>
+            <h2 style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:_thm.txt,letterSpacing:"-0.2px"}}>
               Importar Datos CFTC
             </h2>
-            <p style={{margin:0,fontSize:11,color:T.sub}}>
+            <p style={{margin:0,fontSize:11,color:_thm.sub}}>
               Dos fuentes independientes · TFF Futures Only + Combined · Publicado cada viernes 21:30h CET
             </p>
           </div>
@@ -4866,7 +4912,7 @@ if (!authUser || forceResetMode) {
             title="Traders in Financial Futures — Futures Only"
             subtitle="Fuente principal · Bias Engine · Intraday Execution · Tabla FX"
             badge="ACTIVO"
-            accentColor={T.accent}
+            accentColor={_thm.accent}
             loaded={!!pairsData}
             loadedLabel={`${pairsData?.length||0} pares · ${source}`}
             loadedSub="Dashboard COT activo"
@@ -4883,7 +4929,7 @@ if (!authUser || forceResetMode) {
             badges={["EURUSD","GBPUSD","USDJPY","DXY","AUDUSD","NZDUSD","USDCAD","USDCHF"]}
             modules={["Bias Engine · Swing Trading","Intraday Execution Layer","FX Table · 8 pares","Market Decision Layer"]}
             darkMode={darkMode}
-            T={T}
+            T={_thm}
             isMobile={isMobile}
           />
 
@@ -4909,11 +4955,11 @@ if (!authUser || forceResetMode) {
             badges={["SP500","NAS100","US10Y","US2Y","EURUSD","DXY","GBPUSD","USDJPY"]}
             modules={["Cross Asset Flow","Rotaciones institucionales","Índices + Bonos","Flujo opciones incluido"]}
             darkMode={darkMode}
-            T={T}
+            T={_thm}
             isMobile={isMobile}
           />
 
-          <p style={{textAlign:"center",fontSize:10,color:T.sub2,marginTop:6,letterSpacing:"0.02em"}}>
+          <p style={{textAlign:"center",fontSize:10,color:_thm.sub2,marginTop:6,letterSpacing:"0.02em"}}>
             Datos procesados localmente · No se envía información a ningún servidor · Fuente: CFTC.gov
           </p>
         </div>
@@ -4922,12 +4968,12 @@ if (!authUser || forceResetMode) {
       {/* ── TAB 5: AJUSTES ── */}
       {mainTab==="cuenta"&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
-          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:4,padding:"24px"}}>
-            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:T.txt}}>Ajustes de Cuenta</h2>
-            <p style={{margin:"0 0 20px",fontSize:11,color:T.sub}}>Gestiona tu perfil, plan de suscripción y preferencias</p>
+          <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4,padding:"24px"}}>
+            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:_thm.txt}}>Ajustes de Cuenta</h2>
+            <p style={{margin:"0 0 20px",fontSize:11,color:_thm.sub}}>Gestiona tu perfil, plan de suscripción y preferencias</p>
             <button onClick={()=>setShowSettings(true)} style={{
               padding:"10px 20px",borderRadius:4,border:"none",cursor:"pointer",
-              background:T.accent,color:"white",fontSize:12,fontWeight:600,
+              background:_thm.accent,color:"white",fontSize:12,fontWeight:600,
             }}>Abrir panel de ajustes</button>
           </div>
         </div>
@@ -4936,7 +4982,7 @@ if (!authUser || forceResetMode) {
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-        body { background: ${T.bg}; color: ${T.txt}; }
+        body { background: ${_thm.bg}; color: ${_thm.txt}; }
       `}</style>
     </div>
   );

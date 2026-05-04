@@ -1,25 +1,14 @@
 /**
- * authService.js — v4 (NUEVO USUARIO: magic link con shouldCreateUser:true)
+ * authService.js — v5 (DOMINIO CORRECTO: app.cot-tracker.com)
  *
- * CAMBIO CRÍTICO:
- *   shouldCreateUser: true  ← permite que usuarios nuevos se creen via magic link
- *
- * FLUJO CORRECTO PARA NUEVOS USUARIOS:
- *   1. Usuario introduce email
- *   2. signInWithOtp({ shouldCreateUser: true }) → Supabase crea auth.users si no existe
- *   3. Usuario recibe email con magic link
- *   4. Click en enlace → /auth/callback → exchangeCodeForSession → SIGNED_IN
- *   5. Trigger on_auth_user_created → crea fila en users_access automáticamente
- *   6. AuthProvider.loadProfile con retry → encuentra la fila
- *   7. Usuario entra al dashboard con onboarding modal
- *
- * Por qué shouldCreateUser:true es seguro aquí:
- *   - Sólo permite login a quien recibe el email (el email es la verificación)
- *   - El trigger crea users_access con plan='trial' y status='active'
- *   - El acceso real se controla por plan/expires_at, no por existir en auth.users
+ * emailRedirectTo → https://app.cot-tracker.com/auth/callback
+ * resetPassword   → https://app.cot-tracker.com/auth/callback
  */
 
 import { supabase } from './supabase.js';
+
+// ─── App base URL — single source of truth ───────────────────────────────────
+const APP_URL = 'https://app.cot-tracker.com';
 
 // ─── Normalize email ──────────────────────────────────────────────────────────
 export function normalizeEmail(email) {
@@ -71,7 +60,7 @@ export async function loginWithEmail(email) {
   const { error } = await supabase.auth.signInWithOtp({
     email: emailClean,
     options: {
-      emailRedirectTo: 'https://cot-tracker.vercel.app/auth/callback',
+      emailRedirectTo: 'https://app.cot-tracker.com/auth/callback',
       shouldCreateUser: true,  // ← CRÍTICO: permite nuevos usuarios
     },
   });
@@ -101,7 +90,7 @@ export async function resetPassword(email) {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(emailClean, {
-    redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+    redirectTo: `${APP_URL}/auth/callback?type=recovery`,
   });
 
   return { error };

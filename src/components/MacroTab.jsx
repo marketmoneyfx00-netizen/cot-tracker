@@ -162,25 +162,10 @@ function Arrow({ dir, size = 14 }) {
 // Supports hover (desktop) + click/tap toggle (mobile).
 // Viewport-clamped: never overflows left/right edges or bottom of screen.
 
-const TOOLTIP_ROOT_ID = '__macro_tip_root__';
-
-function getTooltipRoot() {
-  let el = document.getElementById(TOOLTIP_ROOT_ID);
-  if (!el) {
-    el = document.createElement('div');
-    el.id = TOOLTIP_ROOT_ID;
-    // Must sit above everything, including modals/sidebars
-    Object.assign(el.style, {
-      position: 'fixed', top: '0', left: '0',
-      width: '0', height: '0',
-      overflow: 'visible',
-      zIndex: '2147483647',  // max possible z-index
-      pointerEvents: 'none',
-    });
-    document.body.appendChild(el);
-  }
-  return el;
-}
+// Portal target is document.body — React owns removeChild on body and never fails.
+// NEVER use a manually-managed singleton div (document.createElement + appendChild):
+// in React StrictMode + conditional renders, React's portal cleanup calls removeChild
+// on a div it doesn't track, causing "NotFoundError: removeChild" crashes.
 
 function InfoTip({ text, tm }) {
   const [open, setOpen] = useState(false);
@@ -253,7 +238,7 @@ function InfoTip({ text, tm }) {
     >
       {text}
     </div>,
-    getTooltipRoot()
+    document.body
   ) : null;
 
   return (

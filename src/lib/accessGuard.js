@@ -1,51 +1,60 @@
 /**
- * src/lib/accessGuard.js — v5 (RETRY para nuevos usuarios)
+ * src/lib/accessGuard.js — v8 (DETERMINISTA, SIN BGLOOP)
  *
- * PROBLEMA RESUELTO:
- *   Cuando un usuario nuevo hace click en el magic link:
- *   1. Supabase crea auth.users (SIGNED_IN event)
- *   2. El trigger on_auth_user_created crea users_access
- *   3. El frontend consulta users_access inmediatamente
- *   → La fila puede no existir todavía (race condition de ~200-800ms)
+ * El background loop y el synthetic profile como solución prolongada
+ * han sido ELIMINADOS. La garantía de fila en users_access es ahora
+ * responsabilidad de AuthCallback antes de redirigir a la app.
  *
- * SOLUCIÓN: loadUserProfile con retry exponencial
- *   - Intento 1: inmediato
- *   - Intento 2: 600ms después
- *   - Intento 3: 1.4s después
- *   - Intento 4: 2.6s después
- *   - Intento 5: 4.2s después
- *   Total máx: ~5s antes de darse por vencido
+ * FLUJO DE CARGA:
+ *   1. Retry × 5 con backoff (~4s total)
+ *      — Cubre la race condition del trigger handle_new_user
+ *      — Para nuevos usuarios: AuthCallback ya creó la fila, intento 0 la encuentra
+ *      — Para re-logins: fila existe desde el primer login
  *
- * Si tras todos los reintentos no hay fila:
- *   → Usuario nuevo sin trigger configurado, o trigger falló
- *   → Crear fila mínima via RPC create_user_access_if_missing
- *   → El usuario entra con plan 'trial'
+ *   2. RPC ensure_user_access (SECURITY DEFINER)
+ *      — Último recurso si los 5 reintentos no encuentran fila
+ *      — Cubre edge cases: DB delayed, usuario con password (no pasa por AuthCallback)
+ *
+ *   3. Re-fetch tras RPC
+ *      — Confirma que la fila fue creada
+ *
+ *   4. Si aún no hay fila: error real (DB caída, RPC no deployado)
+ *      — accessStatus.reason = 'db_error'
+ *      — App muestra pantalla de error con retry, no bloqueo de paywall
+ *      — NO synthetic profile de larga duración
+ *
+ * CASOS DE USO Y RESULTADO ESPERADO:
+ *   Usuario nuevo vía magic link:        intento 0 → fila ya existe (AuthCallback)
+ *   Re-login con contraseña:             intento 0 → fila existe (primer login la creó)
+ *   Trigger retrasado:                   intento 2-3 → fila encontrada
+ *   Trigger sin deployar + RPC OK:       retry × 5 → RPC crea fila → re-fetch OK
+ *   DB temporalmente caída:              todos los intentos fallan → error explícito
  */
 
 import { supabase } from './supabase.js';
 
-// ─── RETRY CONFIG ─────────────────────────────────────────────────────────────
-const RETRY_DELAYS_MS = [0, 600, 800, 1200, 1600]; // 5 intentos, total ~4.2s
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-// ─── LOAD PROFILE WITH RETRY ──────────────────────────────────────────────────
-/**
- * Carga el perfil del usuario con retry para manejar la race condition
- * entre auth.users creado y el trigger que crea users_access.
- *
- * @param {string} authUid - auth.users.id (obligatorio)
- * @param {object} authUser - objeto completo del usuario autenticado (para fallback)
- * @returns {{ profile: object|null, error: Error|null }}
- */
+const RETRY_DELAYS_MS = [0, 600, 800, 1200, 1600]; // 5 intentos, ~4.2s total
+
+const PROFILE_SELECT =
+  'id, email, plan, status, auth_user_id, stripe_customer_id, ' +
+  'expires_at, access_type, onboarding_completed, first_login_at, ' +
+  'market_selected, telegram_username, created_at, last_login, ' +
+  'password_created, trading_level, trading_goal';
+
+// ─── LOAD PROFILE ─────────────────────────────────────────────────────────────
+
 export async function loadUserProfile(authUid, authUser = null) {
   if (!authUid) {
-    console.error('[accessGuard] loadUserProfile called without authUid');
+    console.error('[accessGuard] No authUid');
     return { profile: null, error: new Error('authUid required') };
   }
 
   let lastError = null;
 
+  // ── Capa 1: Retry con backoff ─────────────────────────────────────────────
   for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
-    // Esperar antes del intento (excepto el primero)
     if (RETRY_DELAYS_MS[attempt] > 0) {
       await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
     }
@@ -53,115 +62,92 @@ export async function loadUserProfile(authUid, authUser = null) {
     try {
       const { data, error } = await supabase
         .from('users_access')
-        .select(
-          'id, email, plan, status, auth_user_id, stripe_customer_id, ' +
-          'expires_at, access_type, onboarding_completed, first_login_at, ' +
-          'market_selected, telegram_username, created_at, last_login'
-        )
+        .select(PROFILE_SELECT)
         .eq('auth_user_id', authUid)
         .maybeSingle();
 
       if (error) {
-        console.warn(`[accessGuard] DB error (attempt ${attempt + 1}):`, error.message);
+        console.warn(`[accessGuard] Attempt ${attempt + 1} DB error:`, error.message);
         lastError = error;
-        continue; // reintentar en errores de red
+        continue;
       }
 
       if (data) {
         if (attempt > 0) {
-          console.log(`[accessGuard] Profile found on retry ${attempt + 1} | auth_user_id:`, authUid);
-        } else {
-          console.log(
-            '[accessGuard] Profile found | auth_user_id:', authUid,
-            '| status:', data.status,
-            '| plan:', data.plan
-          );
+          console.log(`[accessGuard] Profile found on retry ${attempt + 1} for:`, authUid);
         }
         return { profile: data, error: null };
       }
 
-      // data es null — fila no existe todavía
       if (attempt < RETRY_DELAYS_MS.length - 1) {
-        console.log(
-          `[accessGuard] No profile yet (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length}) ` +
-          `— retrying in ${RETRY_DELAYS_MS[attempt + 1]}ms...`
-        );
+        console.log(`[accessGuard] No row (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length}), retrying`);
       }
 
     } catch (err) {
-      console.warn(`[accessGuard] Exception (attempt ${attempt + 1}):`, err.message);
+      console.warn(`[accessGuard] Attempt ${attempt + 1} exception:`, err.message);
       lastError = err;
     }
   }
 
-  // Todos los reintentos fallaron → usuario nuevo sin trigger
-  // Intentar crear la fila via RPC de seguridad
-  console.warn(
-    '[accessGuard] Profile not found after all retries for:', authUid,
-    '— attempting auto-create'
+  // ── Capa 2: RPC ensure_user_access (SECURITY DEFINER) ────────────────────
+  if (authUser?.id && authUser?.email) {
+    console.warn('[accessGuard] Calling ensure_user_access RPC for:', authUser.email);
+
+    try {
+      const { error: rpcErr } = await supabase.rpc('ensure_user_access', {
+        p_auth_user_id: authUser.id,
+        p_email:        authUser.email,
+      });
+
+      if (rpcErr) {
+        console.error('[accessGuard] RPC error:', rpcErr.code, rpcErr.message);
+      }
+
+      // ── Capa 3: Re-fetch tras RPC ─────────────────────────────────────────
+      const { data: row, error: fetchErr } = await supabase
+        .from('users_access')
+        .select(PROFILE_SELECT)
+        .eq('auth_user_id', authUser.id)
+        .maybeSingle();
+
+      if (!fetchErr && row) {
+        console.log('[accessGuard] Profile created by RPC for:', authUser.email);
+        return { profile: row, error: null };
+      }
+    } catch (err) {
+      console.error('[accessGuard] RPC exception:', err.message);
+      lastError = err;
+    }
+  }
+
+  // ── Error real: DB no disponible o RPC no deployado ───────────────────────
+  // Para usuarios que llegaron por AuthCallback: esto no debería ocurrir
+  // (AuthCallback ya garantizó la fila). Si ocurre, es un error de infraestructura.
+  // Para re-logins con contraseña: la fila existe desde el primer login.
+  // Si llega aquí: la DB está caída o hay un problema grave.
+  console.error(
+    '[accessGuard] Profile unresolvable after all attempts for:', authUid,
+    '— Likely DB connectivity issue or ensure_user_access RPC not deployed'
   );
 
-  if (authUser?.id) {
-    const created = await ensureUserAccessExists(authUser);
-    if (created) {
-      return { profile: created, error: null };
-    }
-  }
-
-  console.error('[accessGuard] Failed to load or create profile for:', authUid);
-  return { profile: null, error: lastError ?? new Error('profile_not_found') };
+  return {
+    profile: null,
+    error: lastError ?? new Error('db_error'),
+  };
 }
 
-// ─── AUTO-CREATE FALLBACK ─────────────────────────────────────────────────────
-/**
- * Crea una fila mínima en users_access si no existe.
- * Solo se usa como fallback cuando el trigger falla.
- * Llama al RPC ensure_user_access (ver migration SQL).
- */
-async function ensureUserAccessExists(authUser) {
-  if (!authUser?.id || !authUser?.email) return null;
+// ─── STUBS ────────────────────────────────────────────────────────────────────
 
-  try {
-    const { data, error } = await supabase.rpc('ensure_user_access', {
-      p_auth_user_id: authUser.id,
-      p_email:        authUser.email,
-    });
-
-    if (error) {
-      console.error('[accessGuard] ensure_user_access RPC failed:', error.message);
-      return null;
-    }
-
-    console.log('[accessGuard] ensure_user_access created row for:', authUser.email);
-
-    // Re-fetch the profile after creation
-    const { data: profile } = await supabase
-      .from('users_access')
-      .select(
-        'id, email, plan, status, auth_user_id, stripe_customer_id, ' +
-        'expires_at, access_type, onboarding_completed, first_login_at, ' +
-        'market_selected, telegram_username, created_at, last_login'
-      )
-      .eq('auth_user_id', authUser.id)
-      .maybeSingle();
-
-    return profile ?? null;
-  } catch (err) {
-    console.error('[accessGuard] ensureUserAccessExists exception:', err.message);
-    return null;
-  }
-}
-
-// Stub — mantenido para compatibilidad de imports
 export async function loadUserSubscription(_unused) {
   return { subscription: null, error: null };
 }
 
-// ─── HAS ACTIVE ACCESS ────────────────────────────────────────────────────────
+// ─── ACCESS HELPERS ───────────────────────────────────────────────────────────
+
 export function hasActiveAccess(profile) {
   if (!profile) return false;
   const status = (profile.status ?? '').toLowerCase();
-  if (status !== 'active' && status !== 'trial') return false;
+  if (status !== 'active' && status !== 'trial' && status !== 'free') return false;
   const expiry = profile.expires_at ?? profile.valid_until ?? null;
   if (expiry && new Date(expiry) < new Date()) return false;
   return true;
@@ -176,14 +162,13 @@ export function isTrialExpired(profile) {
   return new Date(expires) < new Date();
 }
 
-// ─── GET ACCESS STATUS ────────────────────────────────────────────────────────
 export function getAccessStatus(profile) {
   if (!profile) {
     return {
       hasAccess: false,
-      reason: 'not_purchased',
-      plan: 'none',
-      status: 'inactive',
+      reason:    'db_error',
+      plan:      'none',
+      status:    'error',
       expiresAt: null,
       isExpired: false,
     };
@@ -199,6 +184,7 @@ export function getAccessStatus(profile) {
     if (isTrialExpired(profile))     reason = 'trial_expired';
     else if (status === 'cancelled') reason = 'cancelled';
     else if (status === 'expired')   reason = 'expired';
+    else if (status === 'suspended') reason = 'suspended';
     else                             reason = 'no_access';
   }
 
