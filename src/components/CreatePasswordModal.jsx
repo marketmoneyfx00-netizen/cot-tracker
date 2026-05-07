@@ -176,6 +176,7 @@ export default function CreatePasswordModal({ profile, onDone }) {
                   <button
                     type="button"
                     onClick={() => setShowPw(v => !v)}
+                    aria-label={showPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)',
                       background:'none', border:'none', cursor:'pointer', color:'#5a6070',
                       fontSize:17, padding:0, lineHeight:1 }}>

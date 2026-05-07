@@ -14,6 +14,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import InterestRatePanel from './InterestRatePanel.jsx';
+import { supabase } from '../lib/supabase.js';
 
 // ── MOCK DATA ─────────────────────────────────────────────────────────────────
 const MOCK = {
@@ -748,7 +749,11 @@ export default function MacroTab({ darkMode, T, isMobile }) {
   async function fetchMacro() {
     setLoading(true); setError(null);
     try {
-      const res  = await fetch('/api/macro');
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+      const res  = await fetch('/api/macro', { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);

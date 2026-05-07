@@ -59,13 +59,17 @@ function resolvePlan(...candidates) {
 function resolveValidUntil(periodEnd, planId) {
   if (periodEnd && typeof periodEnd === 'number') {
     const d = new Date(periodEnd * 1000);
-    console.log(`[fulfillment] valid_until from period_end: ${d.toISOString()}`);
-    return d;
+    // Rechazar fechas en el pasado (reembolsos, ajustes de Stripe)
+    if (d.getTime() > Date.now()) {
+      console.log(`[fulfillment] valid_until from period_end: ${d.toISOString()}`);
+      return d;
+    }
+    console.warn(`[fulfillment] WARN: period_end is in the past (${d.toISOString()}) — using plan fallback`);
   }
   const days = PLAN_FALLBACK_DAYS[planId] ?? 30;
   const d = new Date();
   d.setDate(d.getDate() + days);
-  console.warn(`[fulfillment] WARN: period_end missing — ${days}d fallback: ${d.toISOString()}`);
+  console.warn(`[fulfillment] WARN: period_end missing/past — ${days}d fallback: ${d.toISOString()}`);
   return d;
 }
 

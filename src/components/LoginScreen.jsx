@@ -107,13 +107,29 @@ export default function LoginScreen() {
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState('');
 
-  const [showToast, setShowToast] = useState(false);
+  const [showToast, setShowToast]     = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [resendTimer, setResendTimer]   = useState(0);
+
+  // Validación de email en tiempo real
+  const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+  const emailValid = EMAIL_RE.test(normalizeEmail(email));
+  const showEmailError = emailTouched && email.length > 0 && !emailValid;
 
   const reset = (newMode) => {
     setMode(newMode);
     setError('');
     setSuccess('');
+    setEmailTouched(false);
+    setResendTimer(0);
   };
+
+  // Cuenta atrás para reenviar magic link
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(v => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
 
   // Auto-close toast + redirect after password update in reset flow
   useEffect(() => {
@@ -145,10 +161,8 @@ export default function LoginScreen() {
 
     if (authError) {
       const msg = authError.message?.toLowerCase() ?? '';
-      if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password')) {
+      if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password') || msg.includes('user not found') || msg.includes('no user')) {
         setError('Email o contraseña incorrectos. Verifica tus datos o usa el enlace por email.');
-      } else if (msg.includes('user not found') || msg.includes('no user')) {
-        setError('Correo no registrado. Contacta al administrador.');
       } else if (msg.includes('email not confirmed')) {
         setError('Confirma tu email primero. Revisa tu bandeja de entrada.');
       } else if (msg.includes('rate limit') || msg.includes('too many')) {
@@ -182,7 +196,8 @@ export default function LoginScreen() {
       }
       return;
     }
-    setSuccess('Enlace enviado. Revisa tu bandeja de entrada (y spam).');
+    setSuccess('Enlace enviado. Revisa tu bandeja de entrada (y la carpeta spam).');
+    setResendTimer(60);
   };
 
   // ── Forgot password ─────────────────────────────────────────────────────────
@@ -259,29 +274,28 @@ export default function LoginScreen() {
 
             {/* ── PASSWORD MODE ── */}
             {mode === 'password' && !success && (
-              <>
+              <form onSubmit={e => { e.preventDefault(); handlePasswordLogin(); }} noValidate>
                 <div style={{ marginBottom: 14 }}>
-                  <label style={labelStyle}>Correo electrónico</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handlePasswordLogin()}
+                  <label style={labelStyle} htmlFor="ls-email">Correo electrónico</label>
+                  <input id="ls-email" type="email" value={email} onChange={e => setEmail(e.target.value)}
                     placeholder="tu@email.com" autoComplete="email" style={inputStyle}/>
                 </div>
 
                 <div style={{ marginBottom: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label style={{ ...labelStyle, marginBottom: 0 }}>Contraseña</label>
-                    <button onClick={() => reset('forgot')}
+                    <label style={{ ...labelStyle, marginBottom: 0 }} htmlFor="ls-password">Contraseña</label>
+                    <button type="button" onClick={() => reset('forgot')}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#0055cc', fontWeight: 600, padding: 0 }}>
                       ¿Olvidaste tu contraseña?
                     </button>
                   </div>
                   <div style={{ position: 'relative' }}>
-                    <input type={showPw ? 'text' : 'password'} value={password}
+                    <input id="ls-password" type={showPw ? 'text' : 'password'} value={password}
                       onChange={e => setPassword(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handlePasswordLogin()}
                       placeholder="••••••••" autoComplete="current-password"
                       style={{ ...inputStyle, paddingRight: 44 }}/>
-                    <button onClick={() => setShowPw(v => !v)}
+                    <button type="button" onClick={() => setShowPw(v => !v)}
+                      aria-label={showPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                       style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#8e8e93', fontSize: 18, padding: 0, lineHeight: 1 }}>
                       {showPw ? '🙈' : '👁'}
                     </button>
@@ -298,7 +312,7 @@ export default function LoginScreen() {
                   </div>
                 )}
 
-                <button className="lsbtn" onClick={handlePasswordLogin} disabled={loading}
+                <button type="submit" className="lsbtn" disabled={loading}
                   style={{ width: '100%', padding: '13px', borderRadius: 14, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: loading ? '#c7d9f4' : 'linear-gradient(135deg,#0055cc,#0077ed)', color: 'white', fontSize: 15, fontWeight: 700, boxShadow: loading ? 'none' : '0 4px 14px rgba(0,85,204,0.32)', transition: 'all 0.2s', marginBottom: 16 }}>
                   {loading ? 'Iniciando sesión…' : 'Acceder'}
                 </button>
@@ -309,11 +323,11 @@ export default function LoginScreen() {
                   <div style={{ flex: 1, height: 1, background: '#e5e5ea' }}/>
                 </div>
 
-                <button className="lsbtn" onClick={() => reset('magic_link')}
+                <button type="button" className="lsbtn" onClick={() => reset('magic_link')}
                   style={{ width: '100%', padding: '12px', borderRadius: 14, border: '1.5px solid #e5e5ea', cursor: 'pointer', background: 'white', color: '#1c1c1e', fontSize: 14, fontWeight: 600, transition: 'all 0.2s' }}>
                   📧 Recibir enlace por email
                 </button>
-              </>
+              </form>
             )}
 
             {/* ── MAGIC LINK MODE ── */}
@@ -321,9 +335,17 @@ export default function LoginScreen() {
               <>
                 <div style={{ marginBottom: 16 }}>
                   <label style={labelStyle}>Correo electrónico</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  <input type="email" value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onBlur={() => setEmailTouched(true)}
                     onKeyDown={e => e.key === 'Enter' && handleMagicLink()}
-                    placeholder="tu@email.com" autoComplete="email" style={inputStyle}/>
+                    placeholder="tu@email.com" autoComplete="email"
+                    style={{ ...inputStyle, borderColor: showEmailError ? '#ef4444' : undefined }}/>
+                  {showEmailError && (
+                    <span style={{ fontSize: 11, color: '#ef4444', marginTop: 4, display: 'block' }}>
+                      Introduce un email válido
+                    </span>
+                  )}
                 </div>
 
                 <button className="lsbtn" onClick={handleMagicLink} disabled={loading}
@@ -336,6 +358,26 @@ export default function LoginScreen() {
                   ← Volver a contraseña
                 </button>
               </>
+            )}
+
+            {/* ── MAGIC LINK SUCCESS ── */}
+            {mode === 'magic_link' && success && (
+              <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📧</div>
+                <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1a7a4a' }}>
+                  ¡Enlace enviado!
+                </p>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#5a6a6a', lineHeight: 1.6 }}>
+                  Revisa <strong>{email}</strong> — si no lo ves, mira la carpeta de spam.
+                  El enlace caduca en 60 minutos.
+                </p>
+                <button
+                  onClick={() => { setSuccess(''); setResendTimer(0); }}
+                  disabled={resendTimer > 0}
+                  style={{ background: 'none', border: '1.5px solid #e5e5ea', borderRadius: 10, cursor: resendTimer > 0 ? 'default' : 'pointer', color: resendTimer > 0 ? '#8e8e93' : '#0055cc', fontSize: 13, fontWeight: 600, padding: '9px 18px', transition: 'all 0.2s' }}>
+                  {resendTimer > 0 ? `Reenviar en ${resendTimer}s` : 'No lo recibí — reenviar'}
+                </button>
+              </div>
             )}
 
             {/* ── FORGOT MODE ── */}
@@ -373,7 +415,8 @@ export default function LoginScreen() {
                       autoComplete="new-password"
                       style={{ ...inputStyle, paddingRight: 44 }}
                     />
-                    <button onClick={() => setShowPw(v => !v)}
+                    <button type="button" onClick={() => setShowPw(v => !v)}
+                      aria-label={showPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                       style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#8e8e93', fontSize: 18, padding: 0, lineHeight: 1 }}>
                       {showPw ? '🙈' : '👁'}
                     </button>

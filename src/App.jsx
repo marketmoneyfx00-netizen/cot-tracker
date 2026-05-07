@@ -1,4 +1,13 @@
 import { useState, useRef, useCallback, useEffect, useMemo, Component } from "react";
+
+// Allowlist-based HTML sanitizer — only permits <strong> and <em> tags.
+// Prevents XSS if any external data ever reaches dangerouslySetInnerHTML.
+function sanitizeHtml(raw) {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/<(?!\/?(?:strong|em)\b)[^>]*>/gi, '')
+    .replace(/on\w+\s*=/gi, '');
+}
 import { getIndicatorLogic } from './marketLogic.js';
 import { usePriceStore }     from './hooks/usePriceStore.js';
 import { buildDecision }     from './logic/decisionEngine.js';
@@ -965,9 +974,12 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
     }
     setCheckoutLoading(priceId);
     try {
+      const { supabase: sb } = await import('./lib/supabase.js');
+      const { data: { session } } = await sb.auth.getSession();
+      const authHeader = session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {};
       const res = await fetch('/api/payments/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ priceId, userId: authUserId, userEmail: user?.email }),
       });
       const data = await res.json();
@@ -979,7 +991,11 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
       }
     } catch (err) {
       console.error('[Stripe] Checkout error:', err);
-      alert('Error de conexión. Intenta de nuevo.');
+      if (err?.name === 'AbortError' || err?.message?.includes('timeout')) {
+        alert('La conexión tardó demasiado. Verifica tu internet e intenta de nuevo.');
+      } else {
+        alert('Error de conexión. Intenta de nuevo.');
+      }
     } finally {
       setCheckoutLoading(null);
     }
@@ -3634,7 +3650,7 @@ function CalendarioTab({darkMode, T}) {
                                       {sDir>0?'▲ Por encima del consenso':sDir<0?'▼ Por debajo del consenso':'⇄ En línea con el consenso'}
                                     </div>
                                     <div style={{fontSize:11,color:D.sub,lineHeight:1.65,marginBottom:10}}
-                                      dangerouslySetInnerHTML={{__html: dynInterp||(sDir>0?sc.result_up:sc.result_down)||''}}/>
+                                      dangerouslySetInnerHTML={{__html: sanitizeHtml(dynInterp||(sDir>0?sc.result_up:sc.result_down)||'')}}/>
 
                                     {/* 🎯 Activos sensibles */}
                                     {assetDirs&&assetDirs.length>0&&(
@@ -3800,7 +3816,7 @@ function CalendarioTab({darkMode, T}) {
                               <div style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.08em',marginBottom:8}}>LECTURA OPERATIVA</div>
                               {dynInterp ? (
                                 <div style={{fontSize:11,color:D.sub,lineHeight:1.7}}
-                                  dangerouslySetInnerHTML={{__html: dynInterp}}/>
+                                  dangerouslySetInnerHTML={{__html: sanitizeHtml(dynInterp)}}/>
                               ) : (
                                 <div style={{fontSize:11,color:D.sub,lineHeight:1.6}}>
                                   {isPast&&!hasAct
@@ -3999,25 +4015,22 @@ function AppInner() {
     }
   }, [pairsData, combinedData, source, sourceCombined, selectedPair]);
   useEffect(() => {
-    fetch('/api/calendar?range=thisweek')
-      .then(r => r.json())
-      .then(data => {
+    async function loadCalendar() {
+      try {
+        const { supabase: sb } = await import('./lib/supabase.js');
+        const { data: { session } } = await sb.auth.getSession();
+        const headers = session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {};
+        const r = await fetch('/api/calendar?range=thisweek', { headers });
+        const data = await r.json();
         if (Array.isArray(data)) {
           setSharedEvents(data.filter(d => !d._meta).sort((a,b) => new Date(a.date)-new Date(b.date)));
         }
-      })
-      .catch(() => {});
-    // Refresh every 2 minutes
-    const id = setInterval(() => {
-      fetch('/api/calendar?range=thisweek')
-        .then(r => r.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            setSharedEvents(data.filter(d => !d._meta).sort((a,b) => new Date(a.date)-new Date(b.date)));
-          }
-        })
-        .catch(() => {});
-    }, 2 * 60 * 1000);
+      } catch { /* non-critical */ }
+    }
+    loadCalendar();
+    const id = setInterval(loadCalendar, 2 * 60 * 1000);
     return () => clearInterval(id);
   }, []);
 

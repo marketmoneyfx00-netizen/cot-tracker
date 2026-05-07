@@ -1,14 +1,9 @@
 /**
- * src/services/priceService.js — v2 (AUTH-SAFE + LOCK-PROOF)
- *
- * FIXES:
- * - No arranca si ya está corriendo (evita duplicados)
- * - No lanza múltiples fetch simultáneos (evita lock Supabase)
- * - Controla estado interno robusto
- * - Preparado para ejecutarse SOLO cuando el usuario esté listo
+ * src/services/priceService.js — v3 (AUTH-SAFE + JWT)
  */
 
 import { injectCandle } from '../data/priceStore.js';
+import { supabase }     from '../lib/supabase.js';
 
 // ── Estado interno ─────────────────────────────────────────────
 let _interval       = null;
@@ -45,27 +40,23 @@ function buildCandle(price) {
 
 // ── Fetch protegido ───────────────────────────────────────────
 async function fetchPrice(symbol) {
-  // 🚨 evita llamadas concurrentes (clave del bug)
-  if (_isFetching) {
-    return;
-  }
-
+  if (_isFetching) return;
   _isFetching = true;
 
   try {
     const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 8000);
+    // Obtener el JWT de la sesión activa para autenticar la petición
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = { 'Accept': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
 
     const res = await fetch(
       `/api/price?symbol=${encodeURIComponent(symbol)}`,
-      {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal,
-      }
+      { method: 'GET', headers, signal: controller.signal }
     );
 
     clearTimeout(timeout);

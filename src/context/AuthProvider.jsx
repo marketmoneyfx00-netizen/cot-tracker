@@ -85,7 +85,7 @@ export function AuthProvider({ children }) {
     loadingProfileRef.current = true;
 
     try {
-      console.log('[AUTH] Loading profile for:', authUser.email);
+      console.log('[AUTH] Loading profile for user:', authUser.id.slice(0, 8) + '…');
 
       const { profile: p, error } = await loadUserProfile(authUser.id, authUser);
 
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
       setSubscription(null);
       setAccessStatus(status);
 
-      console.log('[AUTH] Profile OK:', p.email, '| plan:', p.plan);
+      console.log('[AUTH] Profile OK | plan:', p.plan, '| status:', p.status);
 
       updateLastLogin(authUser.id).catch(() => {});
       logLoginEvent(authUser.id, true).catch(() => {});

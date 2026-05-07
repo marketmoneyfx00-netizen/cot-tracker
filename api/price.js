@@ -20,6 +20,7 @@
  */
 
 import { setSecurityHeaders, handleCORS } from './_lib/security.js';
+import { verifyAuth } from './_lib/auth-middleware.js';
 
 // ── Caché en memoria ──────────────────────────────────────────────────────────
 const _cache = new Map();
@@ -60,9 +61,13 @@ async function fetchFinnhub(symbol) {
   if (!key) throw new Error('FINNHUB_API_KEY not configured');
 
   const fSym = toFinnhubSymbol(symbol);
-  const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(fSym)}&token=${key}`;
+  // Key en header para evitar exposición en logs de proxy y Referer
+  const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(fSym)}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(6_000) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(6_000),
+    headers: { 'X-Finnhub-Token': key },
+  });
   if (!res.ok) throw new Error(`Finnhub HTTP ${res.status}`);
 
   const data = await res.json();
@@ -78,9 +83,13 @@ async function fetchTwelveData(symbol) {
   if (!key) throw new Error('TWELVEDATA_API_KEY not configured');
 
   const tSym = toTwelveSymbol(symbol);
-  const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(tSym)}&apikey=${key}`;
+  // Key en header Authorization para evitar exposición en logs de proxy
+  const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(tSym)}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(6_000) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(6_000),
+    headers: { 'Authorization': `apikey ${key}` },
+  });
   if (!res.ok) throw new Error(`TwelveData HTTP ${res.status}`);
 
   const data = await res.json();
@@ -99,6 +108,12 @@ export default async function handler(req, res) {
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Verificar JWT — solo usuarios autenticados pueden usar el proxy de precios
+  const { user, error: authError } = await verifyAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   // Validar símbolo

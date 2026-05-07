@@ -2,16 +2,22 @@
 import { getYields }        from './getYields.js';
 import { calculateSpreads } from './calculateSpreads.js';
 import { buildMacroSignal } from './buildMacroSignal.js';
+import { verifyAuth }       from '../_lib/auth-middleware.js';
 
 let _cache   = null;
 let _cacheTs = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const allowedOrigin = process.env.FRONTEND_ORIGIN || 'https://app.cot-tracker.com';
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'GET')    { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+  const { user: authUser } = await verifyAuth(req);
+  if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
 
   const now = Date.now();
   if (_cache && (now - _cacheTs) < CACHE_TTL_MS) {

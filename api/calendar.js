@@ -15,6 +15,7 @@
 
 import { applyRateLimit } from './_lib/ratelimit.js';
 import { setSecurityHeaders, handleCORS, validateCalendarParams, logSecurityEvent } from './_lib/security.js';
+import { verifyAuth } from './_lib/auth-middleware.js';
 import { scoreNews, inferMarketRegime } from './_lib/newsScoringEngine.js';
 
 // ── Métricas de consumo ────────────────────────────────────────────────────────
@@ -629,6 +630,9 @@ export default async function handler(req, res) {
   if (handleCORS(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ ok:false, error:'Method Not Allowed' });
   if (applyRateLimit(req, res, 'api')) return;
+
+  const { user: authUser } = await verifyAuth(req);
+  if (!authUser) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
   const v = validateCalendarParams(req.query);
   if (!v.ok) {

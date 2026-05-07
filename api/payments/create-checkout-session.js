@@ -6,6 +6,8 @@
  * Returns: { url: string }
  */
 
+import { verifyAuth } from '../_lib/auth-middleware.js';
+
 const VALID_PRICE_IDS = new Set([
   'price_1TQdW7B7QeisGCzWnuzk8SLI', // Mensual    24 EUR
   'price_1TQdc6B7QeisGCzWYXRSjNGc', // Trimestral 59 EUR
@@ -20,6 +22,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ── Verificar JWT — el usuario debe estar autenticado ────────────────────
+  const { user: jwtUser, error: jwtErr } = await verifyAuth(req);
+  if (!jwtUser) {
+    console.warn('[checkout] BLOCKED: invalid or missing JWT:', jwtErr);
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
   const { priceId, userId, userEmail } = req.body ?? {};
 
   // ── Validar priceId ───────────────────────────────────────────────────────
@@ -28,10 +37,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid price ID' });
   }
 
-  // ── Validar userId ────────────────────────────────────────────────────────
+  // ── Validar userId y que coincida con el JWT ──────────────────────────────
   if (!userId || typeof userId !== 'string' || !UUID_RE.test(userId)) {
     console.error('[checkout] BLOCKED: missing or malformed userId:', userId);
     return res.status(401).json({ error: 'Valid authenticated user ID required before purchasing.' });
+  }
+
+  // Garantizar que el userId del body coincide con el del JWT
+  if (jwtUser.id !== userId) {
+    console.error('[checkout] BLOCKED: userId mismatch — JWT:', jwtUser.id, 'body:', userId);
+    return res.status(403).json({ error: 'User ID mismatch.' });
   }
 
   const safeEmail = (typeof userEmail === 'string' && userEmail.includes('@'))

@@ -175,7 +175,7 @@ export default function AuthCallback() {
     }
 
     // ── 5. Garantía: fila en users_access ───────────────────────────────
-    console.log('[AuthCallback] Session OK for:', userEmail, '— ensuring DB row');
+    console.log('[AuthCallback] Session OK — ensuring DB row');
     setStatus('creating');
 
     const { ok } = await ensureRow(userId, userEmail);
@@ -239,13 +239,16 @@ export default function AuthCallback() {
 
         {(status === 'processing' || status === 'creating') && (
           <>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              border: '3px solid rgba(0,85,204,0.2)',
-              borderTopColor: '#0055cc',
-              animation: 'cb-spin 0.8s linear infinite',
-              margin: '0 auto 18px',
-            }}/>
+            <div
+              role="status"
+              aria-label={status === 'creating' ? 'Configurando tu acceso' : 'Verificando enlace'}
+              style={{
+                width: 32, height: 32, borderRadius: '50%',
+                border: '3px solid rgba(0,85,204,0.2)',
+                borderTopColor: '#0055cc',
+                animation: 'cb-spin 0.8s linear infinite',
+                margin: '0 auto 18px',
+              }}/>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#e8eaf0' }}>
               {status === 'creating' ? 'Configurando tu acceso…' : 'Verificando enlace…'}
             </p>

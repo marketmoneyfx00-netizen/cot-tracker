@@ -587,9 +587,8 @@ export default function OnboardingModal({ profile, onComplete }) {
 
   const finish = useCallback(() => {
     console.log('[onboarding] completed, market:', market, 'level:', tradingLevel, 'goal:', tradingGoal);
-    console.log('[funnel] onboarding completed', profile?.email);
     onComplete({ market, tradingLevel, tradingGoal });
-  }, [onComplete, market, tradingLevel, tradingGoal, profile]);
+  }, [onComplete, market, tradingLevel, tradingGoal]);
 
   const handleMarket = useCallback((sel) => {
     setMarket(sel);

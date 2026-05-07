@@ -132,7 +132,7 @@ export default function DropZone({
       </div>
 
       <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 600, color: drag ? accentColor : textColor, transition: "color 0.18s" }}>
-        {drag ? "Suelta el archivo" : "Arrastra el CSV aquí"}
+        {drag ? "Suelta el archivo" : (('ontouchstart' in window) ? "Toca para seleccionar el CSV" : "Arrastra el CSV aquí")}
       </p>
       <p style={{ margin: "0 0 14px", fontSize: 11, color: hintColor }}>{hint}</p>
 
@@ -144,6 +144,7 @@ export default function DropZone({
       <button
         type="button"
         onClick={handleButtonClick}
+        aria-label="Seleccionar archivo CSV para importar"
         style={{
           display: "inline-flex", alignItems: "center", gap: 7,
           padding: "9px 20px", borderRadius: 9,
