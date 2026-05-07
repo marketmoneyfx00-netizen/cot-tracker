@@ -67,7 +67,8 @@ const complete = useCallback(async (data) => {
 
   const patch = {
     onboarding_completed: true,
-    first_login_at: new Date().toISOString(),
+    // Solo escribir first_login_at si no está ya registrado en el perfil
+    ...(profile?.first_login_at ? {} : { first_login_at: new Date().toISOString() }),
     ...(marketSelected ? { market_selected: marketSelected } : {}),
     ...(tradingLevel   ? { trading_level: tradingLevel }     : {}),
     ...(tradingGoal    ? { trading_goal: tradingGoal }       : {}),

@@ -21,7 +21,7 @@ import {
   CROSS_ASSET_FLOW_ASSETS,
 } from './parseTiffCombined.js';
 import { buildTheme, injectCSSVars } from './lib/theme.js';
-import OnboardingModal from './components/onboarding/OnboardingModal.jsx';
+import OnboardingModal from './components/OnboardingModal.jsx';
 import CreatePasswordModal from './components/CreatePasswordModal.jsx';
 import { useOnboarding } from './hooks/useOnboarding.js';
 import MacroTab from './components/MacroTab.jsx';

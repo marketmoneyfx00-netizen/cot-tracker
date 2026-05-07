@@ -2,9 +2,14 @@
  * api/_lib/ratelimit.js
  * In-memory rate limiter para Vercel serverless.
  *
- * NOTA: En Vercel, cada función es una instancia independiente.
- * Este limiter es por-instancia (suficiente para protección básica).
- * Para rate limiting global multi-instancia usa @upstash/ratelimit + Redis.
+ * LIMITACIÓN CONOCIDA: Vercel crea instancias independientes por región/función.
+ * Este limiter es por-instancia. Para rate limiting global multi-instancia:
+ *   → Instalar @upstash/ratelimit + @upstash/redis
+ *   → Configurar UPSTASH_REDIS_REST_URL y UPSTASH_REDIS_REST_TOKEN en Vercel
+ *   → Ver: https://upstash.com/docs/redis/sdks/ratelimit-ts/overview
+ *
+ * Protección adicional: Supabase aplica rate limiting propio en auth endpoints
+ * (5 req/hora por email para magic links). Esta capa es defensa en profundidad.
  *
  * Presets disponibles:
  *   RATE_LIMITS.api    → 100 req / 15 min  (endpoints generales)

@@ -50,9 +50,10 @@ export function AuthProvider({ children }) {
   const [subscription, setSubscription] = useState(null);
   const [accessStatus, setAccessStatus] = useState(null);
 
-  const loadingProfileRef = useRef(false);
-  const initializedRef    = useRef(false);
-  const userRef           = useRef(null);
+  const loadingProfileRef  = useRef(false);
+  const initializedRef     = useRef(false);
+  const userRef            = useRef(null);
+  const profileLoadedRef   = useRef(false); // true tras primera carga exitosa
 
   // ── loadProfile ────────────────────────────────────────────────────────────
   const loadProfile = useCallback(async (authUser) => {
@@ -95,6 +96,7 @@ export function AuthProvider({ children }) {
       setProfile(p);
       setSubscription(null);
       setAccessStatus(status);
+      profileLoadedRef.current = true;
 
       console.log(
         '[AUTH] Profile loaded:', p.email,
@@ -103,10 +105,6 @@ export function AuthProvider({ children }) {
         '| hasAccess:', status.hasAccess,
         '| onboarding_completed:', p.onboarding_completed
       );
-
-      // Side effects (fire-and-forget)
-      updateLastLogin(authUser.id).catch(() => {});
-      logLoginEvent(authUser.id, true).catch(() => {});
 
     } catch (err) {
       console.error('[AUTH] loadProfile exception:', err.message);
@@ -155,14 +153,18 @@ export function AuthProvider({ children }) {
 
           if (isFirstInit) {
             // Primera inicialización: esperar perfil completo antes de mostrar UI.
-            // Elimina el flash spinner → app con accessStatus=null.
             await loadProfile(authUser);
             setLoading(false);
+            // Side effects solo en login real (SIGNED_IN o sesión inicial)
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              updateLastLogin(authUser.id).catch(() => {});
+              logLoginEvent(authUser.id, true).catch(() => {});
+            }
           } else {
-            // Evento posterior (TOKEN_REFRESHED, etc.)
-            // Si ya tenemos perfil: no recargar innecesariamente.
+            // Evento posterior (TOKEN_REFRESHED, USER_UPDATED, etc.)
+            // Usar ref para evitar el stale closure — no recargamos si ya tenemos perfil.
             setLoading(false);
-            if (!profile) {
+            if (!profileLoadedRef.current) {
               loadingProfileRef.current = false;
               loadProfile(authUser).catch(console.error);
             }
@@ -170,6 +172,7 @@ export function AuthProvider({ children }) {
 
         } else {
           initializedRef.current = true;
+          profileLoadedRef.current = false; // resetear al hacer logout
           userRef.current = null;
           setProfile(null);
           setSubscription(null);

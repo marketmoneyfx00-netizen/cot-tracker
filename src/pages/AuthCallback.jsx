@@ -161,9 +161,9 @@ export default function AuthCallback() {
             return;
           }
 
-          // Re-run with the new session
+          // Re-run with the new session (await para no perder errores)
           ranRef.current = false;
-          handleCallback();
+          await handleCallback();
           return;
         }
 

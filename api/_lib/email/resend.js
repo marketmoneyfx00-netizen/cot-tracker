@@ -11,7 +11,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL    = process.env.RESEND_FROM_EMAIL   || 'COT Tracker <noreply@marketmoneyfx.com>';
 const REPLY_TO      = process.env.RESEND_REPLY_EMAIL  || 'support@marketmoneyfx.com';
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://cot-tracker.vercel.app';
+const DASHBOARD_URL = process.env.APP_URL             || 'https://app.cot-tracker.com';
 
 const PLAN_LABELS = {
   mensual:    'Plan Mensual',
@@ -39,7 +39,7 @@ export async function sendWelcomeEmail(data) {
       from:     FROM_EMAIL,
       to:       data.to,
       replyTo:  REPLY_TO,
-      subject:  '✅ Bienvenido a COT Tracker Beta — Acceso activado',
+      subject:  '✅ Bienvenido a COT Tracker — Acceso activado',
       attachments: [
         {
           filename:    `recibo_${data.invoiceNumber}.pdf`,
@@ -82,7 +82,7 @@ function buildHtml(v) {
         <!-- Header -->
         <tr><td style="background:#0B3366;padding:28px 32px;">
           <p style="margin:0;font-size:20px;font-weight:800;color:white;letter-spacing:-0.3px;">COT Tracker</p>
-          <p style="margin:4px 0 0;font-size:11px;color:rgba(180,210,255,0.9);letter-spacing:0.08em;">MARKET MONEY FX</p>
+          <p style="margin:4px 0 0;font-size:11px;color:rgba(180,210,255,0.9);letter-spacing:0.08em;">MARKETMONEYFX</p>
         </td></tr>
 
         <!-- Accent strip -->
@@ -126,7 +126,7 @@ function buildHtml(v) {
         <!-- Footer -->
         <tr><td style="background:#f8f9fc;padding:16px 32px;border-top:1px solid #e5e7eb;">
           <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">
-            COT Tracker Beta · Market Money FX · cot-tracker.vercel.app<br/>
+            COT Tracker · MarketMoneyFX · app.cot-tracker.com<br/>
             Producto digital — acceso SaaS.
           </p>
         </td></tr>
