@@ -151,8 +151,12 @@ export default function LoginScreen() {
         setError('Correo no registrado. Contacta al administrador.');
       } else if (msg.includes('email not confirmed')) {
         setError('Confirma tu email primero. Revisa tu bandeja de entrada.');
+      } else if (msg.includes('rate limit') || msg.includes('too many')) {
+        setError('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.');
+      } else if (msg.includes('network') || msg.includes('fetch')) {
+        setError('Error de conexión. Verifica tu internet e inténtalo de nuevo.');
       } else {
-        setError(`Error: ${authError.message}`);
+        setError('No se pudo iniciar sesión. Inténtalo de nuevo o usa el enlace por email.');
       }
     }
     // On success: AuthProvider.onAuthStateChange fires → app opens automatically
@@ -193,12 +197,18 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (authError) {
-      setError(`Error: ${authError.message}`); return;
+      const msg = authError.message?.toLowerCase() ?? '';
+      if (msg.includes('rate limit') || msg.includes('too many')) {
+        setError('Demasiados intentos. Espera unos minutos.');
+      } else {
+        setError('No se pudo enviar el enlace. Inténtalo de nuevo.');
+      }
+      return;
     }
     setSuccess('Te hemos enviado un enlace para restablecer tu contraseña.');
   };
 
-  const str = mode === 'password' ? pwStrength(password) : null;
+  const str = (mode === 'password' || mode === 'reset') ? pwStrength(password) : null;
 
   return (
     <div style={{ fontFamily: "-apple-system,'SF Pro Text',Helvetica,sans-serif", background: '#f2f2f7', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -352,17 +362,34 @@ export default function LoginScreen() {
             {/* ── RESET MODE ── */}
             {mode === 'reset' && !success && (
               <>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 6 }}>
                   <label style={labelStyle}>Nueva contraseña</label>
-                  <input
-                    type={showPw ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Introduce nueva contraseña"
-                    autoComplete="new-password"
-                    style={inputStyle}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Introduce nueva contraseña"
+                      autoComplete="new-password"
+                      style={{ ...inputStyle, paddingRight: 44 }}
+                    />
+                    <button onClick={() => setShowPw(v => !v)}
+                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#8e8e93', fontSize: 18, padding: 0, lineHeight: 1 }}>
+                      {showPw ? '🙈' : '👁'}
+                    </button>
+                  </div>
                 </div>
+
+                {/* Password strength bar */}
+                {str && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ height: 3, borderRadius: 99, background: '#f0f0f0', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(str.score / 3) * 100}%`, background: str.color, borderRadius: 99, transition: 'width 0.3s, background 0.3s' }}/>
+                    </div>
+                    {str.label && <span style={{ fontSize: 10, color: str.color, fontWeight: 600, marginTop: 3, display: 'block' }}>{str.label}</span>}
+                  </div>
+                )}
+
 
                 <button
                   className="lsbtn"
@@ -380,7 +407,7 @@ export default function LoginScreen() {
                     setLoading(false);
 
                     if (error) {
-                      setError(error.message);
+                      setError('No se pudo actualizar la contraseña. Solicita un nuevo enlace.');
                       return;
                     }
 

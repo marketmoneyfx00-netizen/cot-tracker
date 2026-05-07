@@ -1,0 +1,238 @@
+/**
+ * pairDecisionEngine.js — Unified Per-Pair Decision Engine
+ *
+ * Single source of truth: given a pair + all data sources → one verdict.
+ *
+ * Decision hierarchy (cannot change):
+ *   1. tradeReadinessScore < 50  → AVOID (macro block)
+ *   2. intradayScore < 60        → AVOID (intraday block)
+ *   3. intradayScore < 70        → PREPARE (caution)
+ *   4. cotBias + marketState     → EXECUTE / PREPARE
+ *
+ * Returns a `PairContext` object consumed by ALL UI components.
+ * No state, no side effects — pure function.
+ */
+
+import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
+import { calculateExecutionScore }                  from '../intradayExecutionEngine.js';
+import { detectTradingOpportunityWithVerdict }      from '../utils/alertEngine.js';
+
+// ─── FINAL DECISION ───────────────────────────────────────────────────────────
+// Single source of truth for execution permission.
+// All UI modules MUST use this to determine whether to show actionable signals.
+// Hierarchy is fixed: macro > intraday > COT bias.
+export function buildFinalDecision({ tradeReadinessScore, intradayScore }) {
+  const trs = typeof tradeReadinessScore === 'number' ? tradeReadinessScore : 100;
+  const its = typeof intradayScore       === 'number' ? intradayScore       : 100;
+
+  if (trs < 50) {
+    return {
+      verdict:        'AVOID',
+      reason:         'macro',
+      blockSource:    'TradeReadiness',
+      allowExecution: false,
+      isMacroBlocked: true,
+      isIntradayBlocked: false,
+      message:        'Riesgo macro elevado — no ejecutar',
+      sub:            `Trade Readiness: ${trs}/100`,
+    };
+  }
+  if (its < 60) {
+    return {
+      verdict:        'AVOID',
+      reason:         'intraday',
+      blockSource:    'IntradayExecution',
+      allowExecution: false,
+      isMacroBlocked: false,
+      isIntradayBlocked: true,
+      message:        'Permiso operativo bajo — no ejecutar',
+      sub:            `Intraday Score: ${its}/100`,
+    };
+  }
+  if (its < 70) {
+    return {
+      verdict:        'PREPARE',
+      reason:         'caution',
+      blockSource:    null,
+      allowExecution: false,
+      isMacroBlocked: false,
+      isIntradayBlocked: false,
+      message:        'Contexto de preparación — condiciones mejorando',
+      sub:            `Intraday Score: ${its}/100`,
+    };
+  }
+  return {
+    verdict:        'EXECUTE',
+    reason:         null,
+    blockSource:    null,
+    allowExecution: true,
+    isMacroBlocked: false,
+    isIntradayBlocked: false,
+    message:        'Condiciones operativas válidas',
+    sub:            `Intraday Score: ${its}/100`,
+  };
+}
+
+// ─── MARKET STATE ─────────────────────────────────────────────────────────────
+// Derives per-pair market state from COT bias score + position delta.
+export function derivePairMarketState(pairRow) {
+  if (!pairRow) return 'compression';
+  const inputs = deriveInputsFromPair(pairRow);
+  if (!inputs) return 'compression';
+  const bias   = calculateBiasScore(inputs);
+  if (!bias)   return 'compression';
+
+  const latest = pairRow.weeks?.[0];
+  const prev   = pairRow.weeks?.[1];
+  const delta  = latest && prev ? latest.smartNet - prev.smartNet : 0;
+  const pctL   = latest?.smartPctL ?? 50;
+  const av     = Math.abs(delta);
+  const ab     = Math.abs(bias.score);
+
+  if ((pctL > 75 || pctL < 25) && av > 15000 && delta * bias.score < 0) return 'distribution';
+  if (ab >= 2 && av > 10000)   return 'expansion';
+  if (ab >= 1.5 || av >= 3000) return 'building';
+  return 'compression';
+}
+
+// ─── GLOBAL MARKET STATE ──────────────────────────────────────────────────────
+// Derived from all fxPairs — used for AlertBanner context text.
+export function deriveGlobalMarketState(biasArr) {
+  const tot = biasArr.length || 1;
+  const ex  = biasArr.filter(r => r.state === 'expansion').length;
+  const di  = biasArr.filter(r => r.state === 'distribution').length;
+  const co  = biasArr.filter(r => r.state === 'compression').length;
+  if (di >= 2)         return 'distribution';
+  if (ex > tot / 2)    return 'expansion';
+  if (co > tot / 2)    return 'compression';
+  return 'mixed';
+}
+
+// ─── BIAS ARRAY ───────────────────────────────────────────────────────────────
+// Pre-compute per-pair bias + state for all fxPairs.
+export function buildBiasArray(fxPairs) {
+  return (fxPairs || []).map(p => {
+    if (!p || p.pair.includes('Index')) return null;
+    const inp  = deriveInputsFromPair(p);   if (!inp)  return null;
+    const bias = calculateBiasScore(inp);   if (!bias) return null;
+    return { pair: p.pair, score: bias.score, state: derivePairMarketState(p), bias };
+  }).filter(Boolean);
+}
+
+// ─── CORE ENGINE ──────────────────────────────────────────────────────────────
+/**
+ * buildPairContext
+ *
+ * @param {string}  pair                  — e.g. 'EUR/USD'
+ * @param {Array}   biasArr               — from buildBiasArray()
+ * @param {object}  sentimentData         — { fg, vix, highCount, midCount }
+ * @param {object}  riskData              — { score }
+ * @param {number}  tradeReadinessScore   — 0-100, from TradeReadinessChecklist
+ * @param {string}  globalMarketState     — from deriveGlobalMarketState()
+ *
+ * @returns {PairContext}
+ */
+export function buildPairContext({
+  pair,
+  biasArr,
+  sentimentData,
+  riskData,
+  tradeReadinessScore = 100,
+  globalMarketState = 'mixed',
+}) {
+  // 1. Find this pair's bias entry
+  const pairBias = biasArr.find(r => r.pair === pair)
+    || [...biasArr].sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0]
+    || null;
+
+  // 2. Intraday score for this pair
+  const intradayResult = pairBias ? calculateExecutionScore({
+    biasScore:     pairBias.score,
+    biasDirection: pairBias.score > 0 ? 'bullish' : pairBias.score < 0 ? 'bearish' : 'neutral',
+    riskScore:     riskData?.score ?? 0,
+    fg:            sentimentData?.fg ?? 50,
+    vix:           sentimentData?.vix ?? 18,
+    highCount:     sentimentData?.highCount ?? 0,
+    midCount:      sentimentData?.midCount ?? 0,
+  }) : null;
+  const intradayScore = intradayResult?.score ?? 100;
+
+  // 3. Ideas for this pair only
+  const allIdeas = biasArr
+    .filter(r => Math.abs(r.score) >= 1.5 && r.state !== 'distribution')
+    .map(r => ({
+      pair:       r.pair,
+      isLong:     r.score > 0,
+      dir:        r.score > 0 ? 'buy' : 'sell',
+      confidence: Math.abs(r.score) >= 3 ? 'HIGH' : Math.abs(r.score) >= 2 ? 'MEDIUM' : 'LOW',
+    }));
+  const pairIdeas = allIdeas.filter(i => i.pair === pair);
+
+  // 4. Alert + verdict (fully pair-scoped)
+  const alertData = detectTradingOpportunityWithVerdict({
+    marketState:          { state: globalMarketState },
+    ideas:                pairIdeas,
+    intradayScore,
+    tradeReadinessScore,
+  });
+
+  // 5. Verdict flags — derived directly from scores (single authority)
+  const isMacroBlocked    = tradeReadinessScore < 50;
+  const isIntradayBlocked = intradayScore < 60;
+  const isBlocked         = isMacroBlocked || isIntradayBlocked || alertData?.verdict === 'AVOID';
+  const isPreparing       = !isBlocked && (intradayScore < 70 || alertData?.verdict === 'PREPARE');
+  const isTradable        = !isBlocked && !isPreparing && alertData?.verdict === 'EXECUTE';
+
+  // 6. Intraday constraint for AlertBanner display
+  let intradayConstraint = null;
+  let intradayBlock      = false;
+  if (alertData?.type === 'opportunity') {
+    if (intradayScore < 60) {
+      intradayBlock      = true;
+      intradayConstraint = { level: 'block',   message: 'Evitar ejecución — condiciones intradía no favorables' };
+    } else if (intradayScore < 70) {
+      intradayConstraint = { level: 'warning', message: 'Permiso operativo limitado — el contexto intradía no es óptimo' };
+    }
+  }
+
+  // 7. alertKey — changes whenever verdict-relevant inputs change
+  const alertKey = alertData
+    ? `${alertData.type}-${alertData.strength}-${globalMarketState}-${pair}-${tradeReadinessScore}-${intradayScore}`
+    : null;
+
+  return {
+    // Identity
+    pair,
+
+    // Scores
+    intradayScore,
+    tradeReadinessScore,
+    intradayResult,
+
+    // COT context
+    cotBias:         pairBias?.bias ?? null,
+    biasScore:       pairBias?.score ?? 0,
+    pairMarketState: pairBias?.state ?? 'compression',
+    globalMarketState,
+
+    // Ideas
+    pairIdeas,
+    allIdeas,
+
+    // Alert (with verdict embedded)
+    alertData,
+    alertKey,
+    intradayConstraint,
+    intradayBlock,
+
+    // Decision flags (single source of truth for opacity/pointer-events)
+    isBlocked,
+    isPreparing,
+    isTradable,
+    isMacroBlocked,
+    isIntradayBlocked,
+
+    // Derived verdict string (shorthand)
+    verdict: isBlocked ? 'AVOID' : isPreparing ? 'PREPARE' : 'EXECUTE',
+  };
+}

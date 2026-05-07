@@ -1,40 +1,31 @@
 /**
- * src/services/priceService.js — Polling de precio via proxy serverless
+ * src/services/priceService.js — v2 (AUTH-SAFE + LOCK-PROOF)
  *
- * REEMPLAZA: twelveDataService.js y finnhubRESTService.js
- *
- * En lugar de llamar directamente a Finnhub/TwelveData desde el navegador
- * (exponiendo las API keys en el bundle), este servicio hace polling a
- * /api/price — un endpoint serverless que guarda las keys en el servidor.
- *
- * La lógica de construcción de velas OHLC se mantiene idéntica al
- * twelveDataService.js original para no romper nada en App.jsx.
- *
- * Uso (igual que antes):
- *   import { startPricePolling, stopPricePolling } from './services/priceService.js';
- *   startPricePolling('EUR/USD');
- *   return () => stopPricePolling();
+ * FIXES:
+ * - No arranca si ya está corriendo (evita duplicados)
+ * - No lanza múltiples fetch simultáneos (evita lock Supabase)
+ * - Controla estado interno robusto
+ * - Preparado para ejecutarse SOLO cuando el usuario esté listo
  */
 
 import { injectCandle } from '../data/priceStore.js';
 
-// ── Estado interno ────────────────────────────────────────────────────────────
+// ── Estado interno ─────────────────────────────────────────────
 let _interval       = null;
 let _currentCandle  = null;
 let _currentMinute  = null;
+let _isFetching     = false;
+let _isRunning      = false;
 
-// ── Constructor de vela OHLC 1 minuto ─────────────────────────────────────────
-// Lógica idéntica a twelveDataService.js original
+// ── Constructor de vela OHLC 1 minuto ─────────────────────────
 function buildCandle(price) {
   const now = Math.floor(Date.now() / 60_000);
 
   if (_currentMinute !== now) {
-    // Cierre de vela anterior
     if (_currentCandle) {
       injectCandle(_currentCandle);
     }
 
-    // Nueva vela
     _currentMinute = now;
     _currentCandle = {
       time:  now * 60,
@@ -44,25 +35,40 @@ function buildCandle(price) {
       close: price,
     };
   } else if (_currentCandle) {
-    // Actualizar vela en curso
     _currentCandle.high  = Math.max(_currentCandle.high, price);
     _currentCandle.low   = Math.min(_currentCandle.low,  price);
     _currentCandle.close = price;
+
     injectCandle({ ..._currentCandle });
   }
 }
 
-// ── Fetch al proxy serverless ─────────────────────────────────────────────────
+// ── Fetch protegido ───────────────────────────────────────────
 async function fetchPrice(symbol) {
+  // 🚨 evita llamadas concurrentes (clave del bug)
+  if (_isFetching) {
+    return;
+  }
+
+  _isFetching = true;
+
   try {
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 8000);
+
     const res = await fetch(
       `/api/price?symbol=${encodeURIComponent(symbol)}`,
       {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(8_000),
+        signal: controller.signal,
       }
     );
+
+    clearTimeout(timeout);
 
     if (!res.ok) {
       console.warn(`[priceService] /api/price HTTP ${res.status} for ${symbol}`);
@@ -72,27 +78,36 @@ async function fetchPrice(symbol) {
     const data = await res.json();
 
     if (typeof data?.price !== 'number' || data.price === 0) {
-      console.warn('[priceService] Invalid price in response:', data);
+      console.warn('[priceService] Invalid price:', data);
       return;
     }
 
     buildCandle(data.price);
 
   } catch (err) {
-    // AbortError es esperado cuando stopPricePolling cancela el fetch
     if (err?.name !== 'AbortError') {
       console.error('[priceService] Fetch error:', err?.message ?? err);
     }
+  } finally {
+    _isFetching = false;
   }
 }
 
-// ── API pública ───────────────────────────────────────────────────────────────
+// ── API pública ───────────────────────────────────────────────
 export function startPricePolling(symbol = 'EUR/USD', intervalMs = 10_000) {
+  // 🚨 evita múltiples instancias
+  if (_isRunning) {
+    console.log('[priceService] Already running — skip');
+    return;
+  }
+
   stopPricePolling();
+
+  _isRunning = true;
 
   console.log(`[priceService] Starting polling for ${symbol} every ${intervalMs}ms`);
 
-  // Fetch inmediato al arrancar
+  // Fetch inicial
   fetchPrice(symbol);
 
   _interval = setInterval(() => {
@@ -105,7 +120,12 @@ export function stopPricePolling() {
     clearInterval(_interval);
     _interval = null;
   }
-  // Resetear estado de vela para que la próxima sesión empiece limpia
+
+  _isRunning = false;
+  _isFetching = false;
+
   _currentCandle = null;
   _currentMinute = null;
+
+  console.log('[priceService] Polling stopped');
 }

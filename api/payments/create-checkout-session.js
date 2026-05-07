@@ -1,17 +1,6 @@
 /**
  * api/payments/create-checkout-session.js
  *
- * Crea un Stripe Customer explícito antes de la sesión de pago.
- *
- * GARANTÍAS:
- *   1. userId (auth.users.id) OBLIGATORIO — 401 si falta o es inválido
- *   2. priceId en whitelist — 400 si no está
- *   3. Stripe Customer siempre tiene metadata.auth_user_id
- *   4. customers.search como intento de deduplicación, pero NO como bloqueante:
- *      si search falla o devuelve vacío → se crea Customer nuevo directamente
- *   5. Email completamente opcional — el sistema funciona sin él
- *      (Apple Pay, Google Pay, métodos europeos que no proporcionan email)
- *
  * POST /api/payments/create-checkout-session
  * Body: { priceId: string, userId: string, userEmail?: string }
  * Returns: { url: string }
@@ -19,7 +8,7 @@
 
 const VALID_PRICE_IDS = new Set([
   'price_1TQdW7B7QeisGCzWnuzk8SLI', // Mensual    24 EUR
-  'price_1TQdc6B7QeisGCzWYXRSJNGc', // Trimestral 59 EUR
+  'price_1TQdc6B7QeisGCzWYXRSjNGc', // Trimestral 59 EUR
   'price_1TQdfUB7QeisGCzWkhQSRQAE', // Semestral  99 EUR
   'price_1TQdhfB7QeisGCzWEoFsJFhm', // Anual     169 EUR
 ]);
@@ -39,47 +28,40 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid price ID' });
   }
 
-  // ── Validar userId — OBLIGATORIO ──────────────────────────────────────────
+  // ── Validar userId ────────────────────────────────────────────────────────
   if (!userId || typeof userId !== 'string' || !UUID_RE.test(userId)) {
     console.error('[checkout] BLOCKED: missing or malformed userId:', userId);
-    return res.status(401).json({
-      error: 'Valid authenticated user ID required before purchasing.',
-    });
+    return res.status(401).json({ error: 'Valid authenticated user ID required before purchasing.' });
   }
 
-  // Email es completamente opcional — sistema funciona sin él
   const safeEmail = (typeof userEmail === 'string' && userEmail.includes('@'))
     ? userEmail.toLowerCase().trim().slice(0, 254)
     : null;
 
+  // ── Verificar STRIPE_SECRET_KEY ───────────────────────────────────────────
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
-    console.error('[checkout] STRIPE_SECRET_KEY not configured');
-    return res.status(500).json({ error: 'Payment system not configured' });
+    console.error('[checkout] STRIPE_SECRET_KEY not configured in Vercel environment variables');
+    return res.status(500).json({ error: 'Payment system not configured. Contact support.' });
   }
 
-  const { default: Stripe } = await import('stripe');
-  const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' });
+  // ── APP_URL: usar dominio real en producción ──────────────────────────────
+  // Prioridad: APP_URL env var → VERCEL_URL (set automáticamente por Vercel) → fallback
+  const appUrl = process.env.APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || 'https://app.cot-tracker.com';
 
-  const appUrl = process.env.APP_URL || 'https://cot-tracker.vercel.app';
+  let stripe;
+  try {
+    const { default: Stripe } = await import('stripe');
+    stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' });
+  } catch (importErr) {
+    console.error('[checkout] Failed to import Stripe SDK:', importErr.message);
+    return res.status(500).json({ error: 'Payment system initialization failed.' });
+  }
 
   try {
     // ── Obtener o crear Stripe Customer ───────────────────────────────────
-    //
-    // ESTRATEGIA DE DEDUPLICACIÓN:
-    //   1. customers.search por metadata.auth_user_id
-    //      → Intento de deduplicación (evitar customers duplicados)
-    //      → NO es bloqueante: si falla o devuelve vacío, continuamos
-    //      → Nota: search puede tener latencia de indexación (<60s)
-    //   2. Si search no encuentra → crear Customer nuevo directamente
-    //      → Garantiza siempre tener un Customer válido
-    //      → metadata.auth_user_id siempre presente
-    //
-    // Aceptamos que en edge cases (reintento muy rápido) puedan crearse
-    // dos Customers para el mismo userId. Esto es seguro: el fulfillment
-    // recupera auth_user_id desde Customer.metadata, que siempre es correcto.
-    // La deduplicación no es crítica — la correctitud sí lo es.
-
     let customerId = null;
 
     try {
@@ -87,27 +69,17 @@ export default async function handler(req, res) {
         query: `metadata['auth_user_id']:'${userId}'`,
         limit: 1,
       });
-
       if (searchResult.data.length > 0) {
         customerId = searchResult.data[0].id;
         console.log(`[checkout] Reusing Customer: ${customerId} | user: ${userId}`);
       }
     } catch (searchErr) {
-      // Search falla en test mode a veces, o por latencia de indexación.
-      // No es un error fatal — simplemente creamos Customer nuevo.
       console.warn('[checkout] Customer search failed (non-fatal):', searchErr.message);
     }
 
     if (!customerId) {
-      // Crear Customer con auth_user_id en metadata.
-      // Esta es la fuente de verdad permanente para el recovery del webhook.
-      const customerParams = {
-        metadata: { auth_user_id: userId },
-      };
-      // Añadir email solo si está disponible — NO requerido
-      if (safeEmail) {
-        customerParams.email = safeEmail;
-      }
+      const customerParams = { metadata: { auth_user_id: userId } };
+      if (safeEmail) customerParams.email = safeEmail;
 
       const customer = await stripe.customers.create(customerParams);
       customerId = customer.id;
@@ -117,7 +89,7 @@ export default async function handler(req, res) {
     // ── Crear Checkout Session ─────────────────────────────────────────────
     const session = await stripe.checkout.sessions.create({
       mode:     'subscription',
-      customer: customerId,          // Customer explícito con auth_user_id en metadata
+      customer: customerId,
 
       line_items: [{ price: priceId, quantity: 1 }],
 
@@ -126,13 +98,11 @@ export default async function handler(req, res) {
 
       allow_promotion_codes: true,
 
-      // metadata en session (checkout.session.completed)
       metadata: {
         auth_user_id: userId,
         price_id:     priceId,
       },
 
-      // metadata en subscription — PERSISTE en invoice.paid de renovaciones
       subscription_data: {
         metadata: {
           auth_user_id: userId,
@@ -141,11 +111,41 @@ export default async function handler(req, res) {
       },
     });
 
-    console.log(`[checkout] Session: ${session.id} | customer: ${customerId} | price: ${priceId} | user: ${userId}`);
+    if (!session.url) {
+      console.error('[checkout] Stripe returned session without URL:', session.id);
+      return res.status(500).json({ error: 'Stripe did not return a checkout URL. Try again.' });
+    }
+
+    console.log(`[checkout] Session OK: ${session.id} | customer: ${customerId} | price: ${priceId} | user: ${userId}`);
     return res.status(200).json({ url: session.url });
 
   } catch (err) {
-    console.error('[checkout] Stripe error:', err.message, err.type ?? '', err.code ?? '');
-    return res.status(500).json({ error: 'Failed to create checkout session' });
+    // ── Logging detallado server-side ─────────────────────────────────────
+    console.error('[checkout] Stripe error:', {
+      message: err.message,
+      type:    err.type    ?? 'unknown',
+      code:    err.code    ?? 'unknown',
+      param:   err.param   ?? null,
+      statusCode: err.statusCode ?? null,
+    });
+
+    // ── Mensajes de error específicos para debugging del cliente ──────────
+    // Esto ayuda a diagnosticar sin exponer datos sensibles
+    let clientError = 'Failed to create checkout session.';
+
+    if (err.type === 'StripeAuthenticationError') {
+      clientError = 'Stripe authentication failed. Check STRIPE_SECRET_KEY in Vercel env vars.';
+    } else if (err.type === 'StripeInvalidRequestError') {
+      // Más probable: price ID no existe en el modo (test/live) de la key
+      if (err.message?.includes('No such price')) {
+        clientError = `Price ID not found in Stripe. Possible test/live mode mismatch. (${priceId})`;
+      } else {
+        clientError = `Stripe invalid request: ${err.message}`;
+      }
+    } else if (err.code === 'resource_missing') {
+      clientError = `Stripe resource missing. Price ID may not exist in current mode. (${priceId})`;
+    }
+
+    return res.status(500).json({ error: clientError });
   }
 }

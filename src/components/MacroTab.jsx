@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import InterestRatePanel from './InterestRatePanel.jsx';
 
 // ── MOCK DATA ─────────────────────────────────────────────────────────────────
 const MOCK = {
@@ -792,6 +793,9 @@ export default function MacroTab({ darkMode, T, isMobile }) {
       `}</style>
 
       <div style={{ maxWidth: 1500, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '24px 32px 80px' }}>
+
+        {/* ── PANEL TIPOS DE INTERÉS ── ocupa el mismo contenedor para consistencia visual */}
+        <InterestRatePanel darkMode={darkMode} T={T} isMobile={isMobile} />
 
         {/* ── HERO — compact status header only ────────────────────────────── */}
         <div style={{

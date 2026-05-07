@@ -1,24 +1,21 @@
 /**
- * AuthCallback.jsx — v8 (DETERMINISTA)
+ * AuthCallback.jsx — v10 (IMPLICIT FLOW, SIN RACE CONDITIONS)
  *
- * GARANTÍA: el usuario NO sale de esta página hasta que su fila
- * en users_access está confirmada en la DB. Zero eventual consistency.
+ * Con implicit flow, detectSessionInUrl procesa el hash (#access_token=...)
+ * de forma síncrona al inicializar el cliente Supabase. Cuando este componente
+ * monta, los tokens ya están en localStorage. Basta con llamar getSession()
+ * tras un pequeño delay (300ms) para garantizar que el proceso terminó.
+ *
+ * NO usar onAuthStateChange aquí: con implicit flow el evento SIGNED_IN
+ * ya se emitió antes de que React monte el componente. El listener lo perdería.
  *
  * FLUJO:
- *   1. Detectar token en hash (implicit flow) o code param (OAuth)
- *   2. Obtener sesión (supabase.auth.getSession)
- *   3. Si es recovery → redirigir inmediatamente (no necesita fila)
- *   4. Si es magic link → llamar ensureRow() antes de redirigir:
- *        a. RPC ensure_user_access (SECURITY DEFINER, bypasa RLS)
- *        b. SELECT users_access WHERE auth_user_id = user.id
- *        c. Retry hasta 5 veces con backoff ~3s total
- *        d. Si confirmado → redirigir a /?setup=1
- *        e. Si falla → mostrar error con botón reintentar
- *
- * RESULTADO:
- *   Cuando el usuario llega a la app, su fila EXISTS en users_access.
- *   loadUserProfile() en accessGuard la encuentra en el intento 0.
- *   No hay synthetic profile para nuevos usuarios. No hay bgloop.
+ *   1. Detectar errores en URL
+ *   2. Esperar 300ms (detectSessionInUrl completa el hash processing)
+ *   3. getSession() → sesión disponible en localStorage
+ *   4. Si recovery → redirect a reset form
+ *   5. ensureRow() → garantiza fila en users_access
+ *   6. Redirect a /?setup=1
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -26,7 +23,7 @@ import { supabase } from '../lib/supabase.js';
 
 const APP_URL = 'https://app.cot-tracker.com';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getParam(key) {
   const fromSearch = new URLSearchParams(window.location.search).get(key);
@@ -48,14 +45,10 @@ function friendlyError(code, desc) {
   return desc || 'No se pudo procesar el enlace. Solicita uno nuevo.';
 }
 
-// ─── Garantía de fila en users_access ────────────────────────────────────────
-/**
- * Llama al RPC ensure_user_access y verifica con SELECT.
- * Retry hasta MAX_ATTEMPTS veces.
- * Devuelve true si la fila existe/fue creada. false si falló todo.
- */
-const MAX_ATTEMPTS = 5;
-const ATTEMPT_DELAYS = [0, 600, 700, 800, 900]; // total ~3s
+// ── Garantía de fila en users_access ──────────────────────────────────────────
+
+const MAX_ATTEMPTS   = 5;
+const ATTEMPT_DELAYS = [0, 600, 700, 800, 900];
 
 async function ensureRow(userId, userEmail) {
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
@@ -64,20 +57,15 @@ async function ensureRow(userId, userEmail) {
     }
 
     try {
-      // Paso A: RPC (SECURITY DEFINER — siempre puede escribir)
       const { error: rpcErr } = await supabase.rpc('ensure_user_access', {
         p_auth_user_id: userId,
         p_email:        userEmail,
       });
 
       if (rpcErr) {
-        // El RPC puede fallar si la función no está deployada todavía.
-        // En ese caso el trigger debería haber creado la fila.
-        // Continuamos al SELECT para verificar.
         console.warn(`[AuthCallback] RPC attempt ${i + 1} error:`, rpcErr.code, rpcErr.message);
       }
 
-      // Paso B: verificar que la fila existe
       const { data, error: selErr } = await supabase
         .from('users_access')
         .select('id, auth_user_id, status, plan')
@@ -90,10 +78,9 @@ async function ensureRow(userId, userEmail) {
       }
 
       if (data) {
-        console.log(
-          `[AuthCallback] Row confirmed (attempt ${i + 1}):`,
-          { id: data.id, status: data.status, plan: data.plan }
-        );
+        console.log(`[AuthCallback] Row confirmed (attempt ${i + 1}):`, {
+          id: data.id, status: data.status, plan: data.plan,
+        });
         return { ok: true, profile: data };
       }
 
@@ -107,24 +94,23 @@ async function ensureRow(userId, userEmail) {
   return { ok: false, profile: null };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AuthCallback() {
-  // 'processing' | 'creating' | 'success' | 'error' | 'retrying'
   const [status,   setStatus]   = useState('processing');
   const [msg,      setMsg]      = useState('');
   const [attempts, setAttempts] = useState(0);
   const ranRef = useRef(false);
 
   useEffect(() => {
-    if (ranRef.current) return; // StrictMode double-invoke guard
+    if (ranRef.current) return; // StrictMode guard
     ranRef.current = true;
     handleCallback();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCallback() {
     try {
-      // ── 1. Detectar errores en URL ──────────────────────────────────────
+      // ── 1. Errores en URL ────────────────────────────────────────────────
       const errorCode  = getParam('error_code');
       const errorParam = getParam('error');
       const errorDesc  = getParam('error_description');
@@ -134,85 +120,78 @@ export default function AuthCallback() {
         throw new Error(friendlyError(errorCode || errorParam, errorDesc));
       }
 
-      // ── 2. Esperar a que el SDK procese el hash/code ────────────────────
-      // Con implicit flow, detectSessionInUrl procesa el hash al cargar el cliente.
-      // Una pequeña espera garantiza que getSession() ya tiene los tokens.
-      await new Promise(r => setTimeout(r, 150));
+      // ── 2. Esperar a que detectSessionInUrl procese el hash ──────────────
+      // Con implicit flow, el SDK parsea #access_token al inicializarse.
+      // 300ms es suficiente para que la operación (síncrona + localStorage write)
+      // termine antes de que llamemos getSession().
+      await new Promise(r => setTimeout(r, 300));
 
-      // ── 3. Obtener sesión ───────────────────────────────────────────────
+      // ── 3. Obtener sesión desde localStorage ─────────────────────────────
       const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
 
       if (sessionErr) throw sessionErr;
 
       if (!session?.user) {
-        // No hay sesión — puede ser un code OAuth que necesita exchange
+        // Sin sesión: puede ser un enlace expirado o ya usado.
+        // Intentar con exchangeCodeForSession por si hubiera un code param (PKCE futuro).
         const code = getParam('code');
-        const type = getParam('type') ?? '';
-
         if (code) {
-          console.log('[AuthCallback] Exchanging code for session');
-          const { data: exchangeData, error: exchErr } = await supabase.auth.exchangeCodeForSession(
+          console.log('[AuthCallback] Trying code exchange');
+          const { data: ex, error: exErr } = await supabase.auth.exchangeCodeForSession(
             window.location.href
           );
-          if (exchErr) throw exchErr;
-
-          if (type === 'recovery') {
-            window.location.replace(`${APP_URL}/?mode=reset-password`);
-            return;
+          if (exErr) throw exErr;
+          if (ex?.session?.user) {
+            return continueWithSession(ex.session);
           }
-
-          // Re-run with the new session
-          ranRef.current = false;
-          handleCallback();
-          return;
         }
 
-        // Sin sesión y sin código — ir al login
-        console.warn('[AuthCallback] No session, no code — going home');
+        console.warn('[AuthCallback] No session — going home');
         window.location.replace(`${APP_URL}/`);
         return;
       }
 
-      const { id: userId, email: userEmail } = session.user;
-
-      // ── 4. Recovery (reset password) — redirigir directo ───────────────
-      const hash = window.location.hash;
-      const hp   = hash ? new URLSearchParams(hash.slice(1)) : null;
-      const type = hp?.get('type') ?? getParam('type') ?? '';
-
-      if (type === 'recovery') {
-        console.log('[AuthCallback] Recovery → redirect to reset form');
-        window.location.replace(`${APP_URL}/?mode=reset-password`);
-        return;
-      }
-
-      // ── 5. GARANTÍA: asegurar fila en users_access ──────────────────────
-      console.log('[AuthCallback] Session OK for:', userEmail, '— ensuring DB row');
-      setStatus('creating');
-
-      const { ok } = await ensureRow(userId, userEmail);
-
-      if (ok) {
-        // Fila confirmada → redirigir a la app
-        setStatus('success');
-        setTimeout(() => window.location.replace(`${APP_URL}/?setup=1`), 350);
-        return;
-      }
-
-      // ── 6. Todos los intentos fallaron ──────────────────────────────────
-      // Mostrar error con botón de reintento — NO redirigir a la app.
-      console.error('[AuthCallback] Failed to confirm DB row after all attempts');
-      setStatus('error');
-      setMsg(
-        'Hubo un problema al configurar tu acceso. ' +
-        'Pulsa "Reintentar" — suele resolverse en segundos.'
-      );
+      await continueWithSession(session);
 
     } catch (err) {
       console.error('[AuthCallback] Error:', err.message);
       setStatus('error');
       setMsg(friendlyError(err.code, err.message));
     }
+  }
+
+  async function continueWithSession(session) {
+    const { id: userId, email: userEmail } = session.user;
+
+    // ── 4. Recovery ──────────────────────────────────────────────────────
+    const hash = window.location.hash;
+    const hp   = hash ? new URLSearchParams(hash.slice(1)) : null;
+    const type = hp?.get('type') ?? getParam('type') ?? '';
+
+    if (type === 'recovery') {
+      console.log('[AuthCallback] Recovery → redirect to reset form');
+      window.location.replace(`${APP_URL}/?mode=reset-password`);
+      return;
+    }
+
+    // ── 5. Garantía: fila en users_access ───────────────────────────────
+    console.log('[AuthCallback] Session OK for:', userEmail, '— ensuring DB row');
+    setStatus('creating');
+
+    const { ok } = await ensureRow(userId, userEmail);
+
+    if (ok) {
+      setStatus('success');
+      setTimeout(() => window.location.replace(`${APP_URL}/?setup=1`), 350);
+      return;
+    }
+
+    console.error('[AuthCallback] Failed to confirm DB row after all attempts');
+    setStatus('error');
+    setMsg(
+      'Hubo un problema al configurar tu acceso. ' +
+      'Pulsa "Reintentar" — suele resolverse en segundos.'
+    );
   }
 
   async function handleRetry() {
@@ -223,16 +202,16 @@ export default function AuthCallback() {
     await handleCallback();
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight:   '100vh',
-      display:     'flex',
-      alignItems:  'center',
+      minHeight:      '100vh',
+      display:        'flex',
+      alignItems:     'center',
       justifyContent: 'center',
-      background:  '#0b0f14',
-      fontFamily:  "-apple-system,'SF Pro Text',Helvetica,sans-serif",
-      touchAction: 'manipulation',
+      background:     '#0b0f14',
+      fontFamily:     "-apple-system,'SF Pro Text',Helvetica,sans-serif",
+      touchAction:    'manipulation',
     }}>
       <style>{`
         @keyframes cb-spin { to { transform: rotate(360deg); } }
@@ -245,7 +224,6 @@ export default function AuthCallback() {
         animation: 'cb-in 0.25s ease both',
       }}>
 
-        {/* Logo */}
         <div style={{
           width: 56, height: 56, borderRadius: 16,
           background: 'linear-gradient(135deg,#0055cc,#0077ed)',
@@ -259,7 +237,6 @@ export default function AuthCallback() {
           </svg>
         </div>
 
-        {/* Processing */}
         {(status === 'processing' || status === 'creating') && (
           <>
             <div style={{
@@ -273,14 +250,11 @@ export default function AuthCallback() {
               {status === 'creating' ? 'Configurando tu acceso…' : 'Verificando enlace…'}
             </p>
             <p style={{ margin: '6px 0 0', fontSize: 12, color: '#5a6070' }}>
-              {status === 'creating'
-                ? 'Creando tu cuenta en la plataforma'
-                : 'Un momento'}
+              {status === 'creating' ? 'Creando tu cuenta en la plataforma' : 'Un momento'}
             </p>
           </>
         )}
 
-        {/* Success */}
         {status === 'success' && (
           <>
             <div style={{ fontSize: 42, marginBottom: 12 }}>✅</div>
@@ -293,7 +267,6 @@ export default function AuthCallback() {
           </>
         )}
 
-        {/* Error */}
         {status === 'error' && (
           <>
             <div style={{
@@ -316,7 +289,6 @@ export default function AuthCallback() {
               {msg || 'Hubo un problema. Intenta de nuevo.'}
             </p>
 
-            {/* Retry — only for DB errors (not expired links) */}
             {!msg.includes('expirado') && !msg.includes('usado') && !msg.includes('válido') && (
               <button
                 onClick={handleRetry}

@@ -1,10 +1,11 @@
+// ESM — convertido desde CJS (package.json tiene "type":"module")
 const PAIRS = [
   { key: 'US_DE', foreignKey: 'DE10Y' },
   { key: 'US_UK', foreignKey: 'UK10Y' },
   { key: 'US_JP', foreignKey: 'JP10Y' },
 ];
 
-function calculateSpreads(yields) {
+export function calculateSpreads(yields) {
   const spreads   = {};
   const direction = {};
   const momentum  = {};
@@ -42,5 +43,3 @@ function calculateSpreads(yields) {
 
   return { spreads, direction, momentum };
 }
-
-module.exports = { calculateSpreads };

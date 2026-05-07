@@ -1,3 +1,4 @@
+// ESM — convertido desde CJS (package.json tiene "type":"module")
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
 const FRED_KEY  = process.env.FRED_API_KEY || '';
 
@@ -44,10 +45,7 @@ async function fetchSeries(seriesId) {
       return null;
     }
 
-    return {
-      current: valid[0],
-      prev:    valid[1] ?? null,
-    };
+    return { current: valid[0], prev: valid[1] ?? null };
 
   } catch (err) {
     console.error(`[getYields] fetchSeries failed for ${seriesId}:`, err.message);
@@ -55,10 +53,8 @@ async function fetchSeries(seriesId) {
   }
 }
 
-async function getYields() {
-  const keys = ['US10Y', 'US2Y', 'DE10Y', 'UK10Y', 'JP10Y', 'CN10Y'];
+export async function getYields() {
+  const keys    = ['US10Y', 'US2Y', 'DE10Y', 'UK10Y', 'JP10Y', 'CN10Y'];
   const results = await Promise.all(keys.map((key) => fetchSeries(SERIES[key])));
   return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
 }
-
-module.exports = { getYields };

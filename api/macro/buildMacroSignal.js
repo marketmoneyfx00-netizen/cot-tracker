@@ -1,7 +1,7 @@
-function buildMacroSignal({ spreads, direction, momentum }, yields) {
+// ESM — convertido desde CJS (package.json tiene "type":"module")
+export function buildMacroSignal({ spreads, direction, momentum }, yields) {
   const { US_DE, US_UK, US_JP } = direction;
 
-  // Only count pairs where spread data actually exists
   const validDirections = [
     spreads.US_DE != null ? US_DE : null,
     spreads.US_UK != null ? US_UK : null,
@@ -27,9 +27,7 @@ function buildMacroSignal({ spreads, direction, momentum }, yields) {
     bias = 'NEUTRAL';
   }
 
-  // Confidence — only score pairs with confirmed data
   let confidence = 0;
-
   if (spreads.US_DE != null && US_DE === 'up') confidence += 2;
   if (spreads.US_JP != null && US_JP === 'up') confidence += 2;
 
@@ -51,9 +49,7 @@ function buildMacroSignal({ spreads, direction, momentum }, yields) {
 
   confidence = Math.max(0, Math.min(10, Math.round(confidence)));
 
-  // Drivers — only for pairs with real spread values
   const drivers = [];
-
   if (spreads.US_DE != null) {
     const arrow  = US_DE === 'up' ? '↑' : US_DE === 'down' ? '↓' : '→';
     const mom    = momentum.US_DE;
@@ -116,5 +112,3 @@ function _buildChinaContext(cn10yCur, us10yCur) {
   }
   return `China yields remain stable at ${cn10yCur.toFixed(2)}%, suggesting limited external macro pressure from Asia. PBoC posture appears accommodative, supporting global risk appetite at the margin.`;
 }
-
-module.exports = { buildMacroSignal };

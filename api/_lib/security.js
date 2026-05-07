@@ -24,10 +24,12 @@ export function setSecurityHeaders(res) {
     "img-src 'self' data:",
     "frame-ancestors 'none'",
   ].join('; '));
-  // CORS para los endpoints de la API
-  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_ORIGIN || '*');
+  // CORS para los endpoints de la API — nunca fallback a '*' en producción
+  const allowedOrigin = process.env.FRONTEND_ORIGIN || 'https://app.cot-tracker.com';
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin');
 }
 
 // ── CORS preflight handler ───────────────────────────────────────────────────

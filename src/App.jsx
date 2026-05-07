@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo, Component } from "re
 import { getIndicatorLogic } from './marketLogic.js';
 import { usePriceStore }     from './hooks/usePriceStore.js';
 import { buildDecision }     from './logic/decisionEngine.js';
+import { buildPairContext, buildBiasArray, deriveGlobalMarketState, buildFinalDecision } from './logic/pairDecisionEngine.js';
 import { checkAlerts }       from './logic/alertsEngine.js';
 import { buildInterpretation, TOOLTIPS } from './logic/interpretationEngine.js';
 import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
@@ -11,6 +12,12 @@ import { startPricePolling, stopPricePolling } from './services/priceService.js'
 import DropZone from './components/DropZone.jsx';
 import SourceCard from './components/SourceCard.jsx';
 import CrossAssetFlow from './components/CrossAssetFlow.jsx';
+import ContextSummary from './components/ContextSummary.jsx';
+import AlertBanner    from './components/AlertBanner.jsx';
+import { detectTradingOpportunity, detectTradingOpportunityWithVerdict } from './utils/alertEngine.js';
+import { calculateExecutionScore }  from './intradayExecutionEngine.js';
+import MarketState    from './components/MarketState.jsx';
+import TradeIdeas     from './components/TradeIdeas.jsx';
 import MarketDecisionLayer from './components/MarketDecisionLayer.jsx';
 import { useAuth } from './context/AuthProvider.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -21,10 +28,12 @@ import {
   CROSS_ASSET_FLOW_ASSETS,
 } from './parseTiffCombined.js';
 import { buildTheme, injectCSSVars } from './lib/theme.js';
-import OnboardingModal from './components/onboarding/OnboardingModal.jsx';
+import OnboardingModal from './components/OnboardingModal.jsx';
 import CreatePasswordModal from './components/CreatePasswordModal.jsx';
 import { useOnboarding } from './hooks/useOnboarding.js';
 import MacroTab from './components/MacroTab.jsx';
+import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
+import MacroEventCard from './components/MacroEventCard.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,6 +43,8 @@ import MacroTab from './components/MacroTab.jsx';
 // GAS_URL removed — no longer used for auth
 // STORAGE_KEY removed — session managed by Supabase, not localStorage
 const STORAGE_KEY = "cot_user_registered"; // kept for dark/lang prefs only
+const COT_STORAGE_KEY = "cotData_v1";
+const COT_MAX_AGE = 24 * 60 * 60 * 1000; // 24h en ms
 // ─────────────────────────────────────────────────────────────────────────────
 const CONTRACT_MAP = [
   { keys: ["EURO FX - CHICAGO MERCANTILE", "EURO FX - CHICAGO"],           pair: "EUR/USD",   cat: "fx", invert: false },
@@ -799,7 +810,7 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
 // ─── STRIPE PRICE IDs (one constant per plan for easy updates) ───────────────
 const STRIPE_PRICE_IDS = {
   mensual:    "price_1TQdW7B7QeisGCzWnuzk8SLI",
-  trimestral: "price_1TQdc6B7QeisGCzWYXRSJNGc",
+  trimestral: "price_1TQdc6B7QeisGCzWYXRSjNGc",
   semestral:  "price_1TQdfUB7QeisGCzWkhQSRQAE",
   anual:      "price_1TQdhfB7QeisGCzWEoFsJFhm",
 };
@@ -2321,6 +2332,17 @@ function getEventFlag(country) {
   return CCY_FLAG[ccy] || FLAG_MAP[(country||'').toUpperCase()] || '🌐';
 }
 
+// Lowercase ISO country code for flagcdn.com img tags
+const COUNTRY_FLAG_CODE = {
+  US:'us', EU:'eu', GB:'gb', JP:'jp', CA:'ca', AU:'au',
+  NZ:'nz', CH:'ch', DE:'de', FR:'fr', CN:'cn', NL:'nl',
+  IT:'it', ES:'es', KR:'kr', BR:'br', MX:'mx', IN:'in',
+  SE:'se', NO:'no', DK:'dk', PL:'pl', ZA:'za', SG:'sg',
+};
+function getEventFlagCode(country) {
+  return COUNTRY_FLAG_CODE[(country||'').toUpperCase()] || (country||'').toLowerCase().slice(0,2) || 'un';
+}
+
 function calcSentiment(events) {
   const today = new Date().toISOString().slice(0,10);
   const todayEvs = events.filter(e=>e.date?.slice(0,10)===today);
@@ -2348,6 +2370,7 @@ function CalendarioTab({darkMode, T}) {
   // Suscripción reactiva al priceStore — se re-renderiza con cada nueva vela
   // liveCandles es el valor que se pasa a getIndicatorLogic en el render
   const liveCandles = usePriceStore(3);
+
   // confirmedCandles: excluye la vela en formación (última) para señales estables
   const confirmedCandles = liveCandles.length > 1
     ? liveCandles.slice(0, -1)
@@ -2821,6 +2844,7 @@ function CalendarioTab({darkMode, T}) {
                   const stars    = ev.impact==='High'?3:ev.impact==='Medium'?2:1;
                   const iCol     = impColor(ev.impact);
                   const flag     = getEventFlag(ev.country);
+                  const flagCode = getEventFlagCode(ev.country);
                   const ccy      = getEventCcy(ev.country);
                   const sc       = matchEventScenario(ev.event, ev.country);
                   // Robust actual value — try multiple fields
@@ -2894,7 +2918,12 @@ function CalendarioTab({darkMode, T}) {
                             </div>
                             {/* Flag + CCY — solo una vez */}
                             <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
-                              <span style={{fontSize:22}}>{flag}</span>
+                              <img
+                                src={`https://flagcdn.com/28x21/${flagCode}.png`}
+                                srcSet={`https://flagcdn.com/56x42/${flagCode}.png 2x`}
+                                alt={ccy}
+                                style={{width:22,height:'auto',borderRadius:2,display:'block',flexShrink:0}}
+                              />
                               <span style={{fontSize:14,fontWeight:800,color:D.accent,
                                 letterSpacing:'0.05em'}}>{ccy}</span>
                             </div>
@@ -2968,7 +2997,12 @@ function CalendarioTab({darkMode, T}) {
                           {/* Flag + CCY — solo una vez, sin country code */}
                           <div style={{display:'flex',flexDirection:'column',gap:2,justifyContent:'center'}}>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:18,lineHeight:1}}>{flag}</span>
+                              <img
+                                src={`https://flagcdn.com/28x21/${flagCode}.png`}
+                                srcSet={`https://flagcdn.com/56x42/${flagCode}.png 2x`}
+                                alt={ccy}
+                                style={{width:22,height:'auto',borderRadius:2,display:'block'}}
+                              />
                             </div>
                             <span style={{fontSize:11,fontWeight:800,color:D.accent,letterSpacing:'0.05em'}}>
                               {ccy}
@@ -3840,11 +3874,42 @@ function AppInner() {
   const [showBillingApp, setShowBillingApp] = useState(false);
   const openBilling = useCallback(() => setShowBillingApp(true), []);
 
-  const [pairsData, setPairsData] = useState(null);
-  const [source,    setSource]    = useState("");
+  const [pairsData, setPairsData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(COT_STORAGE_KEY);
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!parsed?.timestamp || Date.now() - parsed.timestamp > COT_MAX_AGE) {
+        localStorage.removeItem(COT_STORAGE_KEY);
+        return null;
+      }
+      return parsed.pairsData ?? null;
+    } catch { return null; }
+  });
+  const [source, setSource] = useState(() => {
+    try {
+      const saved = localStorage.getItem(COT_STORAGE_KEY);
+      if (!saved) return "";
+      return JSON.parse(saved).source ?? "";
+    } catch { return ""; }
+  });
   // ── TIFF Combined dataset (parallel, never overwrites Futures Only) ────────
-  const [combinedData,  setCombinedData]  = useState(null); // parseTiffCombined() result
-  const [sourceCombined,setSourceCombined]= useState("");
+  const [combinedData,  setCombinedData]  = useState(() => {
+    try {
+      const saved = localStorage.getItem(COT_STORAGE_KEY);
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!parsed?.timestamp || Date.now() - parsed.timestamp > COT_MAX_AGE) return null;
+      return parsed.combinedData ?? null;
+    } catch { return null; }
+  });
+  const [sourceCombined,setSourceCombined]= useState(() => {
+    try {
+      const saved = localStorage.getItem(COT_STORAGE_KEY);
+      if (!saved) return "";
+      return JSON.parse(saved).sourceCombined ?? "";
+    } catch { return ""; }
+  });
   const [errorCombined, setErrorCombined] = useState(null);
   const [error,     setError]     = useState(null);
   const [tab,       setTab]       = useState("fx");
@@ -3882,15 +3947,91 @@ function AppInner() {
   useEffect(() => { injectCSSVars(darkMode); }, [darkMode]);
 
   // ── Precio real de mercado para scoreT ──────────────────────────────────────
-  // Inicia polling al montar AppInner. Requiere VITE_TWELVEDATA_API_KEY en .env.
+  // Arranca SOLO cuando el perfil está cargado — evita conflictos de auth.
+  const priceStartedRef = useRef(false);
+
   useEffect(() => {
+    if (!profile) return;
+    if (priceStartedRef.current) return;
+
+    priceStartedRef.current = true;
     startPricePolling('EUR/USD');
-return () => stopPricePolling();
+
+    return () => {
+      stopPricePolling();
+      priceStartedRef.current = false;
+    };
+  }, [profile]);
+
+  // ── Live price candles for TradeReadinessChecklist ───────────────────────
+  const liveCandles = usePriceStore(3);
+
+  // ── Shared calendar events for TradeReadinessChecklist ──────────────────
+  const [sharedEvents, setSharedEvents] = useState([]);
+  const [tradeReadinessScore, setTradeReadinessScore] = useState(100);
+  const [selectedPair, setSelectedPair] = useState(() => {
+    try {
+      const saved = localStorage.getItem(COT_STORAGE_KEY);
+      if (!saved) return 'EUR/USD';
+      return JSON.parse(saved).selectedPair ?? 'EUR/USD';
+    } catch { return 'EUR/USD'; }
+  });
+
+  // ── AUTO-SAVE COT data to localStorage ─────────────────────────────────────
+  // Placed here — AFTER all useState declarations — to avoid TDZ on selectedPair.
+  // The dependency array is evaluated at call time; declaring this effect before
+  // selectedPair would throw "Cannot access before initialization".
+  useEffect(() => {
+    if (!pairsData && !combinedData) return;
+    try {
+      localStorage.setItem(COT_STORAGE_KEY, JSON.stringify({
+        pairsData,
+        source,
+        combinedData,
+        sourceCombined,
+        selectedPair,
+        timestamp: Date.now(),
+      }));
+    } catch (e) {
+      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+        console.warn('[COT] localStorage llena — no se pudo guardar el estado COT');
+      }
+    }
+  }, [pairsData, combinedData, source, sourceCombined, selectedPair]);
+  useEffect(() => {
+    fetch('/api/calendar?range=thisweek')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setSharedEvents(data.filter(d => !d._meta).sort((a,b) => new Date(a.date)-new Date(b.date)));
+        }
+      })
+      .catch(() => {});
+    // Refresh every 2 minutes
+    const id = setInterval(() => {
+      fetch('/api/calendar?range=thisweek')
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setSharedEvents(data.filter(d => !d._meta).sort((a,b) => new Date(a.date)-new Date(b.date)));
+          }
+        })
+        .catch(() => {});
+    }, 2 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   const toggleDark = () => { const v=!darkMode; setDarkMode(v); localStorage.setItem("cot_dark",JSON.stringify(v)); };
   const changeLang = (l) => { setLang(l); localStorage.setItem("cot_lang",l); };
-  const handleLogout = async () => { await logout(); setPairsData(null); setShowSettings(false); };
+  const handleLogout = async () => {
+    localStorage.removeItem(COT_STORAGE_KEY);
+    await logout();
+    setPairsData(null);
+    setCombinedData(null);
+    setSource("");
+    setSourceCombined("");
+    setShowSettings(false);
+  };
 
   // ── Handle Stripe return (?checkout=success / ?checkout=cancelled) ─────────
   useEffect(() => {
@@ -4004,6 +4145,64 @@ return () => stopPricePolling();
     }),
     [fxPairs, sort]
   );
+
+  // ── PAIR DECISION ENGINE — placed here: after fxPairs, before early returns ──
+  // All useMemo hooks that depend on fxPairs MUST be declared after it to avoid TDZ.
+  const biasArr = useMemo(() => buildBiasArray(fxPairs), [fxPairs]);
+
+  // ── PAIR-SPECIFIC CURRENCY MAP ─────────────────────────────────────────────
+  // Maps each tradeable pair to the currencies whose macro events are relevant.
+  const PAIR_CCYS_MAP = {
+    'EUR/USD': ['EUR','USD'], 'GBP/USD': ['GBP','USD'],
+    'USD/JPY': ['USD','JPY'], 'USD/CHF': ['USD','CHF'],
+    'USD/CAD': ['USD','CAD'], 'AUD/USD': ['AUD','USD'],
+    'NZD/USD': ['NZD','USD'], 'USD Index': ['USD'],
+  };
+  const EVENT_COUNTRY_CCY = {
+    US:'USD', EU:'EUR', GB:'GBP', JP:'JPY', CA:'CAD',
+    AU:'AUD', NZ:'NZD', CH:'CHF', DE:'EUR', FR:'EUR', ES:'EUR', IT:'EUR', NL:'EUR',
+  };
+  function eventCcy(country) { return EVENT_COUNTRY_CCY[(country||'').toUpperCase()] || country; }
+
+  // ── PAIR-FILTERED EVENTS — only events relevant to the selected pair ────────
+  // This is the single source of truth for per-pair risk / sentiment / execution.
+  const pairEvents = useMemo(() => {
+    const ccys = PAIR_CCYS_MAP[selectedPair] || ['USD'];
+    return sharedEvents.filter(e => ccys.includes(eventCcy(e.country)));
+  }, [sharedEvents, selectedPair]);
+
+  const sentimentData = useMemo(() => {
+    const s = calcSentiment(pairEvents);
+    return { fg: s.fg, vix: parseFloat(s.vix), highCount: s.highCount, midCount: s.midCount };
+  }, [pairEvents]);
+
+  const riskData = useMemo(() => {
+    return { score: calcRisk(pairEvents).score };
+  }, [pairEvents]);
+
+  const globalMarketState = useMemo(() => deriveGlobalMarketState(biasArr), [biasArr]);
+
+  const currentContext = useMemo(() => {
+    if (!biasArr.length) return null;
+    return buildPairContext({
+      pair:               selectedPair,
+      biasArr,
+      sentimentData,
+      riskData,
+      tradeReadinessScore,
+      globalMarketState,
+    });
+  }, [selectedPair, biasArr, sentimentData, riskData, tradeReadinessScore, globalMarketState]);
+
+  // ── FINAL DECISION — single source of truth for all module blocking ────────
+  // Derived from currentContext scores. ALL components must respect this verdict.
+  const finalDecision = useMemo(() => {
+    if (!currentContext) return { verdict: 'EXECUTE', allowExecution: true, isMacroBlocked: false, isIntradayBlocked: false };
+    return buildFinalDecision({
+      tradeReadinessScore: currentContext.tradeReadinessScore,
+      intradayScore:       currentContext.intradayScore,
+    });
+  }, [currentContext]);
 
   const _resetParams    = new URLSearchParams(window.location.search);
   const forceResetMode  = _resetParams.get('mode')  === 'reset-password';
@@ -4383,23 +4582,138 @@ if (!authUser || forceResetMode) {
       {mainTab==="sesgos"&&(pairsData||combinedData)&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"12px":"28px 32px"}}>
 
-          {/* ── MARKET DECISION LAYER ─────────────────────────────────────── */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 1 — ALERTA OPERATIVA                                      */}
+          {/* ¿Debo operar hoy? Veredicto inmediato basado en contexto actual  */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {pairsData&&fxPairs.length>0&&currentContext&&(()=>{
+            const { alertData, alertKey, intradayConstraint, intradayBlock } = currentContext;
+            return (
+              <AlertBanner
+                alert={alertData}
+                alertKey={alertKey}
+                intradayConstraint={intradayConstraint}
+                intradayBlock={intradayBlock}
+                darkMode={darkMode}
+                T={_thm}
+                pair={selectedPair}
+              />
+            );
+          })()}
+
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 2 — CONTEXTO INSTITUCIONAL                                */}
+          {/* ¿Qué dice el posicionamiento CFTC esta semana?                  */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {pairsData&&fxPairs.length>0&&(()=>{
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
+                    CONTEXTO INSTITUCIONAL
+                  </span>
+                  <span style={{flex:1,height:1,background:_thm.border}}/>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>COT · CFTC · SEMANAL</span>
+                </div>
+                <ContextSummary fxPairs={fxPairs} darkMode={darkMode} T={_thm}/>
+                <div style={{marginTop:10}}>
+                  <MarketState fxPairs={fxPairs} darkMode={darkMode} T={_thm}/>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 3 — PERMISO OPERATIVO INTRADÍA                            */}
+          {/* ¿Tienes permiso de ejecutar hoy según el contexto macro+COT?    */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {pairsData&&currentContext&&(()=>{
+            const availablePairs = biasArr.map(r => ({
+              pair:   r.pair,
+              signal: fxPairs.find(p => p.pair === r.pair)?.signal,
+              bias:   r.bias,
+            }));
+            if (!availablePairs.length) return null;
+
+            const topBias = biasArr.find(r => r.pair === selectedPair)
+              || [...biasArr].sort((a,b) => Math.abs(b.score) - Math.abs(a.score))[0];
+
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
+                    PERMISO OPERATIVO INTRADÍA
+                  </span>
+                  <span style={{flex:1,height:1,background:_thm.border}}/>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>INTRADAY EXECUTION · NO GENERA SEÑALES</span>
+                </div>
+                <IntradayExecutionCard
+                  biasResult={topBias.bias}
+                  availablePairs={availablePairs}
+                  sentimentData={sentimentData}
+                  riskData={riskData}
+                  darkMode={darkMode}
+                  T={_thm}
+                  isMobile={isMobile}
+                  isPremium={isPremium}
+                  onUpgrade={openBilling}
+                  finalDecision={finalDecision}
+                />
+              </div>
+            );
+          })()}
+
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 4 — IDEAS DE TRADING                                      */}
+          {/* ¿Qué pares tienen confluencia institucional para considerar?    */}
+          {/* Siempre visible — el estado de alerta se muestra dentro         */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {pairsData&&fxPairs.length>0&&currentContext&&(
+            <div style={{marginBottom:16}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
+                  IDEAS DE TRADING
+                </span>
+                <span style={{flex:1,height:1,background:_thm.border}}/>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>COT · NO SON SEÑALES DE ENTRADA</span>
+              </div>
+              <TradeIdeas
+                fxPairs={fxPairs}
+                darkMode={darkMode}
+                T={_thm}
+                isPremium={isPremium}
+                onUpgrade={openBilling}
+                marketState={globalMarketState}
+                intradayScore={currentContext.intradayScore}
+                tradeReadinessScore={tradeReadinessScore}
+                selectedPair={selectedPair}
+                finalDecision={finalDecision}
+              />
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 5 — DECISIÓN DE MERCADO                                   */}
+          {/* Interpretación combinada HTF + LTF por par                      */}
+          {/* ─────────────────────────────────────────────────────────────── */}
           {pairsData&&fxPairs.length>0&&(
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
-                  MARKET DECISION LAYER
+                  DECISIÓN DE MERCADO
                 </span>
                 <span style={{flex:1,height:1,background:_thm.border}}/>
-                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>INTERPRETACIÓN · HTF+LTF · AUTO</span>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision}/>
             </div>
           )}
 
-          {/* ── INSTITUTIONAL BIAS ENGINE CARDS ─────────────────────────── */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 6 — SESGO INSTITUCIONAL POR PAR                           */}
+          {/* Score HTF semanal -5 a +5. Contexto, no señal de entrada        */}
+          {/* ─────────────────────────────────────────────────────────────── */}
           {(()=>{
-            // Safe pre-computation: each step guards against null/undefined
             const biasResults = (fxPairs || []).map(p => {
               if (!p) return null;
               const inputs = deriveInputsFromPair(p);
@@ -4418,10 +4732,10 @@ if (!authUser || forceResetMode) {
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                   <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
-                    INSTITUTIONAL BIAS ENGINE
+                    SESGO INSTITUCIONAL POR PAR
                   </span>
                   <span style={{flex:1,height:1,background:_thm.border}}/>
-                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>HTF · SESGO SEMANAL · NO SEÑAL</span>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>INSTITUTIONAL BIAS ENGINE · HTF · NO SEÑAL</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':`repeat(${Math.min(top.length,3)},1fr)`,gap:10}}>
                   {top.map(({pair,bias})=>(
@@ -4437,67 +4751,22 @@ if (!authUser || forceResetMode) {
             );
           })()}
 
-          {/* ── INSTITUTIONAL CROSS ASSET FLOW ─────────────────────────── */}
+          {/* ─────────────────────────────────────────────────────────────── */}
+          {/* LAYER 7 — FLUJO CROSS-ASSET                                     */}
+          {/* FX + Índices + Bonos — requiere archivo Combined                */}
+          {/* ─────────────────────────────────────────────────────────────── */}
           {combinedData && (
             <div style={{marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:"#8b5cf6",letterSpacing:"0.1em"}}>
-                  CROSS ASSET FLOW
+                  FLUJO CROSS-ASSET
                 </span>
                 <span style={{flex:1,height:1,background:_thm.border}}/>
-                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>COMBINED · FX + ÍNDICES + BONOS</span>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>CROSS ASSET FLOW · COMBINED · FX + ÍNDICES + BONOS</span>
               </div>
               <CrossAssetFlow combinedData={combinedData} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling}/>
             </div>
           )}
-
-          {/* ── INTRADAY EXECUTION LAYER ──────────────────────────────────── */}
-          {pairsData&&(()=>{
-            // Build availablePairs: all fxPairs with their precomputed bias
-            const availablePairs = (fxPairs||[]).map(p=>{
-              if(!p) return null;
-              const inp = deriveInputsFromPair(p);
-              if(!inp) return null;
-              const bias = calculateBiasScore(inp);
-              return { pair: p.pair, signal: p.signal, bias };
-            }).filter(Boolean);
-
-            if(!availablePairs.length) return null;
-
-            // Top bias pair drives the shared sentiment/risk approximation
-            const topBias = availablePairs.reduce((best,p)=>
-              Math.abs(p.bias.score) > Math.abs(best.bias.score) ? p : best
-            , availablePairs[0]);
-
-            const sentimentData = { fg: 55 - Math.abs(topBias.bias.score)*3, vix: 18 + Math.abs(topBias.bias.score)*1.5, highCount: 0, midCount: 1 };
-            const riskData      = { score: Math.abs(topBias.bias.score) * 4 };
-
-            return (
-              <div style={{marginBottom:4}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                  <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
-                    INTRADAY EXECUTION LAYER
-                  </span>
-                  <span style={{flex:1,height:1,background:_thm.border}}/>
-                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>PERMISO OPERATIVO · NO GENERA SEÑALES</span>
-                </div>
-                <IntradayExecutionCard
-                  biasResult={topBias.bias}
-                  availablePairs={availablePairs}
-                  sentimentData={sentimentData}
-                  riskData={riskData}
-                  darkMode={darkMode}
-                  T={_thm}
-                  isMobile={isMobile}
-                  isPremium={isPremium}
-                  onUpgrade={openBilling}
-                />
-              </div>
-            );
-          })()}
-
-          {/* Summary bar, column headers, pair rows and methodology footer
-              → moved to Tabla Histórica tab */}
 
         </div>
       )}
@@ -4977,6 +5246,20 @@ if (!authUser || forceResetMode) {
             }}>Abrir panel de ajustes</button>
           </div>
         </div>
+      )}
+
+      {/* ── TRADE READINESS CHECKLIST ── */}
+      {profile && (
+        <TradeReadinessChecklist
+          events={sharedEvents}
+          pairsData={pairsData}
+          candles={liveCandles}
+          darkMode={darkMode}
+          T={_thm}
+          onScore={setTradeReadinessScore}
+          selectedPair={selectedPair}
+          onPairChange={setSelectedPair}
+        />
       )}
 
       <style>{`

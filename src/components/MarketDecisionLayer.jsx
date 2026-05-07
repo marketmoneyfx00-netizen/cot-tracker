@@ -73,8 +73,13 @@ function buildPairConfluence(biasScore, tacSignal, tacStrength) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET DECISION LAYER — Premium interpretation card
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade }) {
+function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision }) {
   if (!fxPairs || fxPairs.length===0) return null;
+
+  const allowExecution  = finalDecision?.allowExecution ?? true;
+  const isMacroBlocked  = finalDecision?.isMacroBlocked  ?? false;
+  const isIntradayBlock = finalDecision?.isIntradayBlocked ?? false;
+  const verdict         = finalDecision?.verdict ?? 'EXECUTE';
 
   const SIGNAL_LABELS = {
     buy:        {label:"Alcista",    color:"#22c55e", icon:"▲"},
@@ -129,6 +134,48 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
         </span>
       </div>
 
+      {/* ── VERDICT BANNER — shown whenever execution is not permitted ── */}
+      {!allowExecution && (
+        <div style={{
+          margin: '0 14px 0',
+          padding: '9px 14px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: isMacroBlocked
+            ? 'rgba(239,68,68,0.08)'
+            : 'rgba(245,158,11,0.08)',
+          border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
+          borderRadius: 8,
+          marginTop: 10,
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>{isMacroBlocked ? '🚫' : '⚠️'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              color: isMacroBlocked ? '#ef4444' : '#f59e0b',
+            }}>
+              {isMacroBlocked
+                ? 'Análisis disponible · ejecución bloqueada por macro risk'
+                : 'Análisis disponible · permiso operativo bajo'}
+            </span>
+            <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>
+              {isMacroBlocked
+                ? 'Trade Readiness bloqueado — usa esta lectura para planificación, no para ejecución inmediata'
+                : 'Intraday Execution por debajo del umbral — esperar mejora del contexto'}
+            </div>
+          </div>
+          <span style={{
+            fontSize: 9, fontWeight: 700, flexShrink: 0,
+            padding: '3px 8px', borderRadius: 99,
+            background: isMacroBlocked ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
+            color: isMacroBlocked ? '#ef4444' : '#f59e0b',
+            border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'}`,
+            letterSpacing: '0.06em',
+          }}>
+            {verdict}
+          </span>
+        </div>
+      )}
+
       {/* Cards */}
       <div style={{
         padding: isMobile?"12px":"14px 20px",
@@ -155,12 +202,25 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
                 <span style={{fontSize:16,fontWeight:800,color:T.txt,fontFamily:"monospace",letterSpacing:"0.03em"}}>
                   {pair}
                 </span>
-                <span style={{
-                  fontSize:9,fontWeight:700,color:conf.cfg.color,
-                  background:conf.cfg.bg,border:`1px solid ${conf.cfg.border}`,
-                  padding:"2px 8px",borderRadius:99,letterSpacing:"0.04em",
-                  whiteSpace:"nowrap",
-                }}>{conf.cfg.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {!allowExecution && (
+                    <span style={{
+                      fontSize: 8, fontWeight: 700,
+                      color: isMacroBlocked ? '#ef4444' : '#f59e0b',
+                      background: isMacroBlocked ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)',
+                      border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                      padding: '2px 6px', borderRadius: 99, letterSpacing: '0.05em',
+                    }}>
+                      {isMacroBlocked ? '🚫 NO EXEC' : '⚠️ ESPERAR'}
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize:9,fontWeight:700,color:conf.cfg.color,
+                    background:conf.cfg.bg,border:`1px solid ${conf.cfg.border}`,
+                    padding:"2px 8px",borderRadius:99,letterSpacing:"0.04em",
+                    whiteSpace:"nowrap",
+                  }}>{conf.cfg.label}</span>
+                </div>
               </div>
 
               {/* Macro + Tactical row */}

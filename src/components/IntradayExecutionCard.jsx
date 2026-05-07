@@ -138,7 +138,7 @@ function PermissionBadge({ permission, score, isMobile }) {
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile, isPremium = true, onUpgrade }) {
+export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision }) {
   const [expanded, setExpanded] = useState(false);
 
   const defaultPair = availablePairs?.[0]?.pair ?? '—';
@@ -190,6 +190,47 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
           <PairSelector pairs={availablePairs} selected={activePair} onChange={setSelectedPair} darkMode={darkMode} T={T} />
         )}
       </div>
+
+      {/* ── MACRO BLOCK NOTICE — only when TradeReadiness blocks despite intraday being OK ── */}
+      {finalDecision?.isMacroBlocked && score >= 60 && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '9px 12px', marginBottom: 14, borderRadius: 8,
+          background: 'rgba(239,68,68,0.07)',
+          border: '1px solid rgba(239,68,68,0.22)',
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>🚫</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>
+              Timing válido · bloqueado por macro risk
+            </span>
+            <div style={{ fontSize: 10, color: T.sub, marginTop: 2, lineHeight: 1.5 }}>
+              El permiso intradía es suficiente ({score}/100), pero Trade Readiness ha bloqueado la operativa.
+              Usa este análisis para planificación — no para ejecución inmediata.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── INTRADAY BLOCK NOTICE ── */}
+      {finalDecision?.isIntradayBlocked && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '9px 12px', marginBottom: 14, borderRadius: 8,
+          background: 'rgba(245,158,11,0.07)',
+          border: '1px solid rgba(245,158,11,0.22)',
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>
+              Permiso operativo insuficiente
+            </span>
+            <div style={{ fontSize: 10, color: T.sub, marginTop: 2, lineHeight: 1.5 }}>
+              Intraday Score por debajo del umbral mínimo (60). Esperar mejora del contexto antes de buscar setups.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SCORE BLOCK ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18, marginBottom: 18 }}>

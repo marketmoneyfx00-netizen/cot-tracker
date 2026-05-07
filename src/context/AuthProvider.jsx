@@ -1,32 +1,40 @@
 /**
- * AuthProvider.jsx — v8 (DETERMINISTA)
+ * AuthProvider.jsx — v12 (DEADLOCK-FREE)
  *
- * Sin callback onRealProfile. Sin synthetic prolongado.
+ * ROOT CAUSE DEL LOCK:
+ * Supabase JS v2.103+ usa initializePromise como prerequisito de getSession().
+ * El callback de onAuthStateChange se ejecuta DENTRO del lock de _initialize().
+ * Si desde el callback llamamos supabase.from() → _getAccessToken() → getSession()
+ * → await initializePromise → DEADLOCK circular (initializePromise no puede resolver
+ * hasta que _initialize() termine, pero _initialize() espera al callback, que espera
+ * a initializePromise).
+ * Después de 5s el lock se roba a sí mismo → "lock was released because another
+ * request stole it".
  *
- * Si accessGuard devuelve profile=null (DB caída, RPC no deployado):
- *   → accessStatus.reason = 'db_error'
- *   → App.jsx muestra pantalla de error de conexión con botón Reintentar
- *   → NO se bloquea como paywall
- *   → NO se da acceso falso
- *
- * Para nuevos usuarios vía magic link:
- *   AuthCallback garantizó la fila antes de llegar aquí.
- *   loadProfile encuentra la fila en el intento 0.
- *   profile nunca es null para usuarios que pasaron por AuthCallback.
- *
- * Para re-logins con contraseña:
- *   La fila existe desde el primer login.
- *   profile nunca es null.
- *
- * El único caso donde profile=null es un error real de DB.
+ * FIX: setTimeout(0) en el callback saca loadProfile del contexto del lock de
+ * Supabase (macrotask nueva). Para entonces initializePromise ya está resuelta
+ * y getSession() funciona sin conflictos.
  */
 
 import {
-  createContext, useContext, useEffect,
-  useState, useCallback, useRef
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
 } from 'react';
-import { listenAuthChanges, logLoginEvent, updateLastLogin } from '../lib/authService.js';
-import { loadUserProfile, getAccessStatus } from '../lib/accessGuard.js';
+
+import {
+  listenAuthChanges,
+  logLoginEvent,
+  updateLastLogin,
+} from '../lib/authService.js';
+
+import {
+  loadUserProfile,
+  getAccessStatus,
+} from '../lib/accessGuard.js';
 
 const AuthContext = createContext({
   loading:        true,
@@ -50,163 +58,160 @@ export function AuthProvider({ children }) {
   const [subscription, setSubscription] = useState(null);
   const [accessStatus, setAccessStatus] = useState(null);
 
+  // ── Refs — never cause re-renders, no closure staleness ──────────────────
   const loadingProfileRef = useRef(false);
-  const initializedRef    = useRef(false);
+  const lastUserIdRef     = useRef(null);
+  const profileRef        = useRef(null);
   const userRef           = useRef(null);
 
-  // ── loadProfile ────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // LOAD PROFILE
+  // deps = [] — reference never changes, no closure issues.
+  // Uses refs for all guards so closures over state are never stale.
+  // ─────────────────────────────────────────────────────────────────────────
   const loadProfile = useCallback(async (authUser) => {
-    if (!authUser?.id) {
-      setProfile(null);
-      setSubscription(null);
-      setAccessStatus(null);
+    if (!authUser?.id) return;
+
+    if (lastUserIdRef.current === authUser.id && profileRef.current) {
+      console.log('[AUTH] Profile already loaded — skip');
       return;
     }
 
     if (loadingProfileRef.current) {
-      console.log('[AUTH] loadProfile already running — skipping');
+      console.log('[AUTH] loadProfile skipped (already running)');
       return;
     }
+
     loadingProfileRef.current = true;
 
     try {
-      console.log('[AUTH] Loading profile for:', authUser.email, '| uid:', authUser.id);
+      console.log('[AUTH] Loading profile for:', authUser.email);
 
       const { profile: p, error } = await loadUserProfile(authUser.id, authUser);
 
       if (error || !p) {
-        // DB caída o RPC no deployado — error de infraestructura real
-        console.error('[AUTH] DB error loading profile for:', authUser.email, error?.message);
+        console.error('[AUTH] DB ERROR:', error?.message);
+        profileRef.current = null;
         setProfile(null);
         setSubscription(null);
-        // reason='db_error' → App.jsx muestra pantalla de error con retry
-        // NO 'hasAccess:true' — queremos que el usuario vea el error
-        // y pueda reintentar, no que entre con estado inconsistente
-        setAccessStatus({
-          hasAccess: false,
-          reason:    'db_error',
-          plan:      'none',
-          status:    'error',
-        });
+        setAccessStatus({ hasAccess: false, reason: 'db_error', plan: 'none', status: 'error' });
         return;
       }
+
+      lastUserIdRef.current = authUser.id;
+      profileRef.current    = p;
 
       const status = getAccessStatus(p);
       setProfile(p);
       setSubscription(null);
       setAccessStatus(status);
 
-      console.log(
-        '[AUTH] Profile loaded:', p.email,
-        '| plan:', p.plan,
-        '| status:', p.status,
-        '| hasAccess:', status.hasAccess,
-        '| onboarding_completed:', p.onboarding_completed
-      );
+      console.log('[AUTH] Profile OK:', p.email, '| plan:', p.plan);
 
-      // Side effects (fire-and-forget)
       updateLastLogin(authUser.id).catch(() => {});
       logLoginEvent(authUser.id, true).catch(() => {});
 
     } catch (err) {
-      console.error('[AUTH] loadProfile exception:', err.message);
+      console.error('[AUTH] loadProfile EXCEPTION:', err.message);
+      profileRef.current = null;
       setProfile(null);
-      setAccessStatus({
-        hasAccess: false,
-        reason:    'db_error',
-        plan:      'none',
-        status:    'error',
-      });
+      setAccessStatus({ hasAccess: false, reason: 'db_error', plan: 'none', status: 'error' });
+
     } finally {
       loadingProfileRef.current = false;
+      setLoading(false);
     }
-  }, []);
+  }, []); // NO DEPS — never recreated, listener never dies
 
-  // ── refreshProfile ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // REFRESH MANUAL
+  // ─────────────────────────────────────────────────────────────────────────
   const refreshProfile = useCallback(async () => {
     const currentUser = userRef.current;
-    if (currentUser) {
-      loadingProfileRef.current = false;
-      await loadProfile(currentUser);
-    }
+    if (!currentUser) return;
+
+    lastUserIdRef.current     = null;
+    profileRef.current        = null;
+    loadingProfileRef.current = false;
+
+    setLoading(true);
+    await loadProfile(currentUser);
   }, [loadProfile]);
 
-  // ── Auth state listener ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // AUTH LISTENER
+  // deps = [] → registered ONCE, never recreated, never unsubscribed early.
+  //
+  // KEY FIX: loadProfile is called via setTimeout(0).
+  // Supabase v2.103+ fires onAuthStateChange callbacks INSIDE _initialize()'s
+  // Web Locks API lock. Any call to supabase.from() from within the callback
+  // triggers _getAccessToken() → getSession() → await initializePromise, which
+  // creates a circular deadlock (initializePromise can't resolve until the
+  // callback finishes, which waits for getSession, which waits for
+  // initializePromise). After 5 s the lock steals itself.
+  //
+  // setTimeout(0) moves loadProfile to a new macrotask. By then _initialize()
+  // has completed, initializePromise is resolved, and getSession() works fine.
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[AUTH] Subscribing to auth state changes');
+    console.log('[AUTH] INIT listener');
 
-    const unsubscribe = listenAuthChanges(async (event, newSession) => {
-      console.log('[AUTH] Auth event:', event);
+    const unsubscribe = listenAuthChanges((event, newSession) => {
+      console.log('[AUTH EVENT]', event);
 
-      try {
-        if (new URLSearchParams(window.location.search).get('mode') === 'reset-password') {
-          setLoading(false);
-          return;
-        }
+      const authUser = newSession?.user ?? null;
 
-        const authUser = newSession?.user ?? null;
-        userRef.current = authUser;
-        setSession(newSession);
-        setUser(authUser);
+      userRef.current = authUser;
+      setSession(newSession);
+      setUser(authUser);
 
-        if (authUser) {
-          const isFirstInit = !initializedRef.current;
-          initializedRef.current = true;
+      if (!authUser) {
+        lastUserIdRef.current     = null;
+        profileRef.current        = null;
+        loadingProfileRef.current = false;
 
-          if (isFirstInit) {
-            // Primera inicialización: esperar perfil completo antes de mostrar UI.
-            // Elimina el flash spinner → app con accessStatus=null.
-            await loadProfile(authUser);
-            setLoading(false);
-          } else {
-            // Evento posterior (TOKEN_REFRESHED, etc.)
-            // Si ya tenemos perfil: no recargar innecesariamente.
-            setLoading(false);
-            if (!profile) {
-              loadingProfileRef.current = false;
-              loadProfile(authUser).catch(console.error);
-            }
-          }
-
-        } else {
-          initializedRef.current = true;
-          userRef.current = null;
-          setProfile(null);
-          setSubscription(null);
-          setAccessStatus(null);
-          setLoading(false);
-
-          // Limpiar tokens corruptos
-          try {
-            const key = Object.keys(localStorage).find(
-              k => k.startsWith('sb-') && k.endsWith('-auth-token')
-            );
-            if (key) {
-              const stored = JSON.parse(localStorage.getItem(key) || '{}');
-              if (!stored?.access_token) {
-                localStorage.removeItem(key);
-                console.log('[AUTH] Cleared stale token');
-              }
-            }
-          } catch { /* best-effort */ }
-        }
-
-      } catch (err) {
-        console.error('[AUTH] event error:', err);
+        setProfile(null);
+        setSubscription(null);
+        setAccessStatus(null);
         setLoading(false);
-      } finally {
-        console.log('[AUTH] Render ready');
+        return;
       }
+
+      if (event !== 'INITIAL_SESSION' && event !== 'SIGNED_IN') {
+        console.log('[AUTH] Ignored event:', event);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ FIX: defer DB call to outside Supabase's internal lock context.
+      // setTimeout(0) moves this to a macrotask. By then initializePromise
+      // is resolved and getSession() works without deadlock.
+      // setLoading(false) happens inside loadProfile's finally block.
+      setTimeout(() => {
+        loadProfile(authUser).catch((err) => {
+          console.error('[AUTH] deferred loadProfile error:', err.message);
+          setLoading(false);
+        });
+      }, 0);
     });
 
-    return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadProfile]);
+    return () => {
+      unsubscribe?.();
+    };
+  }, []); // EMPTY DEPS — registered once, lives forever
 
   return (
-    <AuthContext.Provider value={{
-      loading, session, user, profile, subscription, accessStatus, refreshProfile
-    }}>
+    <AuthContext.Provider
+      value={{
+        loading,
+        session,
+        user,
+        profile,
+        subscription,
+        accessStatus,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
