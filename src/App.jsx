@@ -2438,7 +2438,10 @@ function CalendarioTab({darkMode, T}) {
     if (!f) setError(null);
     try {
       const forceParam = f ? '&force=true' : '';
-      const res = await fetch(`/api/calendar?range=${apiRange}${forceParam}`);
+      const { supabase: _sb } = await import('./lib/supabase.js');
+      const { data: { session: _sess } } = await _sb.auth.getSession();
+      const _hdrs = _sess?.access_token ? { Authorization: `Bearer ${_sess.access_token}` } : {};
+      const res = await fetch(`/api/calendar?range=${apiRange}${forceParam}`, { headers: _hdrs });
       let data;
       try { data = await res.json(); } catch { data = []; }
       if (!Array.isArray(data)) {
