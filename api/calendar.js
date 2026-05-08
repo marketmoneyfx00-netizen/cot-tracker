@@ -48,6 +48,9 @@ const TTL_HISTORY = 60  * 60 * 1000;  // 1h   — días anteriores (datos establ
 // TTL del caché de RapidAPI (raw data): 4 horas
 // Con 25k req/mes y TTL=4h → máx 6 llamadas/día/semana ≈ 180 req/mes → muy dentro del plan
 const RAPIDAPI_TTL = 4 * 60 * 60 * 1000;
+// TTL reducido cuando hay eventos pendientes de hoy (watchdog activo): 3 min
+// Permite que el dato aparezca en ~3min tras publicación incluso sin force=true
+const RAPIDAPI_TTL_PENDING = 3 * 60 * 1000;
 
 function getTTL(week, events) {
   if (week === 'lastweek') return TTL_HISTORY;
@@ -242,22 +245,20 @@ async function fetchFF(week) {
 // Host: economic-trading-forex-events-calendar.p.rapidapi.com
 // Path: /fxstreet
 // Campos: name, countryCode, currencyCode, actual, consensus, previous, date/datetime
-async function fetchRapidAPI(from, to, hasPendingPast = false) {
+async function fetchRapidAPI(from, to, hasPendingPast = false, forceRefresh = false) {
   const key = process.env.RAPIDAPI_KEY;
   if (!key) {
     console.warn('[ra] ⚠️  RAPIDAPI_KEY no configurada — añadir en Vercel → Settings → Env Variables');
     return [];
   }
 
-  // Cuando hay eventos pasados sin actual, reducir el TTL del caché RA a 15min
-  // para recoger el dato publicado en minutos en vez de esperar hasta 4h.
-  // Con plan 25k req/mes: 1 pendiente activo durante 1h = ~4 llamadas extra — despreciable.
-  const effectiveTTL = hasPendingPast
-    ? Math.min(RAPIDAPI_TTL, 15 * 60 * 1000)
-    : RAPIDAPI_TTL;
+  // Cuando hay eventos pasados sin actual, usar TTL corto (3min) para recoger
+  // el dato publicado rápidamente. Con force=true del watchdog, bypass total.
+  const effectiveTTL = hasPendingPast ? RAPIDAPI_TTL_PENDING : RAPIDAPI_TTL;
 
   // Caché hit: misma semana solicitada y dentro del TTL efectivo
-  if (rapidCache && rapidCache.from === from && rapidCache.to === to &&
+  // forceRefresh=true (del watchdog frontend) omite el caché RA para datos frescos
+  if (!forceRefresh && rapidCache && rapidCache.from === from && rapidCache.to === to &&
       (Date.now() - rapidCache.ts) < effectiveTTL) {
     metrics.cacheHits++;
     console.log(`[ra] 📦 caché hit (${Math.round((Date.now()-rapidCache.ts)/60000)}min / TTL=${Math.round(effectiveTTL/60000)}min), ${rapidCache.data.length} eventos`);
@@ -318,23 +319,30 @@ async function fetchRapidAPI(from, to, hasPendingPast = false) {
 }
 
 // Normalizar evento de RapidAPI/FXStreet al formato interno
-function normRapidAPI(ev) {
+// keepTime=true preserva la hora completa (necesario para nextweek base events)
+function normRapidAPI(ev, keepTime = false) {
   const rawCountry = ev.countryCode || ev.country || ev.currency || '';
   const country    = toFF_Country(rawCountry);
 
   // Date: la API /fxstreet a veces no devuelve campo date — cubrir todos los alias
   const rawDate = ev.date || ev.datetime || ev.eventDate || ev.time
     || ev.releaseDate || ev.publishDate || ev.dateUtc || '';
-  const date = rawDate ? rawDate.slice(0, 10) : '';
+  const date = rawDate
+    ? (keepTime ? rawDate : rawDate.slice(0, 10))
+    : '';
 
   // normActual: 0 numérico es dato válido
   const actual   = normActual(ev.actual);
   const estimate = normStr(String(ev.consensus ?? ev.forecast ?? ev.estimate ?? ''));
   const previous = normStr(String(ev.previous ?? ev.prev ?? ''));
   const event    = ev.name || ev.event || ev.indicator || ev.title || '';
+  const impact   = ev.impact === 'High' ? 'High' : ev.impact === 'Medium' ? 'Medium'
+    : ev.importance === '3' || ev.Importance === '3' ? 'High'
+    : ev.importance === '2' || ev.Importance === '2' ? 'Medium' : 'Low';
 
-  return { event, country, date, actual, estimate, previous,
-    _isBetter: ev.isBetterThanExpected ?? null, _ra: true };
+  return { event, country, date, impact, actual, estimate, previous,
+    _isBetter: ev.isBetterThanExpected ?? null, _ra: true,
+    _source: 'ra', _fetched_at: new Date().toISOString() };
 }
 
 // ── FUENTE 3: FXStreet scrape (fallback) ─────────────────────────────────────
@@ -574,7 +582,7 @@ function normalizeEvent(ev, nowMs, regime = {}) {
 }
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
-async function pipeline(week) {
+async function pipeline(week, forceRefresh = false) {
   const bounds = week==='lastweek' ? lastWeekBounds() : week==='nextweek' ? nextWeekBounds() : weekBounds();
 
   // FF base events
@@ -600,14 +608,50 @@ async function pipeline(week) {
   const pending = ffEvents.filter(e => new Date(e.date).getTime() < nowMs && e.actual === null);
   console.log(`[pipeline] ${week}: ff=${ffEvents.length} pending=${pending.length} bounds=${bounds.from}→${bounds.to}`);
 
+  // Para nextweek: FF no publica el calendario hasta jueves/viernes.
+  // Si FF está vacío, intentar RapidAPI directamente como fuente base.
+  if (ffEvents.length === 0 && week === 'nextweek') {
+    console.log('[pipeline] nextweek: FF vacío — intentando RapidAPI como fuente base...');
+    const [raEvents, fxsEvents] = await Promise.all([
+      fetchRapidAPI(bounds.from, bounds.to, false, forceRefresh),
+      fetchFXStreet(bounds.from, bounds.to),
+    ]);
+    const raNorm  = raEvents.map(e => normRapidAPI(e, true));
+    const fxsNorm = fxsEvents.map(e => {
+      const rawCountry = e.CountryCode || e.countryCode || e.country || e.Currency || '';
+      const country = nc(rawCountry);
+      const rawDate = e.EventDate || e.eventDate || e.date || e.datetime || '';
+      return {
+        event:    e.Name || e.name || e.Event || e.event || '',
+        country,
+        date:     rawDate ? rawDate.slice(0,10) : '',
+        impact:   e.Importance==='3'||e.importance==='3'||e.impact==='High' ? 'High'
+                 : e.Importance==='2'||e.importance==='2'||e.impact==='Medium' ? 'Medium' : 'Low',
+        estimate: normStr(e.Consensus ?? e.consensus ?? e.forecast ?? null),
+        previous: normStr(e.Previous ?? e.previous ?? null),
+        actual:   null,
+        unit:     '',
+        _source:  'fxs',
+        _fetched_at: new Date().toISOString(),
+      };
+    });
+    const base = raNorm.length > 0 ? raNorm : fxsNorm;
+    if (base.length > 0) {
+      console.log(`[pipeline] nextweek RA fallback: ${base.length} eventos`);
+      return { events: base, ffError };
+    }
+    // Si ninguna fuente tiene datos, retornar vacío con razón
+    return { events: [], ffError };
+  }
+
   if (ffEvents.length === 0)    return { events: [], ffError };
   if (pending.length === 0)     return { events: ffEvents, ffError };
 
   // Fetch fuentes en paralelo
-  // hasPendingPast=true → TTL efectivo de RA se reduce a 15min para recoger actuals recientes
+  // forceRefresh=true → también bypasa la caché RA para recoger actuals recién publicados
   console.log('[pipeline] Lanzando RA + FXS...');
   const [raEvents, fxsEvents] = await Promise.all([
-    fetchRapidAPI(bounds.from, bounds.to, pending.length > 0),
+    fetchRapidAPI(bounds.from, bounds.to, pending.length > 0, forceRefresh),
     fetchFXStreet(bounds.from, bounds.to),
   ]);
   console.log(`[pipeline] ra=${raEvents.length} fxs=${fxsEvents.length} pendingOverride=${pending.length > 0}`);
@@ -703,7 +747,7 @@ export default async function handler(req, res) {
     }
 
     // ── Pipeline normal ───────────────────────────────────────────────────
-    const { events, ffError } = await pipeline(week);
+    const { events, ffError } = await pipeline(week, !!force);
     const nowMs = Date.now();
 
     // Infer market regime from all collected event titles (same as pulse.js)
@@ -716,7 +760,7 @@ export default async function handler(req, res) {
     if (!events.length) {
       const msgs = {
         lastweek: 'Forex Factory no expone datos históricos. Disponibles si el servidor los guardó durante esa semana.',
-        nextweek:  'Forex Factory publica el calendario de la próxima semana habitualmente el jueves o viernes.',
+        nextweek:  'El calendario de la próxima semana aún no ha sido publicado por ninguna de las fuentes disponibles (Forex Factory · FXStreet). Forex Factory publica habitualmente el jueves o viernes.',
       };
       if (msgs[week]) payload.push({ _meta:true, _empty_reason:msgs[week] });
     }

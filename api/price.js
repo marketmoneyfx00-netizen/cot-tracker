@@ -24,12 +24,15 @@ import { verifyAuth } from './_lib/auth-middleware.js';
 
 // ── Caché en memoria ──────────────────────────────────────────────────────────
 const _cache = new Map();
-const CACHE_TTL_MS = 8_000;
+const CACHE_TTL_MS       = 8_000;         // 8s  — pares forex (cambian constantemente)
+const CACHE_TTL_INDEX_MS = 5 * 60_000;   // 5min — índices como VIX (mueven más lento)
+const INDEX_SYMS = new Set(['VIX', '^VIX', 'SPX', 'NDX', 'DJI', 'RUT']);
 
 function getCached(symbol) {
   const entry = _cache.get(symbol);
   if (!entry) return null;
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+  const ttl = INDEX_SYMS.has(symbol) ? CACHE_TTL_INDEX_MS : CACHE_TTL_MS;
+  if (Date.now() - entry.ts > ttl) {
     _cache.delete(symbol);
     return null;
   }
@@ -144,12 +147,19 @@ export default async function handler(req, res) {
     });
   }
 
+  // Índices US (VIX, SPX, etc.) solo están disponibles en TwelveData —
+  // Finnhub los mapearía a OANDA:VIX (forex pair incorrecto).
+  const US_INDICES = new Set(['VIX', '^VIX', 'SPX', 'NDX', 'DJI', 'RUT']);
+  const isIndex = US_INDICES.has(symbol) || symbol.startsWith('^');
+
   // Determinar orden de proveedores
   // Si el símbolo tiene formato OANDA:... preferimos Finnhub primero
-  const preferFinnhub = symbol.includes(':') || (req.query?.provider === 'finnhub');
-  const providers = preferFinnhub
-    ? [fetchFinnhub, fetchTwelveData]
-    : [fetchTwelveData, fetchFinnhub];
+  const preferFinnhub = !isIndex && (symbol.includes(':') || req.query?.provider === 'finnhub');
+  const providers = isIndex
+    ? [fetchTwelveData]
+    : preferFinnhub
+      ? [fetchFinnhub, fetchTwelveData]
+      : [fetchTwelveData, fetchFinnhub];
 
   let lastError = null;
 

@@ -2359,26 +2359,44 @@ function getEventFlagCode(country) {
   return COUNTRY_FLAG_CODE[(country||'').toUpperCase()] || (country||'').toLowerCase().slice(0,2) || 'un';
 }
 
-function calcSentiment(events) {
+// liveVix: VIX real del mercado (de /api/price?symbol=VIX), null si no disponible
+function calcSentiment(events, liveVix = null) {
   const today = new Date().toISOString().slice(0,10);
   const todayEvs = events.filter(e=>e.date?.slice(0,10)===today);
   const highCount = todayEvs.filter(e=>e.impact==='High').length;
   const midCount  = todayEvs.filter(e=>e.impact==='Medium').length;
   const score = highCount * 15 + midCount * 5;
-  const vix = 18 + highCount * 1.8 + midCount * 0.5 + (Math.random()*2 - 1);
-  const fg = Math.max(5, Math.min(95, 55 - highCount * 5 - midCount * 2));
-  let mood, moodColor, riskLabel;
+
+  // VIX: usar el dato real de mercado cuando disponible.
+  // Fallback estable (sin ruido aleatorio): base 13 + eventos del día
+  const vixEstimate = 13 + highCount * 1.4 + midCount * 0.4;
+  const vix = liveVix ?? vixEstimate;
+  const vixIsReal = liveVix !== null;
+
+  // Fear/Greed: basado en VIX real cuando disponible.
+  // Mapeo lineal: VIX 10 → fg=95 (GREED), VIX 40 → fg=5 (EXTREME FEAR)
+  // fg = 95 - (vix - 10) * 3 = 125 - vix*3
+  const fgFromVix = Math.max(5, Math.min(95, Math.round(125 - vix * 3)));
+  // Ajuste adicional por carga de eventos del día (±10 puntos máx)
+  const evAdj = -(highCount * 3 + midCount * 1);
+  const fg = vixIsReal
+    ? Math.max(5, Math.min(95, fgFromVix + evAdj))
+    : Math.max(5, Math.min(95, 55 - highCount * 5 - midCount * 2));
+
+  let mood, moodColor;
   if (fg >= 65) { mood='GREED'; moodColor='#22c55e'; }
   else if (fg >= 45) { mood='NEUTRAL'; moodColor='#f59e0b'; }
   else if (fg >= 25) { mood='FEAR'; moodColor='#f97316'; }
   else { mood='EXTREME FEAR'; moodColor='#ef4444'; }
+
   let volLabel;
   if (vix < 15) volLabel='Volatilidad baja. Mercado tranquilo.';
-  else if (vix < 25) volLabel='Volatilidad moderada. Atención al mercado.';
-  else if (vix < 35) volLabel='Volatilidad alta. Gestión del riesgo activa.';
+  else if (vix < 20) volLabel='Volatilidad moderada. Precaución selectiva.';
+  else if (vix < 30) volLabel='Volatilidad alta. Gestión del riesgo activa.';
   else volLabel='Volatilidad extrema. Mercado en crisis.';
+
   const scoreOf5 = Math.min(5, Math.round(highCount * 1.5 + midCount * 0.5));
-  return {score, vix: vix.toFixed(2), fg, mood, moodColor, volLabel, scoreOf5, highCount, midCount};
+  return {score, vix: vix.toFixed(2), vixIsReal, fg, mood, moodColor, volLabel, scoreOf5, highCount, midCount};
 }
 
 // ─── MAIN CALENDARIO COMPONENT ───────────────────────────────────────────────
@@ -2402,7 +2420,28 @@ function CalendarioTab({darkMode, T}) {
   const [advancedOpen, setAdvancedOpen] = useState(new Set());
   // advRefs: mapa de refs por evKey para calcular scrollHeight real en la animación
   const advRefs = useRef({});
-  const [filters,   setFilters]  = useState({impact:'all', country:'all', cat:'all'});
+
+  // VIX real de mercado — fetched from /api/price?symbol=VIX (TwelveData)
+  const [liveVix, setLiveVix] = useState(null);
+  useEffect(()=>{
+    let cancelled = false;
+    const fetchVix = async () => {
+      try {
+        const { supabase: _sb } = await import('./lib/supabase.js');
+        const { data: { session } } = await _sb.auth.getSession();
+        const hdrs = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        const r = await fetch('/api/price?symbol=VIX', { headers: hdrs });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelled && typeof d.price === 'number' && d.price > 0) setLiveVix(d.price);
+      } catch (_) {}
+    };
+    fetchVix();
+    const id = setInterval(fetchVix, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+  // impact: Set vacío = mostrar todos; Set con valores = filtrar por esos impactos
+  const [filters,   setFilters]  = useState({impact: new Set(), country:'all', cat:'all'});
   const [showFilters, setShowFilters] = useState(false);
   const [isMobile, setIsMobile]  = useState(()=>window.innerWidth < 700);
   const [lastFetchTime, setLastFetchTime] = useState(null);
@@ -2554,7 +2593,7 @@ function CalendarioTab({darkMode, T}) {
   const filtered = events.filter(ev => {
     // Filtro HOY
     if (todayOnly && ev.date?.slice(0,10) !== todayStr) return false;
-    if (filters.impact!=='all' && ev.impact!==filters.impact) return false;
+    if (filters.impact.size > 0 && !filters.impact.has(ev.impact)) return false;
     const ccy = getEventCcy(ev.country);
     if (filters.country!=='all' && ccy!==filters.country) return false;
     if (filters.cat!=='all') {
@@ -2572,7 +2611,7 @@ function CalendarioTab({darkMode, T}) {
     grouped[d].push(ev);
   });
 
-  const sentiment = calcSentiment(events);
+  const sentiment = calcSentiment(events, liveVix);
   const risk = calcRisk(events);
 
   // Unique countries for filter
@@ -2608,7 +2647,7 @@ function CalendarioTab({darkMode, T}) {
               <div style={{fontSize:13,fontWeight:700,color:D.txt}}>Sentimiento & Volatilidad</div>
               <div style={{fontSize:11,color:D.sub,marginTop:2}}>Score: {sentiment.scoreOf5}/5 · {sentiment.highCount} eventos alto impacto hoy</div>
             </div>
-            <InfoTooltip text="Este módulo muestra el sentimiento actual del mercado y una estimación de volatilidad basada en VIX y eventos macro de alto impacto. No genera señal directa, solo contexto de riesgo." />
+            <InfoTooltip text="VIX obtenido de TwelveData en tiempo real (actualizado cada 5 min). Si no está disponible, se usa una estimación basada en la carga de eventos del día. El fear/greed refleja el nivel de volatilidad del mercado." />
           </div>
 
           {/* Mood */}
@@ -2634,10 +2673,15 @@ function CalendarioTab({darkMode, T}) {
           {/* VIX */}
           <div style={{display:'flex',alignItems:'flex-end',gap:10,marginBottom:6}}>
             <span style={{fontSize:32,fontWeight:800,color:D.txt,letterSpacing:'-1px'}}>{sentiment.vix}</span>
-            <span style={{fontSize:13,color:sentiment.vix>25?D.bear:sentiment.vix>18?D.amber:D.bull,
-              fontWeight:600,marginBottom:5}}>
-              VIX est.
+            <span style={{fontSize:13,fontWeight:600,marginBottom:5,
+              color:parseFloat(sentiment.vix)>25?D.bear:parseFloat(sentiment.vix)>18?D.amber:D.bull}}>
+              {sentiment.vixIsReal ? 'VIX' : 'VIX est.'}
             </span>
+            {!sentiment.vixIsReal && (
+              <span style={{fontSize:10,color:D.sub2,marginBottom:5,fontStyle:'italic'}}>
+                (dato de mercado no disponible)
+              </span>
+            )}
           </div>
           <div style={{fontSize:12,color:D.sub,lineHeight:1.5,marginBottom:14}}>{sentiment.volLabel}</div>
 
@@ -2686,11 +2730,16 @@ function CalendarioTab({darkMode, T}) {
               </button>
             ))}
             <div style={{width:1,background:D.border,flexShrink:0,margin:'0 2px',height:20,alignSelf:'center'}}/>
-            {[['all','Todos'],['High','🔴 Alto'],['Medium','🟡 Medio'],['Low','⚪ Bajo']].map(([id,label])=>{
-              const isActive = filters.impact===id;
-              const col = impColor(id==='all'?null:id);
+            {[['High','🔴 Alto'],['Medium','🟡 Medio'],['Low','⚪ Bajo']].map(([id,label])=>{
+              const isActive = filters.impact.has(id);
+              const col = impColor(id);
               return (
-                <button key={id} onClick={()=>setFilters(f=>({...f,impact:id}))} className="filter-chip"
+                <button key={id} className="filter-chip"
+                  onClick={()=>setFilters(f=>{
+                    const next = new Set(f.impact);
+                    next.has(id) ? next.delete(id) : next.add(id);
+                    return {...f, impact: next};
+                  })}
                   style={{padding:'5px 10px',borderRadius:20,fontSize:isMobile?13:11,fontWeight:600,
                     flexShrink:0,cursor:'pointer',lineHeight:'1.4',
                     border:`1.5px solid ${isActive?col:D.border}`,
@@ -2700,6 +2749,15 @@ function CalendarioTab({darkMode, T}) {
                 </button>
               );
             })}
+            {filters.impact.size > 0 && (
+              <button className="filter-chip"
+                onClick={()=>setFilters(f=>({...f, impact: new Set()}))}
+                style={{padding:'5px 10px',borderRadius:20,fontSize:isMobile?13:11,fontWeight:600,
+                  flexShrink:0,cursor:'pointer',lineHeight:'1.4',
+                  border:`1.5px solid ${D.border}`,background:'transparent',color:D.sub2}}>
+                ✕
+              </button>
+            )}
             <button onClick={()=>setShowFilters(f=>!f)} className="filter-chip"
               style={{padding:'5px 10px',borderRadius:20,fontSize:12,flexShrink:0,cursor:'pointer',
                 lineHeight:'1.4',
@@ -2797,9 +2855,9 @@ function CalendarioTab({darkMode, T}) {
                 Forex Factory no expone datos históricos en su API gratuita. Los datos de la semana pasada estarán disponibles si el servidor los guardó durante esa semana.
               </p>
             )}
-            {weekRange==='nextweek'&&(
+            {weekRange==='nextweek'&&!emptyReason&&(
               <p style={{margin:'0 0 16px',fontSize:12,color:D.sub}}>
-                Forex Factory publica el calendario semanal habitualmente el jueves o viernes.
+                Se consultaron todas las fuentes disponibles. El calendario se publica habitualmente el jueves o viernes.
               </p>
             )}
             <button onClick={()=>fetchEvents(weekRange, true)}
@@ -3988,6 +4046,25 @@ function AppInner() {
   // ── Shared calendar events for TradeReadinessChecklist ──────────────────
   const [sharedEvents, setSharedEvents] = useState([]);
   const [tradeReadinessScore, setTradeReadinessScore] = useState(100);
+  // VIX real de mercado compartido entre CalendarioTab y AppInner
+  const [sharedLiveVix, setSharedLiveVix] = useState(null);
+  useEffect(()=>{
+    let cancelled = false;
+    const fetchVix = async () => {
+      try {
+        const { supabase: _sb } = await import('./lib/supabase.js');
+        const { data: { session } } = await _sb.auth.getSession();
+        const hdrs = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        const r = await fetch('/api/price?symbol=VIX', { headers: hdrs });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelled && typeof d.price === 'number' && d.price > 0) setSharedLiveVix(d.price);
+      } catch (_) {}
+    };
+    fetchVix();
+    const id = setInterval(fetchVix, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
   const [selectedPair, setSelectedPair] = useState(() => {
     try {
       const saved = localStorage.getItem(COT_STORAGE_KEY);
@@ -4188,9 +4265,9 @@ function AppInner() {
   }, [sharedEvents, selectedPair]);
 
   const sentimentData = useMemo(() => {
-    const s = calcSentiment(pairEvents);
+    const s = calcSentiment(pairEvents, sharedLiveVix);
     return { fg: s.fg, vix: parseFloat(s.vix), highCount: s.highCount, midCount: s.midCount };
-  }, [pairEvents]);
+  }, [pairEvents, sharedLiveVix]);
 
   const riskData = useMemo(() => {
     return { score: calcRisk(pairEvents).score };
