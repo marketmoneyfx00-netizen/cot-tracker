@@ -43,6 +43,7 @@ import { useOnboarding } from './hooks/useOnboarding.js';
 import MacroTab from './components/MacroTab.jsx';
 import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
 import MacroEventCard from './components/MacroEventCard.jsx';
+import ResumenTab from './components/ResumenTab.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4009,7 +4010,7 @@ function AppInner() {
 
   // ── THEME — must be defined before any _thm.xxx usage including early returns ─
   const _thm = buildTheme(darkMode);
-  const [mainTab,   setMainTab]   = useState("calendario");
+  const [mainTab,   setMainTab]   = useState("resumen");
   const [tooltip,   setTooltip]   = useState(null);
   const [tooltipX,  setTooltipX]  = useState(0);
   const [tooltipY,  setTooltipY]  = useState(0);
@@ -4275,6 +4276,13 @@ function AppInner() {
 
   const globalMarketState = useMemo(() => deriveGlobalMarketState(biasArr), [biasArr]);
 
+  // All-events sentiment/risk (not filtered by selected pair) — for ResumenTab
+  const allSentimentData = useMemo(() => {
+    const s = calcSentiment(sharedEvents, sharedLiveVix);
+    return { fg: s.fg, vix: parseFloat(s.vix), vixIsReal: s.vixIsReal, highCount: s.highCount, midCount: s.midCount };
+  }, [sharedEvents, sharedLiveVix]);
+  const allRiskData = useMemo(() => ({ score: calcRisk(sharedEvents).score }), [sharedEvents]);
+
   const currentContext = useMemo(() => {
     if (!biasArr.length) return null;
     return buildPairContext({
@@ -4533,11 +4541,12 @@ if (!authUser || forceResetMode) {
 
   // ── DASHBOARD ──────────────────────────────────────────────────────────────
   const TABS = [
+    {id:"resumen",    label:"🌐 Resumen"},
     {id:"calendario", label:"📅 Calendario"},
-    {id:"sesgos",     label:"Dashboard COT"},
-    {id:"macro",      label:"🌐 Macro"},
+    {id:"sesgos",     label:"Divisas COT"},
+    {id:"macro",      label:"Macro"},
     {id:"historico",  label:"Tabla Histórica"},
-    {id:"importar",   label:"📁 Importar CSV"},
+    {id:"importar",   label:"📁 Datos"},
     {id:"cuenta",     label:"Ajustes"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
@@ -4646,6 +4655,22 @@ if (!authUser || forceResetMode) {
 
       {/* ── COT WEEKLY BANNER ── */}
       <COTWeeklyBanner darkMode={darkMode} T={_thm}/>
+
+      {/* ── TAB: RESUMEN (Sunday Macro Review) ── */}
+      {mainTab==="resumen"&&(
+        <ResumenTab
+          T={_thm}
+          darkMode={darkMode}
+          biasArr={biasArr}
+          sharedEvents={sharedEvents}
+          allSentimentData={allSentimentData}
+          allRiskData={allRiskData}
+          globalMarketState={globalMarketState}
+          sharedLiveVix={sharedLiveVix}
+          pairsData={pairsData}
+          onNavigate={setMainTab}
+        />
+      )}
 
       {/* ── TAB 1: CALENDARIO ── */}
       {mainTab==="calendario"&&(
