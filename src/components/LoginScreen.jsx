@@ -277,6 +277,7 @@ export default function LoginScreen() {
       <style>{`
         @keyframes fadeIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes toastFadeIn{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
         input:focus{outline:none!important;border-color:#0055cc!important;box-shadow:0 0 0 3px rgba(0,85,204,0.12)!important;}
         .lsbtn:hover:not(:disabled){opacity:0.88;}
         .lsbtn:active:not(:disabled){transform:scale(0.98);}
@@ -322,28 +323,61 @@ export default function LoginScreen() {
             {mode === 'password' && !success && (
               <form onSubmit={e => { e.preventDefault(); handlePasswordLogin(); }} noValidate>
 
-                {/* Social login buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                  <SocialButton
-                    icon={<GoogleIcon />}
-                    label={oauthLoading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
-                    loading={oauthLoading === 'google'}
-                    onClick={() => handleOAuth('google')}
-                  />
-                  <SocialButton
-                    icon={<GitHubIcon />}
-                    label={oauthLoading === 'github' ? 'Redirigiendo…' : 'Continuar con GitHub'}
-                    loading={oauthLoading === 'github'}
-                    onClick={() => handleOAuth('github')}
-                    style={{ color: '#24292f' }}
-                  />
-                  <SocialButton
-                    icon={<AppleIcon />}
-                    label={oauthLoading === 'apple' ? 'Redirigiendo…' : 'Continuar con Apple'}
-                    loading={oauthLoading === 'apple'}
-                    onClick={() => handleOAuth('apple')}
-                    style={{ background: '#000', color: '#fff', border: '1.5px solid #000' }}
-                  />
+                {/* Google — primary CTA */}
+                <button
+                  type="button"
+                  className="lsbtn"
+                  onClick={() => handleOAuth('google')}
+                  disabled={!!oauthLoading}
+                  style={{
+                    width: '100%', padding: '13px 16px', borderRadius: 12, marginBottom: 10,
+                    border: '1.5px solid #dadce0', cursor: oauthLoading ? 'not-allowed' : 'pointer',
+                    background: oauthLoading === 'google' ? '#f8f9fa' : 'white',
+                    color: '#3c4043', fontSize: 15, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                    transition: 'all 0.18s', boxSizing: 'border-box',
+                    boxShadow: '0 1px 3px rgba(60,64,67,0.08)',
+                    opacity: oauthLoading && oauthLoading !== 'google' ? 0.5 : 1,
+                  }}
+                >
+                  {oauthLoading === 'google'
+                    ? <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #dadce0', borderTopColor: '#4285F4', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/>
+                    : <GoogleIcon />
+                  }
+                  {oauthLoading === 'google' ? 'Conectando con Google…' : 'Continuar con Google'}
+                </button>
+
+                {/* GitHub + Apple — secondary row */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+                  {[
+                    { provider: 'github', icon: <GitHubIcon />, label: 'GitHub',
+                      style: { background: '#24292f', color: '#fff', border: '1.5px solid #24292f' } },
+                    { provider: 'apple',  icon: <AppleIcon />,  label: 'Apple',
+                      style: { background: '#000', color: '#fff', border: '1.5px solid #000' } },
+                  ].map(({ provider, icon, label, style }) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      className="lsbtn"
+                      onClick={() => handleOAuth(provider)}
+                      disabled={!!oauthLoading}
+                      style={{
+                        flex: 1, padding: '11px 10px', borderRadius: 12,
+                        cursor: oauthLoading ? 'not-allowed' : 'pointer',
+                        fontSize: 13, fontWeight: 600,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                        transition: 'all 0.18s', boxSizing: 'border-box',
+                        opacity: oauthLoading && oauthLoading !== provider ? 0.4 : 1,
+                        ...style,
+                      }}
+                    >
+                      {oauthLoading === provider
+                        ? <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/>
+                        : icon
+                      }
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
                 {/* Divider */}
