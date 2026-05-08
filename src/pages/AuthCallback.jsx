@@ -161,7 +161,13 @@ export default function AuthCallback() {
   }
 
   async function continueWithSession(session) {
-    const { id: userId, email: userEmail } = session.user;
+    const { id: userId } = session.user;
+    // OAuth providers (GitHub private email, Apple relay) may put the email in metadata
+    const userEmail =
+      session.user.email ||
+      session.user.user_metadata?.email ||
+      session.user.identities?.[0]?.identity_data?.email ||
+      null;
 
     // ── 4. Recovery ──────────────────────────────────────────────────────
     const hash = window.location.hash;

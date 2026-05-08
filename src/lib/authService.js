@@ -106,6 +106,17 @@ export async function updatePassword(newPassword) {
   return { error };
 }
 
+// ─── LOGIN WITH OAUTH (Google, GitHub, Apple) ─────────────────────────────────
+export async function loginWithOAuth(provider) {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${APP_URL}/auth/callback`,
+    },
+  });
+  return { data, error };
+}
+
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 export async function logout() {
   const { error } = await supabase.auth.signOut();
