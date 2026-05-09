@@ -5,6 +5,7 @@
  * Solo presentación — toda la lógica vive en App.jsx / engines.
  */
 import { useMemo, useState } from 'react';
+import TooltipInfo from './TooltipInfo.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,11 +61,12 @@ function impactColor(impact) {
   return '#6b7280';
 }
 
-function SectionHeader({ icon, title, sub, T }) {
+function SectionHeader({ icon, title, sub, tooltip, T }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
       <span style={{ fontSize: 14 }}>{icon}</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: T.accent, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{title}</span>
+      {tooltip && <TooltipInfo text={tooltip} />}
       {sub && <><span style={{ flex: 1, height: 1, background: T.border }} /><span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.05em', fontWeight: 500 }}>{sub}</span></>}
       {!sub && <span style={{ flex: 1, height: 1, background: T.border }} />}
     </div>
@@ -141,7 +143,7 @@ export default function ResumenTab({
 
       {/* ── PHASE 1: RÉGIMEN DE MERCADO ──────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionHeader icon="🌐" title="Régimen de Mercado" sub="CONTEXTO GLOBAL" T={T} />
+        <SectionHeader icon="🌐" title="Régimen de Mercado" sub="CONTEXTO GLOBAL" tooltip="Estado general del mercado basado en VIX y riesgo operativo. Determina qué tamaño de posición usar y qué setups priorizar esta semana." T={T} />
         <div style={{
           background: regime.bg, border: `1px solid ${regime.color}40`,
           borderRadius: 12, padding: '18px 20px',
@@ -168,12 +170,15 @@ export default function ResumenTab({
 
       {/* ── PHASE 2: SENTIMIENTO & VIX ───────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionHeader icon="📊" title="Sentimiento & Flujo" sub="FEAR/GREED · VIX" T={T} />
+        <SectionHeader icon="📊" title="Sentimiento & Flujo" sub="FEAR/GREED · VIX" tooltip="Combina VIX y la carga de eventos macro para medir el riesgo operativo del mercado. Úsalo para decidir si aumentar o reducir el tamaño de posición." T={T} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
 
           {/* Fear & Greed */}
           <Card T={T}>
-            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em' }}>FEAR / GREED</div>
+            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 4 }}>
+              FEAR / GREED
+              <TooltipInfo text="Índice 0-100 del sentimiento del mercado. >55 = codicia (mayor riesgo). <45 = miedo (posibles oportunidades). Ajusta tu exposición en consecuencia." />
+            </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{ fontSize: 32, fontWeight: 800, color: fgInfo.color, lineHeight: 1 }}>{fg}</span>
               <span style={{ fontSize: 11, color: fgInfo.color, fontWeight: 600 }}>/100</span>
@@ -192,8 +197,9 @@ export default function ResumenTab({
 
           {/* VIX */}
           <Card T={T}>
-            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em' }}>
+            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 4 }}>
               {vixIsReal ? 'VIX · TIEMPO REAL' : 'VIX ESTIMADO'}
+              <TooltipInfo text="Volatilidad implícita del S&P 500. VIX < 18 = calma. VIX 18-25 = precaución, reduce tamaño. VIX > 25 = riesgo elevado, evita operar." />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{
@@ -212,7 +218,10 @@ export default function ResumenTab({
 
           {/* Eventos semana */}
           <Card T={T}>
-            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em' }}>EVENTOS SEMANA</div>
+            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 4 }}>
+              EVENTOS SEMANA
+              <TooltipInfo text="Publicaciones macroeconómicas relevantes esta semana. Más eventos de alto impacto = mayor volatilidad potencial. Reduce el tamaño de posición cuando ≥ 3 eventos de alto impacto." />
+            </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{
                 fontSize: 32, fontWeight: 800, lineHeight: 1,
@@ -227,7 +236,10 @@ export default function ResumenTab({
 
           {/* Riesgo operativo */}
           <Card T={T}>
-            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em' }}>RIESGO OPERATIVO</div>
+            <div style={{ fontSize: 10, color: T.sub2, fontWeight: 600, marginBottom: 8, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 4 }}>
+              RIESGO OPERATIVO
+              <TooltipInfo text="Score 0-100 que combina VIX y eventos macro. < 40 = condiciones favorables. 40-70 = precaución, reduce tamaño. > 70 = evita operar." />
+            </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{
                 fontSize: 32, fontWeight: 800, lineHeight: 1,
@@ -311,7 +323,7 @@ export default function ResumenTab({
 
       {/* ── PHASE 4: SESGO POR DIVISA ─────────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionHeader icon="💱" title="Sesgo por Divisa" sub="COT · CFTC" T={T} />
+        <SectionHeader icon="💱" title="Sesgo por Divisa" sub="COT · CFTC" tooltip="Fortaleza relativa de cada divisa según el posicionamiento institucional del informe COT (CFTC). Positivo = divisa fuerte vs sus pares. Negativo = divisa débil. Basado en datos semanales." T={T} />
         {!hasCOTData ? (
           <Card T={T}>
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -377,7 +389,7 @@ export default function ResumenTab({
 
       {/* ── PHASE 5: SHORTLIST DE PARES ───────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionHeader icon="🎯" title="Shortlist de Pares" sub="PRIORIDAD OPERATIVA" T={T} />
+        <SectionHeader icon="🎯" title="Shortlist de Pares" sub="PRIORIDAD OPERATIVA" tooltip="Pares ordenados por intensidad de sesgo institucional COT. A+ (|score| ≥ 3) = sesgo fuerte, operable. Vigilar (≥ 2) = sesgo moderado. Condicional (≥ 1) = sesgo incipiente, esperar confirmación. Descartar = sin sesgo claro." T={T} />
         {!hasCOTData ? (
           <Card T={T}>
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -430,31 +442,6 @@ export default function ResumenTab({
         )}
       </div>
 
-      {/* ── FOOTER NAVIGATION ────────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center',
-        paddingTop: 8, borderTop: `1px solid ${T.border}`,
-      }}>
-        {[
-          { tab: 'calendario', icon: '📅', label: 'Calendario' },
-          { tab: 'sesgos',     icon: '📊', label: 'Dashboard COT' },
-          { tab: 'macro',      icon: '🌐', label: 'Macro' },
-          { tab: 'importar',   icon: '📁', label: 'Importar CSV' },
-        ].map(({ tab, icon, label }) => (
-          <button
-            key={tab}
-            onClick={() => onNavigate?.(tab)}
-            style={{
-              background: T.card, border: `1px solid ${T.border}`,
-              borderRadius: 8, padding: '8px 16px',
-              fontSize: 12, fontWeight: 600, color: T.sub,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <span>{icon}</span><span>{label}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

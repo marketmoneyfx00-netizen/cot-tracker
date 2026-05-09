@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, Component } from "react";
+import { createPortal } from 'react-dom';
 
 // Allowlist-based HTML sanitizer — only permits <strong> and <em> tags.
 // Prevents XSS if any external data ever reaches dangerouslySetInnerHTML.
@@ -526,36 +527,78 @@ function heatCell(val, type="net") {
   return {background:"rgba(180,180,180,0.08)", color:"#9E9E9E"};
 }
 
-// Unified (i) tooltip — matches TooltipInfo style system-wide
+// Unified (i) tooltip — portal-based, immune to transform/overflow ancestors
 function InfoTooltip({text}) {
   const [pos, setPos] = useState(null);
+  const iconRef = useRef(null);
   const TIP_W = 240;
 
-  const handleEnter = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
+  const calcPos = (el) => {
+    const r = el.getBoundingClientRect();
     const vw = window.innerWidth;
-    const spaceAbove = r.top;
-    const top  = spaceAbove > 100 ? r.top - 8 : r.bottom + 8;
+    const above = r.top > 120;
+    const top  = above ? r.top - 8 : r.bottom + 8;
     const left = Math.min(Math.max(r.left - TIP_W/2 + 6, 8), vw - TIP_W - 8);
-    setPos({top, left, above: spaceAbove > 100});
+    return { top, left, above };
   };
 
+  useEffect(() => {
+    if (!pos) return;
+    const reposition = () => { if (iconRef.current) setPos(calcPos(iconRef.current)); };
+    const close = (e) => { if (!iconRef.current?.contains(e.target)) setPos(null); };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('touchstart', close);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('touchstart', close);
+    };
+  }, [!!pos]);
+
+  const handleEnter = () => { if (iconRef.current) setPos(calcPos(iconRef.current)); };
+  const handleLeave = () => setPos(null);
   const handleTap = (e) => {
     e.stopPropagation();
-    setPos(p => p ? null : (() => {
-      const r = e.currentTarget.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const top  = r.top > 100 ? r.top - 8 : r.bottom + 8;
-      const left = Math.min(Math.max(r.left - TIP_W/2 + 6, 8), vw - TIP_W - 8);
-      return {top, left, above: r.top > 100};
-    })());
+    setPos(p => p ? null : (iconRef.current ? calcPos(iconRef.current) : null));
   };
 
+  const tooltip = pos ? createPortal(
+    <span style={{
+      position:"fixed",
+      top: pos.above ? pos.top - 90 : pos.top,
+      left: pos.left,
+      width: TIP_W,
+      background:"rgba(20,22,28,0.97)", color:"#e2e8f0",
+      fontSize:11, fontWeight:400, lineHeight:1.55, padding:"8px 10px",
+      borderRadius:8, zIndex:99999,
+      boxShadow:"0 4px 20px rgba(0,0,0,0.35)",
+      pointerEvents:"none", whiteSpace:"normal",
+      maxWidth:"80vw",
+      fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",
+    }}>
+      {text}
+      <span style={{
+        position:"absolute",
+        ...(pos.above
+          ? {top:"100%", borderTop:"5px solid rgba(20,22,28,0.97)", borderBottom:"none"}
+          : {bottom:"100%", borderBottom:"5px solid rgba(20,22,28,0.97)", borderTop:"none"}
+        ),
+        left:20,
+        borderLeft:"5px solid transparent",
+        borderRight:"5px solid transparent",
+      }}/>
+    </span>,
+    document.body
+  ) : null;
+
   return (
-    <span style={{position:"relative", display:"inline-flex", alignItems:"center", flexShrink:0}}>
+    <span ref={iconRef} style={{display:"inline-flex", alignItems:"center", flexShrink:0}}>
       <span
         onMouseEnter={handleEnter}
-        onMouseLeave={()=>setPos(null)}
+        onMouseLeave={handleLeave}
         onTouchStart={handleTap}
         style={{
           width:13, height:13, borderRadius:"50%",
@@ -570,33 +613,7 @@ function InfoTooltip({text}) {
         onMouseOver={e=>e.currentTarget.style.opacity="0.75"}
         onMouseOut={e=>e.currentTarget.style.opacity="0.45"}
       >i</span>
-      {pos && (
-        <span style={{
-          position:"fixed",
-          top: pos.above ? pos.top - 80 : pos.top,
-          left: pos.left,
-          width: TIP_W,
-          background:"rgba(20,22,28,0.97)", color:"#e2e8f0",
-          fontSize:11, fontWeight:400, lineHeight:1.55, padding:"8px 10px",
-          borderRadius:8, zIndex:99999,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.35)",
-          pointerEvents:"none", whiteSpace:"normal",
-          maxWidth:"80vw",
-          fontFamily:"-apple-system,'SF Pro Text',Helvetica,sans-serif",
-        }}>
-          {text}
-          <span style={{
-            position:"absolute",
-            ...(pos.above
-              ? {top:"100%", borderTop:"5px solid rgba(20,22,28,0.97)", borderBottom:"none"}
-              : {bottom:"100%", borderBottom:"5px solid rgba(20,22,28,0.97)", borderTop:"none"}
-            ),
-            left:20,
-            borderLeft:"5px solid transparent",
-            borderRight:"5px solid transparent",
-          }}/>
-        </span>
-      )}
+      {tooltip}
     </span>
   );
 }
@@ -2838,33 +2855,42 @@ function CalendarioTab({darkMode, T}) {
         {!loading&&!error&&filtered.length===0&&(
           <div style={{textAlign:'center',padding:'48px 24px',color:D.sub}}>
             <div style={{fontSize:40,marginBottom:12}}>
-              {weekRange==='lastweek'?'🗂️':weekRange==='nextweek'?'🔭':'📅'}
+              {events.length>0?'🔍':weekRange==='lastweek'?'🗂️':weekRange==='nextweek'?'🔭':'📅'}
             </div>
             <p style={{margin:'0 0 8px',fontSize:15,fontWeight:600,color:D.txt}}>
-              {weekRange==='lastweek'?'Sin datos de la semana pasada'
+              {events.length>0
+                ?'No hay eventos con los filtros seleccionados'
+                :weekRange==='lastweek'?'Sin datos de la semana pasada'
                 :weekRange==='nextweek'?'El calendario de la próxima semana aún no está disponible'
                 :'No hay eventos para este período'}
             </p>
-            {emptyReason&&(
+            {events.length>0&&(
+              <p style={{margin:'0 0 16px',fontSize:12,color:D.sub,maxWidth:420,lineHeight:1.6,marginLeft:'auto',marginRight:'auto'}}>
+                Prueba a desactivar algunos filtros de impacto o divisa para ver más eventos.
+              </p>
+            )}
+            {events.length===0&&emptyReason&&(
               <p style={{margin:'0 0 16px',fontSize:12,color:D.sub,maxWidth:480,lineHeight:1.6,marginLeft:'auto',marginRight:'auto'}}>
                 {emptyReason}
               </p>
             )}
-            {weekRange==='lastweek'&&!emptyReason&&(
+            {events.length===0&&weekRange==='lastweek'&&!emptyReason&&(
               <p style={{margin:'0 0 16px',fontSize:12,color:D.sub,maxWidth:420,lineHeight:1.6,marginLeft:'auto',marginRight:'auto'}}>
                 Forex Factory no expone datos históricos en su API gratuita. Los datos de la semana pasada estarán disponibles si el servidor los guardó durante esa semana.
               </p>
             )}
-            {weekRange==='nextweek'&&!emptyReason&&(
+            {events.length===0&&weekRange==='nextweek'&&!emptyReason&&(
               <p style={{margin:'0 0 16px',fontSize:12,color:D.sub}}>
                 Se consultaron todas las fuentes disponibles. El calendario se publica habitualmente el jueves o viernes.
               </p>
             )}
-            <button onClick={()=>fetchEvents(weekRange, true)}
-              style={{padding:'8px 20px',borderRadius:20,border:`1.5px solid ${D.border}`,
-                background:'transparent',color:D.sub,fontSize:12,cursor:'pointer',fontWeight:600}}>
-              ⟳ Reintentar
-            </button>
+            {events.length===0&&(
+              <button onClick={()=>fetchEvents(weekRange, true)}
+                style={{padding:'8px 20px',borderRadius:20,border:`1.5px solid ${D.border}`,
+                  background:'transparent',color:D.sub,fontSize:12,cursor:'pointer',fontWeight:600}}>
+                ⟳ Reintentar
+              </button>
+            )}
           </div>
         )}
 
