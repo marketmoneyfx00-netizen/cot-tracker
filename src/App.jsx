@@ -18,8 +18,7 @@ import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
 import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
 import TooltipInfo from './components/TooltipInfo.jsx';
 import { startPricePolling, stopPricePolling } from './services/priceService.js';
-import DropZone from './components/DropZone.jsx';
-import SourceCard from './components/SourceCard.jsx';
+import SyncStatus from './components/SyncStatus.jsx';
 import CrossAssetFlow from './components/CrossAssetFlow.jsx';
 import ContextSummary from './components/ContextSummary.jsx';
 import AlertBanner    from './components/AlertBanner.jsx';
@@ -3952,42 +3951,12 @@ function AppInner() {
   const [showBillingApp, setShowBillingApp] = useState(false);
   const openBilling = useCallback(() => setShowBillingApp(true), []);
 
-  const [pairsData, setPairsData] = useState(() => {
-    try {
-      const saved = localStorage.getItem(COT_STORAGE_KEY);
-      if (!saved) return null;
-      const parsed = JSON.parse(saved);
-      if (!parsed?.timestamp || Date.now() - parsed.timestamp > COT_MAX_AGE) {
-        localStorage.removeItem(COT_STORAGE_KEY);
-        return null;
-      }
-      return parsed.pairsData ?? null;
-    } catch { return null; }
-  });
-  const [source, setSource] = useState(() => {
-    try {
-      const saved = localStorage.getItem(COT_STORAGE_KEY);
-      if (!saved) return "";
-      return JSON.parse(saved).source ?? "";
-    } catch { return ""; }
-  });
+  const [pairsData,      setPairsData]      = useState(null);
+  const [source,         setSource]         = useState('');
   // ── TIFF Combined dataset (parallel, never overwrites Futures Only) ────────
-  const [combinedData,  setCombinedData]  = useState(() => {
-    try {
-      const saved = localStorage.getItem(COT_STORAGE_KEY);
-      if (!saved) return null;
-      const parsed = JSON.parse(saved);
-      if (!parsed?.timestamp || Date.now() - parsed.timestamp > COT_MAX_AGE) return null;
-      return parsed.combinedData ?? null;
-    } catch { return null; }
-  });
-  const [sourceCombined,setSourceCombined]= useState(() => {
-    try {
-      const saved = localStorage.getItem(COT_STORAGE_KEY);
-      if (!saved) return "";
-      return JSON.parse(saved).sourceCombined ?? "";
-    } catch { return ""; }
-  });
+  const [combinedData,   setCombinedData]   = useState(null);
+  const [sourceCombined, setSourceCombined] = useState('');
+  const [lastSync,       setLastSync]       = useState(null);
   const [errorCombined, setErrorCombined] = useState(null);
   const [error,     setError]     = useState(null);
   const [tab,       setTab]       = useState("fx");
@@ -4066,35 +4035,26 @@ function AppInner() {
     const id = setInterval(fetchVix, 5 * 60 * 1000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
-  const [selectedPair, setSelectedPair] = useState(() => {
-    try {
-      const saved = localStorage.getItem(COT_STORAGE_KEY);
-      if (!saved) return 'EUR/USD';
-      return JSON.parse(saved).selectedPair ?? 'EUR/USD';
-    } catch { return 'EUR/USD'; }
-  });
+  const [selectedPair, setSelectedPair] = useState('EUR/USD');
 
-  // ── AUTO-SAVE COT data to localStorage ─────────────────────────────────────
-  // Placed here — AFTER all useState declarations — to avoid TDZ on selectedPair.
-  // The dependency array is evaluated at call time; declaring this effect before
-  // selectedPair would throw "Cannot access before initialization".
+  // ── Fetch COT data from Supabase (auto-sync) ──────────────────────────────
   useEffect(() => {
-    if (!pairsData && !combinedData) return;
-    try {
-      localStorage.setItem(COT_STORAGE_KEY, JSON.stringify({
-        pairsData,
-        source,
-        combinedData,
-        sourceCombined,
-        selectedPair,
-        timestamp: Date.now(),
-      }));
-    } catch (e) {
-      if (e?.name === 'QuotaExceededError' || e?.code === 22) {
-        console.warn('[COT] localStorage llena — no se pudo guardar el estado COT');
-      }
+    async function loadCotData() {
+      try {
+        const { supabase: sb } = await import('./lib/supabase.js');
+        const { data: { session } } = await sb.auth.getSession();
+        const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        const r = await fetch('/api/cot/latest', { headers });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.pairsData?.length)        { setPairsData(data.pairsData);       setSource(data.source || 'Sync automatico'); }
+        if (data.combinedData?.assetCount) { setCombinedData(data.combinedData); setSourceCombined(data.sourceCombined || 'Sync automatico'); }
+        if (data.lastSync)                 { setLastSync(data.lastSync); }
+      } catch { /* non-critical */ }
     }
-  }, [pairsData, combinedData, source, sourceCombined, selectedPair]);
+    loadCotData();
+  }, []);
+
   useEffect(() => {
     async function loadCalendar() {
       try {
@@ -4546,7 +4506,7 @@ if (!authUser || forceResetMode) {
     {id:"sesgos",     label:"Divisas COT"},
     {id:"macro",      label:"Macro"},
     {id:"historico",  label:"Tabla Histórica"},
-    {id:"importar",   label:"📁 Datos"},
+    {id:"importar",   label:"🔄 Sync"},
     {id:"cuenta",     label:"Ajustes"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
@@ -5281,75 +5241,15 @@ if (!authUser || forceResetMode) {
         </div>
       )}
 
-      {/* ── TAB 4: IMPORTAR CSV ── */}
+      {/* ── TAB 4: SYNC STATUS ── */}
       {mainTab==="importar"&&(
-        <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"14px":"28px 32px"}}>
-          {/* Page header */}
-          <div style={{marginBottom:22}}>
-            <h2 style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:_thm.txt,letterSpacing:"-0.2px"}}>
-              Importar Datos CFTC
-            </h2>
-            <p style={{margin:0,fontSize:11,color:_thm.sub}}>
-              Dos fuentes independientes · TFF Futures Only + Combined · Publicado cada viernes 21:30h CET
-            </p>
-          </div>
-
-          {/* Futures Only */}
-          <SourceCard
-            title="Traders in Financial Futures — Futures Only"
-            subtitle="Fuente principal · Bias Engine · Intraday Execution · Tabla FX"
-            badge="ACTIVO"
-            accentColor={_thm.accent}
-            loaded={!!pairsData}
-            loadedLabel={`${pairsData?.length||0} pares · ${source}`}
-            loadedSub="Dashboard COT activo"
-            error={error}
-            onViewDashboard={()=>setMainTab("sesgos")}
-            downloadUrl="https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"
-            downloadNote="→ Futures Only → 2026 (Text)"
-            dropId="cot-fut-only-input"
-            dropHint="Futures Only · .csv .txt"
-            dropLoaded={!!pairsData}
-            onFile={(text,name)=>{handleFile(text,name);setMainTab("sesgos");}}
-            whatTitle="¿Qué aporta?"
-            whatDesc="Activa el Dashboard COT principal con sesgo institucional semanal en divisas."
-            badges={["EURUSD","GBPUSD","USDJPY","DXY","AUDUSD","NZDUSD","USDCAD","USDCHF"]}
-            modules={["Bias Engine · Swing Trading","Intraday Execution Layer","FX Table · 8 pares","Market Decision Layer"]}
-            darkMode={darkMode}
-            T={_thm}
-            isMobile={isMobile}
-          />
-
-          {/* Combined */}
-          <SourceCard
-            title="Traders in Financial Futures — Futures and Options Combined"
-            subtitle="Cross Asset Flow · FX + Índices + Bonos · Exposición institucional completa"
-            badge="NUEVO"
-            accentColor="#8b5cf6"
-            loaded={!!combinedData}
-            loadedLabel={`${combinedData?.assetCount||0} activos · ${sourceCombined}`}
-            loadedSub={combinedData?`${combinedData.byGroup.fx?.length||0} FX · ${combinedData.byGroup.index?.length||0} índices · ${combinedData.byGroup.bonds?.length||0} bonos`:undefined}
-            error={errorCombined}
-            onViewDashboard={()=>setMainTab("sesgos")}
-            downloadUrl="https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"
-            downloadNote="→ Futures and Options → 2026 (Text)"
-            dropId="cot-combined-input"
-            dropHint="FinComYY.txt · Futures and Options"
-            dropLoaded={!!combinedData}
-            onFile={(text,name)=>handleFileCombined(text,name)}
-            whatTitle="¿Qué aporta?"
-            whatDesc="Añade opciones al flujo de futuros. Detecta rotaciones institucionales cross-asset."
-            badges={["SP500","NAS100","US10Y","US2Y","EURUSD","DXY","GBPUSD","USDJPY"]}
-            modules={["Cross Asset Flow","Rotaciones institucionales","Índices + Bonos","Flujo opciones incluido"]}
-            darkMode={darkMode}
-            T={_thm}
-            isMobile={isMobile}
-          />
-
-          <p style={{textAlign:"center",fontSize:10,color:_thm.sub2,marginTop:6,letterSpacing:"0.02em"}}>
-            Datos procesados localmente · No se envía información a ningún servidor · Fuente: CFTC.gov
-          </p>
-        </div>
+        <SyncStatus
+          lastSync={lastSync}
+          pairsData={pairsData}
+          combinedData={combinedData}
+          darkMode={darkMode}
+          T={_thm}
+        />
       )}
 
       {/* ── TAB 5: AJUSTES ── */}
