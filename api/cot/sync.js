@@ -9,9 +9,10 @@ import { unzipSync } from 'fflate';
 import { supabaseAdmin } from '../_lib/supabase/admin.js';
 import { buildPairsData, parseTiffCombined, detectCftcFileType } from '../_lib/cotParser.js';
 
+const CFTC_YEAR = new Date().getUTCFullYear();
 const CFTC_URLS = {
-  futures_only: 'https://www.cftc.gov/dea/newcot/FinFutlgs.zip',
-  combined:     'https://www.cftc.gov/dea/newcot/FinComLgs.zip',
+  futures_only: `https://www.cftc.gov/files/dea/history/fut_fin_txt_${CFTC_YEAR}.zip`,
+  combined:     `https://www.cftc.gov/files/dea/history/com_fin_txt_${CFTC_YEAR}.zip`,
 };
 
 async function fetchAndExtract(url) {
