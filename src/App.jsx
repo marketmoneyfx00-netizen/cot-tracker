@@ -676,7 +676,6 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
         boxShadow:"0 24px 80px rgba(0,0,0,0.3)",
         animation:"popIn 0.2s cubic-bezier(.34,1.56,.64,1)",
         fontFamily:"'Inter','SF Pro Text',Helvetica,sans-serif",
-        isolation:"isolate",
       }}>
         <style>{`
           @keyframes popIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
@@ -730,7 +729,7 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
               display:"flex", alignItems:"center", justifyContent:"flex-end", gap:2,
             }}>
               {col.label}
-              {col.tip && <InfoTooltip text={TOOLTIPS[col.tip]}/>}
+              {col.tip && <InfoTooltip text={COT_TOOLTIPS[col.tip]}/>}
             </div>
           ))}
         </div>

@@ -16,14 +16,16 @@
 import { useState, useRef, useEffect } from 'react';
 
 // ─── DATOS ────────────────────────────────────────────────────────────────────
-// Historial real aproximado de cada banco central (fecha, tasa en %)
+// Historial real de cada banco central (fecha de cambio, tasa resultante en %)
+// Fuente: comunicados oficiales de cada banco central. Última revisión: may 2025.
 const BANKS = [
   {
     id: 'FED', name: 'FED – Federal Reserve', country: 'US', flag: '🇺🇸', flagCode: 'us', ccy: 'USD',
-    desc: 'Decisión de tipos de interés',
+    desc: 'Tipo objetivo de los fondos federales (límite superior)',
+    // Última reunión 7 may 2025: mantiene en 4.50% (pausa prolongada)
     current: 4.50, previous: 4.75, consensus: 4.50, surprise: 0.00,
-    nextMeeting: '18 jun 2025',
-    signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Política monetaria restrictiva' },
+    nextMeeting: '17-18 jun 2025',
+    signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Política monetaria restrictiva — pausa extendida' },
     history: [
       { d: '2015-12', r: 0.50 }, { d: '2016-12', r: 0.75 }, { d: '2017-03', r: 1.00 },
       { d: '2017-06', r: 1.25 }, { d: '2017-12', r: 1.50 }, { d: '2018-03', r: 1.75 },
@@ -33,24 +35,25 @@ const BANKS = [
       { d: '2022-05', r: 1.00 }, { d: '2022-06', r: 1.75 }, { d: '2022-07', r: 2.50 },
       { d: '2022-09', r: 3.25 }, { d: '2022-11', r: 4.00 }, { d: '2022-12', r: 4.50 },
       { d: '2023-02', r: 4.75 }, { d: '2023-03', r: 5.00 }, { d: '2023-05', r: 5.25 },
-      { d: '2023-07', r: 5.50 }, { d: '2024-09', r: 5.25 }, { d: '2024-11', r: 4.75 },
-      { d: '2024-12', r: 4.50 }, { d: '2025-01', r: 4.50 }, { d: '2025-03', r: 4.50 },
-      { d: '2025-05', r: 4.50 },
+      { d: '2023-07', r: 5.50 },
+      // Ciclo de recortes: sep 2024 (-50pb), nov 2024 (-25pb), dic 2024 (-25pb)
+      { d: '2024-09', r: 5.00 }, { d: '2024-11', r: 4.75 }, { d: '2024-12', r: 4.50 },
+      { d: '2025-01', r: 4.50 }, { d: '2025-03', r: 4.50 }, { d: '2025-05', r: 4.50 },
     ],
     decisions: [
-      { date: '07 may 2025', rate: '4.50%', prev: '4.75%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios',  impact: 3 },
-      { date: '20 mar 2025', rate: '4.75%', prev: '5.00%', cons: '4.75%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '29 ene 2025', rate: '5.00%', prev: '5.00%', cons: '5.00%', surp: '0.00%', decision: 'Sin cambios',  impact: 3 },
-      { date: '18 dic 2024', rate: '4.75%', prev: '4.50%', cons: '4.50%', surp: '+0.25%', decision: 'Subida 25 pb',  impact: 3, bull: true },
-      { date: '07 nov 2024', rate: '4.50%', prev: '4.75%', cons: '4.50%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '07 may 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '19 mar 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '29 ene 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '18 dic 2024', rate: '4.50%', prev: '4.75%', cons: '4.50%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '07 nov 2024', rate: '4.75%', prev: '5.00%', cons: '4.75%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
     ],
   },
   {
     id: 'BCE', name: 'BCE – Banco Central Europeo', country: 'EU', flag: '🇪🇺', flagCode: 'eu', ccy: 'EUR',
-    desc: 'Tipos de refinanciación principales',
+    desc: 'Tipo de interés de las operaciones principales de financiación',
     current: 2.40, previous: 2.65, consensus: 2.40, surprise: 0.00,
     nextMeeting: '05 jun 2025',
-    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes en marcha' },
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes en marcha — convergencia hacia neutral' },
     history: [
       { d: '2015-01', r: 0.05 }, { d: '2016-03', r: 0.00 }, { d: '2019-09', r: 0.00 },
       { d: '2021-12', r: 0.00 }, { d: '2022-07', r: 0.50 }, { d: '2022-09', r: 1.25 },
@@ -70,10 +73,11 @@ const BANKS = [
   },
   {
     id: 'BOE', name: 'BOE – Bank of England', country: 'GB', flag: '🇬🇧', flagCode: 'gb', ccy: 'GBP',
-    desc: 'Tipo de interés oficial bancario',
-    current: 4.50, previous: 4.75, consensus: 4.50, surprise: 0.00,
+    desc: 'Tipo de interés bancario oficial (Bank Rate)',
+    // 8 may 2025: recorte 25 pb → 4.25% (votación 5-4)
+    current: 4.25, previous: 4.50, consensus: 4.25, surprise: 0.00,
     nextMeeting: '19 jun 2025',
-    signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Reducción gradual con cautela' },
+    signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Recortes graduales — ritmo cauteloso' },
     history: [
       { d: '2015-01', r: 0.50 }, { d: '2016-08', r: 0.25 }, { d: '2017-11', r: 0.50 },
       { d: '2018-08', r: 0.75 }, { d: '2020-03', r: 0.10 }, { d: '2021-12', r: 0.25 },
@@ -82,33 +86,33 @@ const BANKS = [
       { d: '2022-11', r: 3.00 }, { d: '2022-12', r: 3.50 }, { d: '2023-02', r: 4.00 },
       { d: '2023-03', r: 4.25 }, { d: '2023-05', r: 4.50 }, { d: '2023-06', r: 5.00 },
       { d: '2023-08', r: 5.25 }, { d: '2024-08', r: 5.00 }, { d: '2024-11', r: 4.75 },
-      { d: '2025-02', r: 4.50 },
+      { d: '2025-02', r: 4.50 }, { d: '2025-05', r: 4.25 },
     ],
     decisions: [
+      { date: '08 may 2025', rate: '4.25%', prev: '4.50%', cons: '4.25%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '20 mar 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
       { date: '06 feb 2025', rate: '4.50%', prev: '4.75%', cons: '4.50%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '19 dic 2024', rate: '4.75%', prev: '5.00%', cons: '4.75%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '07 nov 2024', rate: '5.00%', prev: '5.25%', cons: '5.00%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '01 ago 2024', rate: '5.25%', prev: '5.25%', cons: '5.00%', surp: '+0.25%', decision: 'Sin cambios',  impact: 3 },
-      { date: '20 jun 2024', rate: '5.25%', prev: '5.25%', cons: '5.25%', surp: '0.00%', decision: 'Sin cambios',  impact: 3 },
+      { date: '19 dic 2024', rate: '4.75%', prev: '4.75%', cons: '4.75%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '07 nov 2024', rate: '4.75%', prev: '5.00%', cons: '4.75%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
     ],
   },
   {
     id: 'BOJ', name: 'BOJ – Bank of Japan', country: 'JP', flag: '🇯🇵', flagCode: 'jp', ccy: 'JPY',
-    desc: 'Tipo de interés objetivo a un día',
+    desc: 'Tipo de interés objetivo a un día (OCR)',
     current: 0.50, previous: 0.25, consensus: 0.50, surprise: 0.00,
-    nextMeeting: '17 jun 2025',
-    signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Normalización monetaria gradual' },
+    nextMeeting: '16-17 jun 2025',
+    signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Normalización monetaria gradual — ritmo dependiente de datos' },
     history: [
       { d: '2015-01', r: 0.10 }, { d: '2016-01', r: -0.10 }, { d: '2019-12', r: -0.10 },
       { d: '2022-12', r: -0.10 }, { d: '2023-12', r: -0.10 }, { d: '2024-03', r: 0.10 },
       { d: '2024-07', r: 0.25 }, { d: '2025-01', r: 0.50 },
     ],
     decisions: [
-      { date: '24 ene 2025', rate: '0.50%', prev: '0.25%', cons: '0.25%', surp: '+0.25%', decision: 'Subida 25 pb', impact: 3, bull: true },
-      { date: '31 jul 2024', rate: '0.25%', prev: '0.10%', cons: '0.10%', surp: '+0.15%', decision: 'Subida 15 pb', impact: 3, bull: true },
-      { date: '19 mar 2024', rate: '0.10%', prev: '-0.10%', cons: '0.00%', surp: '+0.10%', decision: 'Fin de tipos neg.', impact: 3, bull: true },
-      { date: '19 dic 2023', rate: '-0.10%', prev: '-0.10%', cons: '-0.10%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
-      { date: '27 oct 2023', rate: '-0.10%', prev: '-0.10%', cons: '-0.10%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+      { date: '01 may 2025', rate: '0.50%', prev: '0.50%', cons: '0.50%', surp: '0.00%', decision: 'Sin cambios',       impact: 3 },
+      { date: '19 mar 2025', rate: '0.50%', prev: '0.50%', cons: '0.50%', surp: '0.00%', decision: 'Sin cambios',       impact: 3 },
+      { date: '24 ene 2025', rate: '0.50%', prev: '0.25%', cons: '0.25%', surp: '+0.25%', decision: 'Subida 25 pb',     impact: 3, bull: true },
+      { date: '19 dic 2024', rate: '0.25%', prev: '0.25%', cons: '0.25%', surp: '0.00%', decision: 'Sin cambios',       impact: 2 },
+      { date: '31 jul 2024', rate: '0.25%', prev: '0.10%', cons: '0.10%', surp: '+0.15%', decision: 'Subida 15 pb',     impact: 3, bull: true },
     ],
   },
   {
@@ -116,27 +120,28 @@ const BANKS = [
     desc: 'Tipo de interés de referencia SNB',
     current: 0.25, previous: 0.50, consensus: 0.25, surprise: 0.00,
     nextMeeting: '19 jun 2025',
-    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes agresivo' },
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes completado — cerca del límite inferior' },
     history: [
       { d: '2015-01', r: -0.75 }, { d: '2019-12', r: -0.75 }, { d: '2022-06', r: -0.25 },
-      { d: '2022-09', r: 0.50 }, { d: '2022-12', r: 1.00 }, { d: '2023-03', r: 1.50 },
-      { d: '2024-03', r: 1.25 }, { d: '2024-06', r: 1.00 }, { d: '2024-09', r: 0.75 },
-      { d: '2024-12', r: 0.50 }, { d: '2025-03', r: 0.25 },
+      { d: '2022-09', r: 0.50 },  { d: '2022-12', r: 1.00 }, { d: '2023-03', r: 1.50 },
+      // Pico: jun 2023 (+25pb). Inicio de recortes: mar 2024
+      { d: '2023-06', r: 1.75 }, { d: '2024-03', r: 1.50 }, { d: '2024-06', r: 1.25 },
+      { d: '2024-09', r: 1.00 }, { d: '2024-12', r: 0.50 }, { d: '2025-03', r: 0.25 },
     ],
     decisions: [
-      { date: '20 mar 2025', rate: '0.25%', prev: '0.50%', cons: '0.25%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '12 dic 2024', rate: '0.50%', prev: '0.75%', cons: '0.75%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '26 sep 2024', rate: '0.75%', prev: '1.00%', cons: '1.00%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '20 jun 2024', rate: '1.00%', prev: '1.25%', cons: '1.25%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '21 mar 2024', rate: '1.25%', prev: '1.50%', cons: '1.50%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '20 mar 2025', rate: '0.25%', prev: '0.50%', cons: '0.25%', surp: '0.00%',  decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '12 dic 2024', rate: '0.50%', prev: '1.00%', cons: '0.75%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
+      { date: '26 sep 2024', rate: '1.00%', prev: '1.25%', cons: '1.25%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '20 jun 2024', rate: '1.25%', prev: '1.50%', cons: '1.50%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '21 mar 2024', rate: '1.50%', prev: '1.75%', cons: '1.75%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
     ],
   },
   {
     id: 'RBA', name: 'RBA – Reserve Bank of Australia', country: 'AU', flag: '🇦🇺', flagCode: 'au', ccy: 'AUD',
-    desc: 'Tipo de interés oficial al contado',
+    desc: 'Tipo de interés oficial al contado (cash rate)',
     current: 4.10, previous: 4.35, consensus: 4.10, surprise: 0.00,
-    nextMeeting: '01 jul 2025',
-    signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Primer recorte — ciclo incierto' },
+    nextMeeting: '20 may 2025',
+    signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Inicio de ciclo de recortes — ritmo incierto' },
     history: [
       { d: '2015-02', r: 2.25 }, { d: '2016-05', r: 1.75 }, { d: '2016-08', r: 1.50 },
       { d: '2019-06', r: 1.25 }, { d: '2019-07', r: 1.00 }, { d: '2019-10', r: 0.75 },
@@ -148,19 +153,19 @@ const BANKS = [
       { d: '2025-02', r: 4.10 },
     ],
     decisions: [
+      { date: '01 abr 2025', rate: '4.10%', prev: '4.10%', cons: '4.10%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
       { date: '18 feb 2025', rate: '4.10%', prev: '4.35%', cons: '4.10%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
-      { date: '10 dic 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios', impact: 3 },
-      { date: '05 nov 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios', impact: 3 },
-      { date: '24 sep 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios', impact: 3 },
-      { date: '06 ago 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios', impact: 3 },
+      { date: '10 dic 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '05 nov 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
+      { date: '24 sep 2024', rate: '4.35%', prev: '4.35%', cons: '4.35%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
     ],
   },
   {
     id: 'BOC', name: 'BOC – Bank of Canada', country: 'CA', flag: '🇨🇦', flagCode: 'ca', ccy: 'CAD',
-    desc: 'Tipo de interés objetivo a un día',
+    desc: 'Tipo de interés objetivo a un día (overnight rate)',
     current: 2.75, previous: 3.00, consensus: 2.75, surprise: 0.00,
     nextMeeting: '04 jun 2025',
-    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes activo' },
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes activo — pausa temporal' },
     history: [
       { d: '2015-01', r: 0.75 }, { d: '2015-07', r: 0.50 }, { d: '2017-07', r: 0.75 },
       { d: '2017-09', r: 1.00 }, { d: '2018-01', r: 1.25 }, { d: '2018-07', r: 1.50 },
@@ -173,11 +178,98 @@ const BANKS = [
       { d: '2025-03', r: 2.75 },
     ],
     decisions: [
+      { date: '16 abr 2025', rate: '2.75%', prev: '2.75%', cons: '2.75%', surp: '0.00%', decision: 'Sin cambios',   impact: 3 },
       { date: '12 mar 2025', rate: '2.75%', prev: '3.00%', cons: '2.75%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
       { date: '29 ene 2025', rate: '3.00%', prev: '3.25%', cons: '3.00%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
       { date: '11 dic 2024', rate: '3.25%', prev: '3.75%', cons: '3.50%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
       { date: '23 oct 2024', rate: '3.75%', prev: '4.25%', cons: '4.00%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
-      { date: '04 sep 2024', rate: '4.25%', prev: '4.50%', cons: '4.25%', surp: '0.00%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+    ],
+  },
+  // ── NUEVOS BANCOS CENTRALES ──────────────────────────────────────────────────
+  {
+    id: 'RBNZ', name: 'RBNZ – Reserve Bank of New Zealand', country: 'NZ', flag: '🇳🇿', flagCode: 'nz', ccy: 'NZD',
+    desc: 'Tasa oficial de efectivo (OCR)',
+    current: 3.50, previous: 3.75, consensus: 3.50, surprise: 0.00,
+    nextMeeting: '28 may 2025',
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes agresivo en marcha' },
+    history: [
+      { d: '2021-10', r: 0.50 }, { d: '2021-11', r: 0.75 }, { d: '2022-02', r: 1.00 },
+      { d: '2022-04', r: 1.50 }, { d: '2022-05', r: 2.00 }, { d: '2022-07', r: 2.50 },
+      { d: '2022-08', r: 3.00 }, { d: '2022-10', r: 3.50 }, { d: '2022-11', r: 4.25 },
+      { d: '2023-02', r: 4.75 }, { d: '2023-04', r: 5.25 }, { d: '2023-05', r: 5.50 },
+      { d: '2024-08', r: 5.25 }, { d: '2024-10', r: 4.75 }, { d: '2024-11', r: 4.25 },
+      { d: '2025-02', r: 3.75 }, { d: '2025-04', r: 3.50 },
+    ],
+    decisions: [
+      { date: '09 abr 2025', rate: '3.50%', prev: '3.75%', cons: '3.50%', surp: '0.00%',  decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '19 feb 2025', rate: '3.75%', prev: '4.25%', cons: '4.00%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
+      { date: '27 nov 2024', rate: '4.25%', prev: '4.75%', cons: '4.50%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
+      { date: '09 oct 2024', rate: '4.75%', prev: '5.25%', cons: '5.00%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
+      { date: '14 ago 2024', rate: '5.25%', prev: '5.50%', cons: '5.50%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+    ],
+  },
+  {
+    id: 'NB', name: 'Norges Bank – Banco de Noruega', country: 'NO', flag: '🇳🇴', flagCode: 'no', ccy: 'NOK',
+    desc: 'Tipo de interés de referencia (policy rate)',
+    current: 4.50, previous: 4.50, consensus: 4.50, surprise: 0.00,
+    nextMeeting: '18-19 jun 2025',
+    signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Último banco del G10 en mantener — primer recorte esperado en verano' },
+    history: [
+      { d: '2015-06', r: 1.00 }, { d: '2016-03', r: 0.50 }, { d: '2019-09', r: 1.50 },
+      { d: '2020-03', r: 0.25 }, { d: '2020-05', r: 0.00 }, { d: '2021-09', r: 0.25 },
+      { d: '2021-12', r: 0.50 }, { d: '2022-03', r: 0.75 }, { d: '2022-05', r: 1.25 },
+      { d: '2022-06', r: 1.75 }, { d: '2022-08', r: 2.25 }, { d: '2022-09', r: 2.75 },
+      { d: '2022-11', r: 2.75 }, { d: '2023-03', r: 3.25 }, { d: '2023-05', r: 3.75 },
+      { d: '2023-06', r: 4.00 }, { d: '2023-08', r: 4.25 }, { d: '2023-09', r: 4.50 },
+    ],
+    decisions: [
+      { date: '08 may 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+      { date: '27 mar 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+      { date: '23 ene 2025', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+      { date: '19 dic 2024', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+      { date: '07 nov 2024', rate: '4.50%', prev: '4.50%', cons: '4.50%', surp: '0.00%', decision: 'Sin cambios', impact: 2 },
+    ],
+  },
+  {
+    id: 'RIX', name: 'Riksbank – Banco de Suecia', country: 'SE', flag: '🇸🇪', flagCode: 'se', ccy: 'SEK',
+    desc: 'Tipo de interés de referencia (repo rate)',
+    current: 2.25, previous: 2.50, consensus: 2.25, surprise: 0.00,
+    nextMeeting: '18 jun 2025',
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes avanzado — posible pausa en 2025' },
+    history: [
+      { d: '2015-02', r: -0.10 }, { d: '2016-02', r: -0.50 }, { d: '2019-12', r: 0.00 },
+      { d: '2020-03', r: 0.00 },  { d: '2022-05', r: 0.25 }, { d: '2022-06', r: 0.75 },
+      { d: '2022-09', r: 1.75 }, { d: '2022-11', r: 2.50 }, { d: '2023-02', r: 3.00 },
+      { d: '2023-04', r: 3.50 }, { d: '2023-06', r: 3.75 }, { d: '2023-09', r: 4.00 },
+      { d: '2024-05', r: 3.75 }, { d: '2024-06', r: 3.50 }, { d: '2024-08', r: 3.25 },
+      { d: '2024-09', r: 3.00 }, { d: '2024-11', r: 2.75 }, { d: '2025-01', r: 2.25 },
+    ],
+    decisions: [
+      { date: '29 ene 2025', rate: '2.25%', prev: '2.75%', cons: '2.50%', surp: '-0.25%', decision: 'Recorte 50 pb', impact: 3, bear: true },
+      { date: '06 nov 2024', rate: '2.75%', prev: '3.00%', cons: '3.00%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '26 sep 2024', rate: '3.00%', prev: '3.25%', cons: '3.25%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '20 ago 2024', rate: '3.25%', prev: '3.50%', cons: '3.50%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '27 jun 2024', rate: '3.50%', prev: '3.75%', cons: '3.75%', surp: '-0.25%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+    ],
+  },
+  {
+    id: 'PBOC', name: 'PBoC – Banco Popular de China', country: 'CN', flag: '🇨🇳', flagCode: 'cn', ccy: 'CNY',
+    desc: 'Tasa Prime de Préstamos a 1 año (LPR 1Y)',
+    current: 3.10, previous: 3.35, consensus: 3.10, surprise: 0.00,
+    nextMeeting: '20 may 2025',
+    signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Estímulo selectivo — soporte al crecimiento' },
+    history: [
+      { d: '2019-08', r: 4.25 }, { d: '2020-02', r: 4.05 }, { d: '2020-04', r: 3.85 },
+      { d: '2021-12', r: 3.80 }, { d: '2022-01', r: 3.70 }, { d: '2022-05', r: 3.70 },
+      { d: '2022-08', r: 3.65 }, { d: '2023-06', r: 3.55 }, { d: '2023-08', r: 3.45 },
+      { d: '2024-02', r: 3.45 }, { d: '2024-07', r: 3.35 }, { d: '2024-10', r: 3.10 },
+    ],
+    decisions: [
+      { date: '20 abr 2025', rate: '3.10%', prev: '3.10%', cons: '3.10%', surp: '0.00%', decision: 'Sin cambios',   impact: 2 },
+      { date: '20 mar 2025', rate: '3.10%', prev: '3.10%', cons: '3.10%', surp: '0.00%', decision: 'Sin cambios',   impact: 2 },
+      { date: '20 feb 2025', rate: '3.10%', prev: '3.10%', cons: '3.10%', surp: '0.00%', decision: 'Sin cambios',   impact: 2 },
+      { date: '21 oct 2024', rate: '3.10%', prev: '3.35%', cons: '3.25%', surp: '-0.10%', decision: 'Recorte 25 pb', impact: 3, bear: true },
+      { date: '22 jul 2024', rate: '3.35%', prev: '3.45%', cons: '3.45%', surp: '-0.10%', decision: 'Recorte 10 pb', impact: 3, bear: true },
     ],
   },
 ];
@@ -393,14 +485,18 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
           border: `1px solid ${T.border}`,
           borderRadius: 14,
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           <div style={{
             padding: '10px 14px',
             borderBottom: `1px solid ${T.border}`,
             fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.1em',
+            flexShrink: 0,
           }}>
             BANCO CENTRAL
           </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
           {BANKS.map(b => {
             const active = b.id === selectedId;
             return (
@@ -454,6 +550,7 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
               </button>
             );
           })}
+          </div>{/* end scrollable bank list */}
         </div>
 
         {/* ── CONTENT PANEL ─────────────────────────────────────────────────── */}

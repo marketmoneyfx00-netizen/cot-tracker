@@ -102,13 +102,14 @@ function normActual(v) {
 function dateSlice(d) { return String(d || '').slice(0, 10); }
 
 function weekBounds(anchor) {
-  const d = anchor ? new Date(anchor) : new Date(), day = d.getDay() || 7;
+  const d = anchor ? new Date(anchor) : new Date();
+  const day = d.getUTCDay() || 7; // use UTC day to avoid local-vs-UTC mismatch on Vercel
   const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - day + 1); mon.setUTCHours(0,0,0,0);
   const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6); sun.setUTCHours(23,59,59,999);
   return { from: mon.toISOString().slice(0,10), to: sun.toISOString().slice(0,10) };
 }
-function lastWeekBounds() { const r = new Date(); r.setDate(r.getDate()-7); return weekBounds(r); }
-function nextWeekBounds() { const r = new Date(); r.setDate(r.getDate()+7); return weekBounds(r); }
+function lastWeekBounds() { const r = new Date(); r.setUTCDate(r.getUTCDate()-7); return weekBounds(r); }
+function nextWeekBounds() { const r = new Date(); r.setUTCDate(r.getUTCDate()+7); return weekBounds(r); }
 function getWeekStr(d) {
   const dt = new Date(dateSlice(d)+'T12:00:00Z'); if (isNaN(dt.getTime())) return 'unknown';
   const day = dt.getUTCDay() || 7; const thu = new Date(dt); thu.setUTCDate(dt.getUTCDate()+4-day);

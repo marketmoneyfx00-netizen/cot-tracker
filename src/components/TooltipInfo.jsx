@@ -18,7 +18,11 @@ export default function TooltipInfo({ text, align = 'center' }) {
   const updatePos = () => {
     if (!iconRef.current) return;
     const rect = iconRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 8, left: rect.left });
+    const vh = window.innerHeight;
+    // Prefer below; flip above if tooltip would clip the bottom of the viewport
+    const belowTop = rect.bottom + 8;
+    const top = belowTop + 80 > vh ? Math.max(8, rect.top - 88) : belowTop;
+    setPos({ top, left: rect.left });
   };
 
   // Close on outside click/tap
