@@ -148,3 +148,30 @@ CREATE POLICY IF NOT EXISTS "users_read_own_access"
   ON users_access FOR SELECT
   USING (auth.jwt() ->> 'email' = email);
 
+-- ── central_bank_rates table ─────────────────────────────────────────────────
+-- Stores historical central bank policy rate observations fetched from FRED.
+-- Populated by api/rates/refresh.js (Vercel Cron, 2x/day).
+-- Read by api/rates/index.js and served to InterestRatePanel.jsx.
+
+CREATE TABLE IF NOT EXISTS central_bank_rates (
+  id              BIGSERIAL    PRIMARY KEY,
+  bank_id         TEXT         NOT NULL,
+  rate            NUMERIC(6,3) NOT NULL,
+  previous_rate   NUMERIC(6,3),
+  observation_date DATE        NOT NULL,
+  decision_label  TEXT,
+  signal_label    TEXT,
+  source          TEXT         NOT NULL DEFAULT 'FRED',
+  fetched_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE (bank_id, observation_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cbr_bank_date
+  ON central_bank_rates (bank_id, observation_date DESC);
+
+ALTER TABLE central_bank_rates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "cbr_read_authenticated"
+  ON central_bank_rates FOR SELECT
+  TO authenticated USING (true);
+

@@ -13,7 +13,8 @@
  *   isMobile  — boolean
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase.js';
 
 // ─── DATOS ────────────────────────────────────────────────────────────────────
 // Historial real de cada banco central (fecha de cambio, tasa resultante en %)
@@ -274,6 +275,76 @@ const BANKS = [
   },
 ];
 
+// ─── SIGNAL COLOR MAP ──────────────────────────────────────────────────────────
+const SIGNAL_COLORS = {
+  RESTRICTIVO:  '#ef4444',
+  ACOMODATICIO: '#22c55e',
+  NEUTRO:       '#f59e0b',
+};
+
+// ─── DYNAMIC RATES HOOK ────────────────────────────────────────────────────────
+function useDynamicRates() {
+  const [data,      setData]      = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [fetchedAt, setFetchedAt] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+      const res = await fetch('/api/rates', { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json.banks && Object.keys(json.banks).length > 0) {
+        setData(json.banks);
+        setFetchedAt(json.timestamp);
+      }
+    } catch (e) {
+      console.warn('[InterestRatePanel] API unavailable — using static data:', e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return { data, loading, fetchedAt, reload: load };
+}
+
+// ─── MERGE STATIC + DYNAMIC ───────────────────────────────────────────────────
+// Merges live API data (rates, decisions, history additions) with the static
+// BANKS metadata (name, flag, desc, chart history back to 2015).
+// If the API has no entry for this bank, returns the static bank unchanged.
+function mergeBank(staticBank, dynamicBanks) {
+  const dyn = dynamicBanks?.[staticBank.id];
+  if (!dyn) return staticBank;
+
+  // Extend chart history: append dynamic points newer than the last static entry
+  const lastStaticDate = staticBank.history.at(-1)?.d ?? '0000-00';
+  const newHistoryPoints = (dyn.history ?? []).filter(p => p.d > lastStaticDate);
+  const mergedHistory = newHistoryPoints.length > 0
+    ? [...staticBank.history, ...newHistoryPoints]
+    : staticBank.history;
+
+  const signalColor = SIGNAL_COLORS[dyn.signalLabel] ?? staticBank.signal.color;
+
+  return {
+    ...staticBank,
+    current:  dyn.current,
+    previous: dyn.previous,
+    signal: {
+      ...staticBank.signal,
+      label: dyn.signalLabel ?? staticBank.signal.label,
+      color: signalColor,
+    },
+    decisions: dyn.decisions?.length > 0 ? dyn.decisions : staticBank.decisions,
+    history:   mergedHistory,
+  };
+}
+
 // ─── GRÁFICO SVG ──────────────────────────────────────────────────────────────
 function RateChart({ history, color, darkMode }) {
   const [tooltip, setTooltip] = useState(null);
@@ -430,11 +501,16 @@ function RateChart({ history, color, darkMode }) {
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function InterestRatePanel({ darkMode, T, isMobile }) {
   const [selectedId, setSelectedId] = useState('FED');
-  const bank = BANKS.find(b => b.id === selectedId) || BANKS[0];
+  const { data: dynamicRates, loading, fetchedAt, reload } = useDynamicRates();
 
-  const lastUpdated = new Date().toLocaleDateString('es-ES', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  }) + ' – ' + new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const staticBank = BANKS.find(b => b.id === selectedId) || BANKS[0];
+  const bank = mergeBank(staticBank, dynamicRates);
+
+  const lastUpdated = fetchedAt
+    ? new Date(fetchedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+      + ' – ' + new Date(fetchedAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+      + ' – ' + new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
   const surpriseColor = bank.surprise > 0 ? '#22c55e'
     : bank.surprise < 0 ? '#ef4444' : T.sub;
@@ -457,17 +533,24 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 11, color: T.sub2 }}>
-            Última actualización: {lastUpdated}
+          <span style={{ fontSize: 11, color: T.sub2, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: dynamicRates ? '#22c55e' : '#6b7280',
+            }}/>
+            {dynamicRates ? 'En vivo' : 'Estático'}: {lastUpdated}
           </span>
           <button
-            onClick={() => {}}
+            onClick={reload}
+            disabled={loading}
+            title="Actualizar datos"
             style={{
               background: 'transparent', border: `1px solid ${T.border}`,
-              borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+              borderRadius: 6, padding: '4px 8px', cursor: loading ? 'not-allowed' : 'pointer',
               color: T.sub, fontSize: 12,
+              opacity: loading ? 0.5 : 1,
             }}
-          >↻</button>
+          >{loading ? '…' : '↻'}</button>
         </div>
       </div>
 
@@ -762,7 +845,7 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
               flexWrap: 'wrap', gap: 8,
             }}>
               <span style={{ fontSize: 9, color: T.sub2, fontStyle: 'italic' }}>
-                Fuente: Investing.com – Datos en tiempo real
+                Fuente: FRED (St. Louis Fed) – Actualización automática 2×/día
               </span>
               <span style={{ fontSize: 9, color: T.sub2 }}>
                 Los datos mostrados son solo informativos y no constituyen asesoramiento financiero.
