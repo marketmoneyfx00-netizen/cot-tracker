@@ -30,8 +30,8 @@ export default async function handler(req, res) {
   // Fetch all historical rows (for chart) ordered asc, then we'll slice for decisions
   const { data, error } = await supabaseAdmin
     .from('central_bank_rates')
-    .select('bank_id, rate, previous_rate, observation_date, decision_label, signal_label')
-    .order('observation_date', { ascending: true });
+    .select('bank_id, rate, previous_rate, decision_date, decision_label, signal_label')
+    .order('decision_date', { ascending: true });
 
   if (error) {
     console.error('[rates] Supabase error:', error.message);
@@ -62,13 +62,13 @@ export default async function handler(req, res) {
 
     // history: all change points formatted for the SVG chart (d: 'YYYY-MM')
     const history = rows.map(r => ({
-      d: r.observation_date.slice(0, 7), // 'YYYY-MM'
+      d: r.decision_date.slice(0, 7), // 'YYYY-MM'
       r: parseFloat(r.rate),
     }));
 
     // decisions: last 6 rows reversed (most-recent first), for the table
     const decisions = [...rows].reverse().slice(0, 6).map(r => ({
-      date:     formatDate(r.observation_date),
+      date:     formatDate(r.decision_date),
       rate:     parseFloat(r.rate).toFixed(2) + '%',
       prev:     r.previous_rate != null ? parseFloat(r.previous_rate).toFixed(2) + '%' : '—',
       cons:     parseFloat(r.rate).toFixed(2) + '%',
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       current:     parseFloat(latest.rate),
       previous:    prev ? parseFloat(prev.rate) : parseFloat(latest.rate),
       signalLabel: latest.signal_label ?? 'NEUTRO',
-      lastDate:    latest.observation_date,
+      lastDate:    latest.decision_date,
       history,
       decisions,
     };

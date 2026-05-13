@@ -94,7 +94,7 @@ async function sanityCheck(bankId, newRate) {
     .from('central_bank_rates')
     .select('rate')
     .eq('bank_id', bankId)
-    .order('observation_date', { ascending: false })
+    .order('decision_date', { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -159,13 +159,17 @@ export default async function handler(req, res) {
 
       for (const point of points) {
         // Skip if already in DB
-        const { data: existing } = await supabaseAdmin
+        const { data: existing, error: existingErr } = await supabaseAdmin
           .from('central_bank_rates')
           .select('id')
           .eq('bank_id', bankId)
-          .eq('observation_date', point.date)
+          .eq('decision_date', point.date)
           .maybeSingle();
 
+        if (existingErr) {
+          results.errors.push({ bankId, date: point.date, reason: existingErr.message, code: existingErr.code, step: 'check_existing' });
+          continue;
+        }
         if (existing) {
           results.skipped.push(`${bankId}:${point.date}`);
           continue;
@@ -187,8 +191,8 @@ export default async function handler(req, res) {
           .from('central_bank_rates')
           .select('rate')
           .eq('bank_id', bankId)
-          .lt('observation_date', point.date)
-          .order('observation_date', { ascending: false })
+          .lt('decision_date', point.date)
+          .order('decision_date', { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -200,7 +204,7 @@ export default async function handler(req, res) {
             bank_id:          bankId,
             rate:             point.rate,
             previous_rate:    prevRate,
-            observation_date: point.date,
+            decision_date: point.date,
             decision_label:   decisionLabel(point.rate, prevRate),
             signal_label:     signalLabel(point.rate, prevRate),
             source:           'FRED',
@@ -208,9 +212,18 @@ export default async function handler(req, res) {
           });
 
         if (insertErr) {
-          // UNIQUE violation means another process inserted it — safe to ignore
-          if (insertErr.code !== '23505') {
-            results.errors.push({ bankId, date: point.date, reason: insertErr.message });
+          if (insertErr.code === '23505') {
+            // Race condition: another process inserted simultaneously — safe to ignore
+            results.skipped.push(`${bankId}:${point.date}:duplicate`);
+          } else {
+            results.errors.push({
+              bankId,
+              date:    point.date,
+              reason:  insertErr.message,
+              code:    insertErr.code,
+              details: insertErr.details ?? null,
+              hint:    insertErr.hint   ?? null,
+            });
           }
         } else {
           results.updated.push(`${bankId}:${point.date}:${point.rate}%`);
