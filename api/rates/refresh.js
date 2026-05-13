@@ -15,16 +15,16 @@ const MAX_DELTA_BPS = 200;
 // FRED series per bank. Daily series give exact decision dates;
 // monthly OECD series (IRSTCI01*) are used where no daily equivalent exists.
 const BANK_SERIES = {
-  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 500 },
-  BCE:  { id: 'ECBDFR',            freq: 'daily',   limit: 500 },
-  BOE:  { id: 'IRSTCI01GBM156N',   freq: 'monthly', limit: 120 },
-  BOJ:  { id: 'IRSTCI01JPM156N',   freq: 'monthly', limit: 120 },
-  SNB:  { id: 'IRSTCI01CHM156N',   freq: 'monthly', limit: 120 },
-  RBA:  { id: 'IRSTCI01AUM156N',   freq: 'monthly', limit: 120 },
-  BOC:  { id: 'IRSTCI01CAM156N',   freq: 'monthly', limit: 120 },
-  RBNZ: { id: 'IRSTCI01NZM156N',   freq: 'monthly', limit: 120 },
-  NB:   { id: 'IRSTCI01NOM156N',   freq: 'monthly', limit: 120 },
-  RIX:  { id: 'IRSTCI01SEM156N',   freq: 'monthly', limit: 120 },
+  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 3000 }, // ~12 years of daily data
+  BCE:  { id: 'ECBDFR',            freq: 'daily',   limit: 3000 },
+  BOE:  { id: 'IRSTCI01GBM156N',   freq: 'monthly', limit: 240 },  // 20 years monthly
+  BOJ:  { id: 'IRSTCI01JPM156N',   freq: 'monthly', limit: 240 },
+  SNB:  { id: 'IRSTCI01CHM156N',   freq: 'monthly', limit: 240 },
+  RBA:  { id: 'IRSTCI01AUM156N',   freq: 'monthly', limit: 240 },
+  BOC:  { id: 'IRSTCI01CAM156N',   freq: 'monthly', limit: 240 },
+  RBNZ: { id: 'IRSTCI01NZM156N',   freq: 'monthly', limit: 240 },
+  NB:   { id: 'IRSTCI01NOM156N',   freq: 'monthly', limit: 240 },
+  RIX:  { id: 'IRSTCI01SEM156N',   freq: 'monthly', limit: 240 },
 };
 
 function signalLabel(rate, prevRate) {
@@ -48,7 +48,7 @@ async function fetchChangePoints(seriesCfg) {
     series_id:  seriesCfg.id,
     api_key:    FRED_KEY,
     file_type:  'json',
-    sort_order: 'asc',               // asc → easier to detect changes
+    sort_order: 'desc',              // desc → get most recent observations first
     limit:      String(seriesCfg.limit),
   });
 
@@ -59,6 +59,9 @@ async function fetchChangePoints(seriesCfg) {
 
   const { observations } = await res.json();
   if (!Array.isArray(observations)) throw new Error(`Bad FRED response for ${seriesCfg.id}`);
+
+  // Reverse so we process oldest → newest (needed for change-point detection)
+  observations.reverse();
 
   const points = [];
   let lastValue = null;
