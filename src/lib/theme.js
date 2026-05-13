@@ -12,21 +12,21 @@
 // ─── Core palette ────────────────────────────────────────────────────────────
 export const PALETTE = {
   dark: {
-    bg:       "#0b0f14",
-    panel:    "#11161d",
-    card:     "#151b23",
-    card2:    "#1a2230",
-    card3:    "#1e2535",
-    border:   "#263041",
-    border2:  "#1e2535",
-    text:     "#e8eaf0",
-    sub:      "#8b90a0",
-    sub2:     "#5a6070",
+    bg:       "#070b14",
+    panel:    "#0d1526",
+    card:     "#111d32",
+    card2:    "#162038",
+    card3:    "#1b263f",
+    border:   "#1e2d47",
+    border2:  "#162038",
+    text:     "#eef0f8",
+    sub:      "#8491a8",
+    sub2:     "#4a5568",
     // overlays
-    overlay:  "rgba(0,0,0,0.65)",
-    sheet:    "#12171f",
+    overlay:  "rgba(0,0,0,0.7)",
+    sheet:    "#0d1526",
     hover:    "rgba(255,255,255,0.04)",
-    latestBg: "rgba(0,85,204,0.10)",
+    latestBg: "rgba(37,99,235,0.10)",
   },
   light: {
     bg:       "#f0f4f8",
@@ -49,9 +49,9 @@ export const PALETTE = {
 
 // ─── Semantic tokens (same in both modes) ────────────────────────────────────
 export const SEMANTIC = {
-  accent:   "#0055cc",
+  accent:   "#2563eb",
   accentHi: "#3b82f6",
-  purple:   "#8b5cf6",
+  purple:   "#7c3aed",
   purpleHi: "#a78bfa",
   green:    "#22c55e",
   greenSft: "#88c999",

@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>COT Tracker — Opera con la ventaja del dinero institucional</title>
+  <meta name="description" content="El posicionamiento real del capital institucional, convertido en señal operativa. Market Decision Layer, Bias Engine, Cross Asset Flow e Intraday Execution. Prueba gratis." />
+  <meta property="og:title"       content="COT Tracker — Ventaja institucional para traders FX" />
+  <meta property="og:description" content="Convierte el posicionamiento CFTC en sesgo operativo claro. 4 módulos. Actualización semanal. Prueba gratis." />
+  <meta property="og:type"        content="website" />
+  <link rel="icon" type="image/svg+xml" href="https://app.cot-tracker.com/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+  /* ── Reset ──────────────────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+  /* ── Tokens ─────────────────────────────────────────────────────────────────── */
+  :root {
+    --bg:        #050810;
+    --bg2:       #080d1a;
+    --bg3:       #0b1120;
+    --card:      #0d1526;
+    --card2:     #111d32;
+    --border:    rgba(255,255,255,0.06);
+    --border2:   rgba(255,255,255,0.11);
+    --border3:   rgba(255,255,255,0.18);
+    --txt:       #eef0f8;
+    --sub:       #8491a8;
+    --sub2:      #3e4a60;
+    --accent:    #2563eb;
+    --accent2:   #1d4ed8;
+    --accent3:   #3b82f6;
+    --purple:    #7c3aed;
+    --cyan:      #06b6d4;
+    --bull:      #22c55e;
+    --bear:      #ef4444;
+    --warn:      #f59e0b;
+    --radius:    14px;
+    --radius-lg: 20px;
+    --radius-xl: 28px;
+    --font:      'Inter', -apple-system, Helvetica, sans-serif;
+    --mono:      'JetBrains Mono', 'SF Mono', monospace;
+    --shadow:    0 4px 24px rgba(0,0,0,.5);
+    --shadow-lg: 0 20px 80px rgba(0,0,0,.6);
+    --glow:      0 0 40px rgba(37,99,235,.2);
+    --gradient:  linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    --gradient2: linear-gradient(135deg, #06b6d4 0%, #2563eb 60%, #7c3aed 100%);
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--txt);
+    overflow-x: hidden;
+  }
+  a { text-decoration: none; color: inherit; }
+  img { display: block; max-width: 100%; }
+  h1,h2,h3 { letter-spacing: -0.035em; line-height: 1.1; font-weight: 800; }
+  p { line-height: 1.7; }
+
+  /* ── Dot grid background ──────────────────────────────────────────────────── */
+  .dot-grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* ── Gradient orbs ───────────────────────────────────────────────────────── */
+  .orb {
+    position: fixed; border-radius: 50%; filter: blur(120px);
+    pointer-events: none; z-index: 0; opacity: 0.35;
+  }
+  .orb-1 { width: 600px; height: 600px; background: #2563eb; top: -180px; left: -100px; animation: drift1 18s ease-in-out infinite; }
+  .orb-2 { width: 500px; height: 500px; background: #7c3aed; top: -60px;  right: -120px; animation: drift2 22s ease-in-out infinite; }
+  .orb-3 { width: 400px; height: 400px; background: #06b6d4; top: 60vh;   left: 30%;    animation: drift3 25s ease-in-out infinite; opacity: 0.2; }
+  @keyframes drift1 { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(40px,60px) scale(1.08)} }
+  @keyframes drift2 { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(-50px,40px) scale(1.1)} }
+  @keyframes drift3 { 0%,100%{transform:translate(0,0) scale(1)}   50%{transform:translate(30px,-50px) scale(1.05)} }
+
+  /* ── Layout ──────────────────────────────────────────────────────────────── */
+  .wrap    { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+  .wrap-sm { max-width:  680px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+  section  { padding: 100px 0; }
+
+  /* ── Scroll reveal ───────────────────────────────────────────────────────── */
+  .up { opacity:0; transform:translateY(28px); transition:opacity .65s cubic-bezier(.4,0,.2,1), transform .65s cubic-bezier(.4,0,.2,1); }
+  .up.go { opacity:1; transform:translateY(0); }
+  .up-d1 { transition-delay:.07s; }
+  .up-d2 { transition-delay:.14s; }
+  .up-d3 { transition-delay:.21s; }
+  .up-d4 { transition-delay:.28s; }
+  .up-d5 { transition-delay:.35s; }
+  .up-d6 { transition-delay:.42s; }
+
+  /* ── Gradient text ───────────────────────────────────────────────────────── */
+  .grad-text {
+    background: var(--gradient2);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .grad-text-gold {
+    background: linear-gradient(135deg,#f59e0b,#ef4444);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 14px 28px; border-radius: 12px; border: none;
+    font-family: var(--font); font-size: 14px; font-weight: 700;
+    cursor: pointer; white-space: nowrap; user-select: none;
+    transition: all .18s cubic-bezier(.4,0,.2,1);
+    -webkit-tap-highlight-color: transparent; position: relative; overflow: hidden;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  .btn-primary {
+    background: var(--gradient); color: #fff;
+    box-shadow: 0 4px 20px rgba(37,99,235,.4), 0 0 0 1px rgba(255,255,255,.08) inset;
+  }
+  .btn-primary:hover { box-shadow: 0 8px 32px rgba(37,99,235,.6); filter: brightness(1.08); transform: translateY(-1px); }
+
+  .btn-ghost {
+    background: rgba(255,255,255,0.05); color: var(--txt);
+    border: 1px solid var(--border2);
+    backdrop-filter: blur(12px);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.09); border-color: var(--border3); transform: translateY(-1px); }
+
+  .btn-lg { padding: 16px 36px; font-size: 15px; border-radius: 14px; }
+
+  /* ── Spinner ─────────────────────────────────────────────────────────────── */
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    animation: spin .7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Labels / Eyebrow ────────────────────────────────────────────────────── */
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent3); margin-bottom: 16px;
+  }
+  .eyebrow::before { content: ''; width: 16px; height: 1px; background: var(--accent3); display: block; }
+  .section-h  { font-size: clamp(30px,3.8vw,48px); margin-bottom: 18px; }
+  .section-p  { font-size: 17px; color: var(--sub); max-width: 560px; line-height: 1.7; }
+  .text-center { text-align: center; }
+  .text-center .section-p { margin: 0 auto; }
+  .text-center .eyebrow { margin: 0 auto 16px; }
+
+  /* ── Glass card ──────────────────────────────────────────────────────────── */
+  .glass {
+    background: rgba(13,21,38,0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--border2);
+  }
+
+  /* ── NAV ─────────────────────────────────────────────────────────────────── */
+  nav {
+    position: sticky; top: 0; z-index: 200;
+    background: rgba(5,8,16,0.82);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    height: 58px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 15px; color: var(--txt); }
+  .nav-brand-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--gradient); display: flex; align-items: center; justify-content: center;
+    font-size: 13px; box-shadow: 0 2px 12px rgba(37,99,235,.5);
+  }
+  .nav-links { display: flex; gap: 2px; }
+  .nav-link { font-size: 13px; color: var(--sub); font-weight: 500; padding: 7px 14px; border-radius: 9px; transition: all .15s; }
+  .nav-link:hover { color: var(--txt); background: rgba(255,255,255,.05); }
+  .nav-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ── Live badge ──────────────────────────────────────────────────────────── */
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px; border-radius: 99px;
+    background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2);
+    font-size: 11px; font-weight: 600; color: var(--bull);
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bull); animation: livePulse 1.8s ease infinite; }
+  @keyframes livePulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)} 50%{box-shadow:0 0 0 4px rgba(34,197,94,0)} }
+
+  /* ── HERO ────────────────────────────────────────────────────────────────── */
+  #hero {
+    padding: 88px 0 80px;
+    position: relative; overflow: hidden;
+  }
+  .hero-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+  .hero-kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 99px; margin-bottom: 28px;
+    background: rgba(37,99,235,.08); border: 1px solid rgba(37,99,235,.2);
+    font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--accent3);
+  }
+  .hero-title {
+    font-size: clamp(38px,5.2vw,68px);
+    font-weight: 900; letter-spacing: -0.04em; line-height: 1.06;
+    margin-bottom: 24px;
+  }
+  .hero-sub {
+    font-size: 17px; color: var(--sub); max-width: 480px;
+    margin-bottom: 40px; line-height: 1.7; font-weight: 400;
+  }
+  .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+
+  /* Social proof strip */
+  .hero-social {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px; border-radius: 12px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    width: fit-content;
+  }
+  .avatar-stack { display: flex; }
+  .avatar-ring {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; margin-left: -8px; flex-shrink: 0;
+  }
+  .avatar-ring:first-child { margin-left: 0; }
+  .social-text { font-size: 12px; }
+  .social-text strong { color: var(--txt); font-weight: 700; }
+  .social-text span  { color: var(--sub); }
+  .stars-text { font-size: 11px; color: var(--warn); letter-spacing: 1px; }
+
+  /* ── Hero dashboard mock ─────────────────────────────────────────────────── */
+  .hero-mock {
+    position: relative;
+    background: var(--card);
+    border: 1px solid rgba(37,99,235,.2);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,.04) inset, var(--glow);
+    overflow: hidden;
+  }
+  .hero-mock::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(135deg, rgba(37,99,235,.06) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .mock-bar {
+    height: 38px; background: rgba(8,13,26,.8); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px; gap: 8px;
+    backdrop-filter: blur(8px);
+  }
+  .mac-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .mac-r { background: #ff5f57; } .mac-y { background: #febc2e; } .mac-g { background: #28c840; }
+  .mock-label { font-size: 11px; color: #3a4565; margin-left: 6px; font-family: var(--mono); }
+  .mock-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .mock-row { display: flex; gap: 8px; }
+
+  .mdl-card {
+    flex: 1; border-radius: 10px; padding: 11px 13px;
+    background: var(--card2); border: 1px solid var(--border);
+    transition: all .2s;
+  }
+  .mdl-card:hover { border-color: var(--border2); }
+  .mdl-card-label { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--sub2); margin-bottom: 6px; font-family: var(--mono); }
+  .mdl-card-bias { font-size: 11px; font-weight: 700; }
+  .bias-bull { color: var(--bull); }
+  .bias-bear { color: var(--bear); }
+  .bias-neu  { color: var(--warn); }
+  .mdl-bar { height: 3px; border-radius: 99px; background: rgba(255,255,255,.06); margin-top: 7px; overflow: hidden; }
+  .mdl-bar-fill { height: 100%; border-radius: 99px; }
+
+  .mock-macro {
+    border-radius: 10px; padding: 11px 13px;
+    background: var(--card2); border: 1px solid var(--border);
+  }
+  .mock-macro-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--sub2); margin-bottom: 8px; }
+  .macro-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .macro-row:last-child { border-bottom: none; }
+  .macro-name { font-size: 10px; color: var(--sub); font-family: var(--mono); }
+  .macro-val  { font-size: 10px; font-weight: 700; }
+
+  /* Floating chip on mock */
+  .mock-chip {
+    position: absolute; top: 54px; right: -14px;
+    background: var(--card); border: 1px solid rgba(34,197,94,.3);
+    border-radius: 10px; padding: 8px 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    font-size: 11px; font-weight: 700; color: var(--bull);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    animation: floatChip 4s ease-in-out infinite;
+  }
+  .mock-chip-2 {
+    position: absolute; bottom: 60px; left: -16px;
+    background: var(--card); border: 1px solid rgba(37,99,235,.3);
+    border-radius: 10px; padding: 8px 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    font-size: 11px; font-weight: 700; color: var(--accent3);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    animation: floatChip2 5s ease-in-out infinite;
+  }
+  @keyframes floatChip  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  @keyframes floatChip2 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
+
+  /* ── STATS / BENTO ───────────────────────────────────────────────────────── */
+  #stats {
+    padding: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: relative; z-index: 1;
+  }
+  .stats-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    display: grid; grid-template-columns: repeat(4,1fr);
+  }
+  .stat-item {
+    text-align: center; padding: 36px 24px; position: relative;
+    transition: background .2s;
+  }
+  .stat-item:hover { background: rgba(255,255,255,.02); }
+  .stat-item + .stat-item { border-left: 1px solid var(--border); }
+  .stat-num { font-size: 32px; font-weight: 900; letter-spacing: -0.04em; }
+  .stat-label { font-size: 12px; color: var(--sub); margin-top: 6px; line-height: 1.5; }
+  .stat-bar {
+    width: 32px; height: 2px; border-radius: 99px;
+    background: var(--gradient); margin: 10px auto 0;
+  }
+
+  /* ── PROBLEM ─────────────────────────────────────────────────────────────── */
+  #problem { background: var(--bg2); position: relative; overflow: hidden; }
+  #problem::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(37,99,235,.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .problem-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 56px; }
+  .p-card {
+    padding: 28px; border-radius: var(--radius-lg); background: var(--card);
+    border: 1px solid var(--border);
+    transition: all .22s cubic-bezier(.4,0,.2,1); position: relative; overflow: hidden;
+  }
+  .p-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(37,99,235,.04) 0%, transparent 60%);
+    opacity: 0; transition: opacity .22s;
+  }
+  .p-card:hover { border-color: rgba(37,99,235,.25); box-shadow: 0 12px 40px rgba(0,0,0,.35); transform: translateY(-3px); }
+  .p-card:hover::before { opacity: 1; }
+  .p-icon { font-size: 28px; margin-bottom: 16px; }
+  .p-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .p-card p  { font-size: 13px; color: var(--sub); line-height: 1.65; }
+
+  /* ── FEATURES ────────────────────────────────────────────────────────────── */
+  #features { background: var(--bg); }
+  .feat-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center;
+    margin-bottom: 104px;
+  }
+  .feat-row:last-child { margin-bottom: 0; }
+  .feat-row.rev { direction: rtl; }
+  .feat-row.rev > * { direction: ltr; }
+
+  .feat-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent3); background: rgba(37,99,235,.07); border: 1px solid rgba(37,99,235,.15);
+    border-radius: 8px; padding: 4px 12px; margin-bottom: 18px;
+  }
+  .feat-num { font-size: 11px; font-weight: 800; }
+  .feat-h { font-size: clamp(24px,3vw,36px); margin-bottom: 14px; }
+  .feat-p { font-size: 16px; color: var(--sub); margin-bottom: 28px; line-height: 1.7; }
+  .feat-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .feat-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14px; color: var(--sub); line-height: 1.55;
+  }
+  .feat-list li .check {
+    width: 18px; height: 18px; border-radius: 5px;
+    background: rgba(37,99,235,.1); border: 1px solid rgba(37,99,235,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; flex-shrink: 0; margin-top: 1px; color: var(--accent3);
+  }
+
+  /* Feature screen mocks */
+  .feat-screen {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: var(--radius-xl); overflow: hidden;
+    box-shadow: var(--shadow-lg), var(--glow);
+    transition: all .25s;
+  }
+  .feat-screen:hover { box-shadow: var(--shadow-lg), 0 0 60px rgba(37,99,235,.25); border-color: rgba(37,99,235,.22); }
+  .feat-screen-bar {
+    height: 34px; background: var(--card); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px; gap: 6px;
+  }
+  .feat-screen-body { padding: 16px; }
+  .fs-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border-radius: 9px; margin-bottom: 6px;
+    background: var(--card); border: 1px solid var(--border);
+    transition: border-color .15s;
+  }
+  .fs-row:hover { border-color: var(--border2); }
+  .fs-pair { font-size: 12px; font-weight: 700; color: var(--txt); font-family: var(--mono); }
+  .fs-bias { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 5px; }
+  .fs-bull { background: rgba(34,197,94,.1); color: var(--bull); }
+  .fs-bear { background: rgba(239,68,68,.1); color: var(--bear); }
+  .fs-neutral { background: rgba(245,158,11,.1); color: var(--warn); }
+  .fs-meta { font-size: 10px; color: var(--sub2); font-family: var(--mono); }
+  .fs-bar { height: 2px; background: var(--border); border-radius: 99px; margin-top: 4px; overflow: hidden; }
+  .fs-bar-fill { height: 100%; border-radius: 99px; }
+
+  /* Cross asset tile */
+  .ca-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ca-tile {
+    padding: 13px; border-radius: 10px; background: var(--card); border: 1px solid var(--border);
+    transition: border-color .15s;
+  }
+  .ca-tile:hover { border-color: var(--border2); }
+  .ca-tile-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--sub2); margin-bottom: 6px; font-family: var(--mono); }
+  .ca-tile-val { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; }
+  .ca-tile-sub { font-size: 10px; color: var(--sub); margin-top: 2px; }
+  .ca-tile-delta { font-size: 10px; font-weight: 700; margin-top: 4px; }
+
+  /* Intraday */
+  .intra-slot { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .intra-slot:last-child { border-bottom: none; }
+  .intra-time { font-size: 10px; font-family: var(--mono); color: var(--sub2); width: 38px; flex-shrink: 0; }
+  .intra-bar-wrap { flex: 1; height: 5px; background: rgba(255,255,255,.05); border-radius: 99px; overflow: hidden; }
+  .intra-bar-fill { height: 100%; border-radius: 99px; transition: width .6s; }
+  .intra-label { font-size: 10px; font-weight: 600; width: 50px; text-align: right; flex-shrink: 0; }
+
+  /* ── TESTIMONIALS ────────────────────────────────────────────────────────── */
+  #testimonials { background: var(--bg2); overflow: hidden; }
+  .testi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; margin-top: 56px; }
+  .testi-card {
+    padding: 28px; border-radius: var(--radius-lg); background: var(--card);
+    border: 1px solid var(--border); position: relative; overflow: hidden;
+    transition: all .22s cubic-bezier(.4,0,.2,1);
+  }
+  .testi-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--gradient); opacity: 0; transition: opacity .22s;
+  }
+  .testi-card:hover { border-color: var(--border2); box-shadow: 0 16px 48px rgba(0,0,0,.35); transform: translateY(-4px); }
+  .testi-card:hover::after { opacity: 1; }
+  .testi-stars { display: flex; gap: 2px; margin-bottom: 14px; }
+  .testi-star { font-size: 13px; }
+  .testi-quote { font-size: 14px; color: var(--sub); line-height: 1.7; margin-bottom: 22px; }
+  .testi-quote::before { content: '"'; font-size: 28px; color: var(--accent); font-weight: 900; line-height: 0; vertical-align: -8px; margin-right: 2px; }
+  .testi-author { display: flex; align-items: center; gap: 12px; }
+  .testi-avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 900; flex-shrink: 0; border: 2px solid rgba(255,255,255,.1);
+  }
+  .testi-name { font-size: 13px; font-weight: 700; color: var(--txt); }
+  .testi-role { font-size: 11px; color: var(--sub2); margin-top: 1px; }
+
+  /* ── PRICING ─────────────────────────────────────────────────────────────── */
+  #pricing { background: var(--bg); position: relative; overflow: hidden; }
+  #pricing::before {
+    content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 600px; border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(37,99,235,.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .pricing-hd { text-align: center; margin-bottom: 52px; }
+  .pricing-hd .section-p { margin: 0 auto; }
+
+  .free-notice {
+    display: flex; gap: 18px; align-items: flex-start;
+    padding: 20px 24px; border-radius: var(--radius);
+    background: rgba(37,99,235,.05); border: 1px solid rgba(37,99,235,.15);
+    margin-bottom: 44px; position: relative; z-index: 1;
+  }
+  .free-notice h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .free-notice p  { font-size: 13px; color: var(--sub); margin-bottom: 12px; }
+  .lock-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .lock-chip {
+    font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--border2); color: var(--sub);
+  }
+
+  .plans { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 32px; position: relative; z-index: 1; }
+  .plan-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 28px 22px;
+    position: relative; transition: all .22s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .plan-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--gradient); opacity: 0; transition: opacity .22s;
+  }
+  .plan-card:hover { border-color: var(--border2); box-shadow: 0 20px 60px rgba(0,0,0,.4); transform: translateY(-4px); }
+  .plan-card:hover::before { opacity: 1; }
+
+  .plan-card.hi {
+    background: var(--card2); border-color: rgba(37,99,235,.45);
+    box-shadow: 0 0 0 1px rgba(37,99,235,.25), 0 20px 60px rgba(37,99,235,.15);
+    transform: translateY(-6px);
+  }
+  .plan-card.hi::before { opacity: 1; }
+  .plan-card.hi:hover { transform: translateY(-9px); box-shadow: 0 0 0 1px rgba(37,99,235,.35), 0 28px 80px rgba(37,99,235,.2); }
+
+  .plan-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--gradient); color: #fff; font-size: 9px; font-weight: 800;
+    letter-spacing: .1em; text-transform: uppercase;
+    padding: 4px 14px; border-radius: 99px; white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(37,99,235,.5);
+  }
+  .plan-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 18px; color: var(--sub); }
+  .plan-price-row { margin-bottom: 4px; }
+  .plan-amt { font-size: 40px; font-weight: 900; letter-spacing: -0.05em; }
+  .plan-per { font-size: 13px; color: var(--sub); margin-left: 3px; }
+  .plan-perday { font-size: 11px; color: var(--sub2); margin-bottom: 14px; font-family: var(--mono); }
+  .plan-save {
+    font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px;
+    margin-bottom: 22px; display: inline-block;
+  }
+  .plan-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; flex: 1; }
+  .plan-features li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); }
+  .plan-features li .ck { width: 16px; height: 16px; border-radius: 4px; background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.2); display: flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; color: var(--bull); }
+
+  .cta {
+    display: block; width: 100%; padding: 13px; border-radius: 10px; border: none;
+    background: var(--gradient); color: #fff; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: var(--font); transition: all .18s; text-align: center;
+    box-shadow: 0 4px 18px rgba(37,99,235,.35); min-height: 44px;
+  }
+  .cta:hover { filter: brightness(1.1); box-shadow: 0 8px 28px rgba(37,99,235,.5); transform: translateY(-1px); }
+  .cta:disabled { opacity: .5; cursor: not-allowed; filter: none; transform: none; }
+  .cta-outline {
+    display: block; width: 100%; padding: 12px; border-radius: 10px;
+    border: 1.5px solid var(--border2); background: transparent;
+    color: var(--txt); font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: var(--font); transition: all .18s; text-align: center; min-height: 44px;
+  }
+  .cta-outline:hover { border-color: var(--accent); color: var(--accent3); background: rgba(37,99,235,.05); transform: translateY(-1px); }
+  .cta-outline:disabled { opacity: .5; cursor: not-allowed; }
+
+  .pricing-footer { text-align: center; font-size: 12px; color: var(--sub2); position: relative; z-index: 1; }
+
+  /* ── URGENCY ─────────────────────────────────────────────────────────────── */
+  #urgency {
+    position: relative; overflow: hidden;
+    background: var(--bg2);
+    text-align: center; padding: 100px 0;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  #urgency::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 80% 80% at 50% 50%, rgba(37,99,235,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #urgency h2 { font-size: clamp(28px,4vw,48px); margin-bottom: 18px; }
+  #urgency p  { font-size: 18px; color: var(--sub); margin-bottom: 40px; max-width: 520px; margin-left: auto; margin-right: auto; }
+
+  /* ── FAQ ─────────────────────────────────────────────────────────────────── */
+  #faq { background: var(--bg); }
+  .faq-inner { max-width: 720px; margin: 0 auto; }
+  .faq-inner h2 { text-align: center; margin-bottom: 52px; }
+  .faq-list { display: flex; flex-direction: column; gap: 8px; }
+  .faq-item { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .15s; }
+  .faq-item:hover { border-color: var(--border2); }
+  .faq-item.open { border-color: rgba(37,99,235,.25); }
+  .faq-q {
+    width: 100%; text-align: left; padding: 18px 22px;
+    background: var(--card); border: none; color: var(--txt);
+    font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--font);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    transition: background .15s;
+  }
+  .faq-q:hover { background: var(--card2); }
+  .faq-chevron { font-size: 9px; color: var(--sub); transition: transform .28s cubic-bezier(.4,0,.2,1); flex-shrink: 0; }
+  .faq-item.open .faq-chevron { transform: rotate(180deg); color: var(--accent3); }
+  .faq-a { max-height: 0; overflow: hidden; transition: max-height .32s cubic-bezier(.4,0,.2,1); }
+  .faq-item.open .faq-a { max-height: 400px; }
+  .faq-a-inner { padding: 0 22px 18px; font-size: 14px; color: var(--sub); line-height: 1.75; }
+
+  /* ── FOOTER ──────────────────────────────────────────────────────────────── */
+  footer {
+    background: var(--bg2); border-top: 1px solid var(--border);
+    padding: 40px 0;
+  }
+  .foot-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .foot-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 14px; }
+  .foot-links { display: flex; gap: 24px; align-items: center; }
+  .foot-links a { font-size: 13px; color: var(--sub); transition: color .15s; }
+  .foot-links a:hover { color: var(--txt); }
+  .foot-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--sub2);
+    padding: 6px 12px; border-radius: 8px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+  }
+
+  /* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+  @media (max-width: 920px) {
+    .hero-inner { grid-template-columns: 1fr; gap: 48px; }
+    .hero-mock   { display: none; }
+    .hero-title  { font-size: clamp(34px,7vw,58px); }
+    .problem-grid { grid-template-columns: 1fr; }
+    .feat-row   { grid-template-columns: 1fr; gap: 40px; direction: ltr !important; }
+    .feat-row.rev > * { direction: ltr; }
+    .testi-grid { grid-template-columns: 1fr; }
+    .plans { grid-template-columns: 1fr 1fr; }
+    .plan-card.hi { transform: none; }
+    .stats-inner { grid-template-columns: 1fr 1fr; }
+    .stat-item + .stat-item { border-left: none; }
+    .stats-inner .stat-item:nth-child(odd)  { border-right: 1px solid var(--border); }
+    .stats-inner .stat-item:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 620px) {
+    section { padding: 72px 0; }
+    .plans { grid-template-columns: 1fr; }
+    .plan-card.hi { transform: none; }
+    .stats-inner { grid-template-columns: 1fr 1fr; }
+    .ca-grid { grid-template-columns: 1fr; }
+    .orb { display: none; }
+  }
+  </style>
+</head>
+<body>
+
+<!-- Background layers -->
+<div class="dot-grid" aria-hidden="true"></div>
+<div class="orb orb-1" aria-hidden="true"></div>
+<div class="orb orb-2" aria-hidden="true"></div>
+<div class="orb orb-3" aria-hidden="true"></div>
+
+<!-- ── NAV ──────────────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-inner">
+    <a href="https://app.cot-tracker.com" class="nav-brand">
+      <div class="nav-brand-icon">📊</div>
+      COT Tracker
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Funcionalidades</a>
+      <a href="#pricing"  class="nav-link">Precios</a>
+      <a href="#faq"      class="nav-link">FAQ</a>
+    </div>
+    <div class="nav-actions">
+      <a href="https://app.cot-tracker.com" class="btn btn-primary" style="padding:9px 20px;font-size:13px;">
+        Empezar gratis →
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────────────────────────────── -->
+<section id="hero">
+  <div class="wrap">
+    <div class="hero-inner">
+      <!-- Left: copy -->
+      <div>
+        <div class="hero-kicker up">
+          <span class="live-badge"><span class="live-dot"></span> CFTC · Actualización semanal</span>
+        </div>
+        <h1 class="hero-title up up-d1">
+          Opera con la visión del<br><span class="grad-text">dinero institucional</span>
+        </h1>
+        <p class="hero-sub up up-d2">
+          Los traders minoristas pierden porque operan sin contexto. COT Tracker convierte el posicionamiento real del capital institucional en ventaja operativa clara — en segundos.
+        </p>
+        <div class="hero-btns up up-d3">
+          <a href="https://app.cot-tracker.com" class="btn btn-primary btn-lg">
+            Empezar gratis →
+          </a>
+          <a href="#pricing" class="btn btn-ghost btn-lg">
+            Ver planes
+          </a>
+        </div>
+        <div class="hero-social up up-d4">
+          <div class="avatar-stack">
+            <div class="avatar-ring" style="background:rgba(37,99,235,.18);color:#60a5fa;">M</div>
+            <div class="avatar-ring" style="background:rgba(34,197,94,.15);color:#4ade80;">A</div>
+            <div class="avatar-ring" style="background:rgba(245,158,11,.15);color:#fbbf24;">J</div>
+            <div class="avatar-ring" style="background:rgba(124,58,237,.15);color:#a78bfa;">R</div>
+            <div class="avatar-ring" style="background:rgba(6,182,212,.15);color:#67e8f9;">S</div>
+          </div>
+          <div>
+            <div class="stars-text">★★★★★</div>
+            <div class="social-text"><strong>Traders activos</strong> <span>· Sin tarjeta de crédito</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: dashboard mock -->
+      <div style="position:relative;">
+        <div class="hero-mock up up-d2">
+          <div class="mock-bar">
+            <div class="mac-dot mac-r"></div>
+            <div class="mac-dot mac-y"></div>
+            <div class="mac-dot mac-g"></div>
+            <span class="mock-label">app.cot-tracker.com · Market Decision Layer</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-row">
+              <div class="mdl-card">
+                <div class="mdl-card-label">EUR/USD</div>
+                <div class="mdl-card-bias bias-bull">↑ ALCISTA</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:72%;background:var(--bull);"></div></div>
+              </div>
+              <div class="mdl-card">
+                <div class="mdl-card-label">GBP/USD</div>
+                <div class="mdl-card-bias bias-bull">↑ ALCISTA</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:58%;background:var(--bull);"></div></div>
+              </div>
+              <div class="mdl-card">
+                <div class="mdl-card-label">USD/JPY</div>
+                <div class="mdl-card-bias bias-bear">↓ BAJISTA</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:65%;background:var(--bear);"></div></div>
+              </div>
+            </div>
+            <div class="mock-row">
+              <div class="mdl-card">
+                <div class="mdl-card-label">AUD/USD</div>
+                <div class="mdl-card-bias bias-neu">→ NEUTRO</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:48%;background:var(--warn);"></div></div>
+              </div>
+              <div class="mdl-card">
+                <div class="mdl-card-label">USD/CAD</div>
+                <div class="mdl-card-bias bias-bear">↓ BAJISTA</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:70%;background:var(--bear);"></div></div>
+              </div>
+              <div class="mdl-card">
+                <div class="mdl-card-label">NZD/USD</div>
+                <div class="mdl-card-bias bias-bull">↑ ALCISTA</div>
+                <div class="mdl-bar"><div class="mdl-bar-fill" style="width:62%;background:var(--bull);"></div></div>
+              </div>
+            </div>
+            <div class="mock-macro">
+              <div class="mock-macro-label">Próximos eventos macro</div>
+              <div class="macro-row">
+                <span class="macro-name">🇺🇸 NFP · Vie 14:30</span>
+                <span class="macro-val" style="color:var(--bear);">⚠ ALTO IMPACTO</span>
+              </div>
+              <div class="macro-row">
+                <span class="macro-name">🇪🇺 BCE Decisión Tipos · Jue</span>
+                <span class="macro-val" style="color:var(--warn);">MEDIO</span>
+              </div>
+              <div class="macro-row">
+                <span class="macro-name">🇺🇸 CPI m/m · Mié 14:30</span>
+                <span class="macro-val" style="color:var(--bear);">⚠ ALTO IMPACTO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Floating chips -->
+        <div class="mock-chip">
+          <span style="color:var(--bull);font-size:13px;">✓</span>
+          Sesgo confirmado EUR/USD
+        </div>
+        <div class="mock-chip-2">
+          <span style="font-size:13px;">⚡</span>
+          Confluencia institucional
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ──────────────────────────────────────────────────────────────────── -->
+<div id="stats">
+  <div class="stats-inner">
+    <div class="stat-item up">
+      <div class="stat-num"><span class="grad-text" data-count="8">8</span> pares FX</div>
+      <div class="stat-label">EUR · GBP · JPY · AUD · CAD · CHF · NZD · DXY</div>
+      <div class="stat-bar"></div>
+    </div>
+    <div class="stat-item up up-d1">
+      <div class="stat-num"><span class="grad-text">+17</span> años</div>
+      <div class="stat-label">de histórico CFTC disponible para análisis</div>
+      <div class="stat-bar"></div>
+    </div>
+    <div class="stat-item up up-d2">
+      <div class="stat-num"><span class="grad-text">4</span> módulos</div>
+      <div class="stat-label">Decision Layer · Bias · Cross Asset · Intraday</div>
+      <div class="stat-bar"></div>
+    </div>
+    <div class="stat-item up up-d3">
+      <div class="stat-num"><span class="grad-text-gold">0.46€</span></div>
+      <div class="stat-label">al día con el plan anual — menos que un café</div>
+      <div class="stat-bar" style="background:linear-gradient(135deg,#f59e0b,#ef4444);"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROBLEM ──────────────────────────────────────────────────────────────── -->
+<section id="problem">
+  <div class="wrap">
+    <p class="eyebrow up">El problema</p>
+    <h2 class="section-h up up-d1">Operas con el mapa equivocado</h2>
+    <p class="section-p up up-d2">El análisis técnico te dice cuándo — pero no por qué. Sin el contexto del posicionamiento institucional, cada trade es una apuesta educada.</p>
+    <div class="problem-grid">
+      <div class="p-card up up-d1">
+        <div class="p-icon">📊</div>
+        <h3>El gráfico no lo cuenta todo</h3>
+        <p>Las velas y los indicadores muestran el pasado. El COT muestra hacia dónde ya se ha posicionado el dinero real — antes de que el precio se mueva.</p>
+      </div>
+      <div class="p-card up up-d2">
+        <div class="p-icon">🎯</div>
+        <h3>Trades correctos, timing incorrecto</h3>
+        <p>Entrar en la dirección correcta en el momento equivocado es igual de doloroso. El contexto macro e institucional define cuándo el mercado tiene permiso para moverse.</p>
+      </div>
+      <div class="p-card up up-d3">
+        <div class="p-icon">🌊</div>
+        <h3>Nadas contra la corriente</h3>
+        <p>El 85% de los trades retail van contra el posicionamiento institucional dominante. No por mala técnica — por falta de visibilidad del contexto real del mercado.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ──────────────────────────────────────────────────────────────── -->
+<section id="features">
+  <div class="wrap">
+
+    <!-- 1 — Market Decision Layer -->
+    <div class="feat-row">
+      <div>
+        <span class="feat-tag up"><span class="feat-num">01</span> Módulo</span>
+        <h2 class="feat-h up up-d1">Market Decision Layer</h2>
+        <p class="feat-p up up-d2">Un panel centralizado que sintetiza el sesgo institucional de cada par en un estado operativo claro: alcista, bajista o neutro. Sin interpretación manual, sin ruido.</p>
+        <ul class="feat-list up up-d3">
+          <li><span class="check">✓</span>Bias consolidado por par: posicionamiento COT + factores macro</li>
+          <li><span class="check">✓</span>Permiso operativo semanal — cuándo el mercado "da permiso" para entrar</li>
+          <li><span class="check">✓</span>Confluencias automáticas entre pares correlacionados</li>
+          <li><span class="check">✓</span>Señal de cambio de sesgo cuando los institucionales giran</li>
+        </ul>
+      </div>
+      <div class="feat-screen up up-d2">
+        <div class="feat-screen-bar">
+          <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
+        </div>
+        <div class="feat-screen-body">
+          <div class="fs-row">
+            <span class="fs-pair">EUR/USD</span>
+            <div><span class="fs-bias fs-bull">↑ ALCISTA</span>
+            <div class="fs-bar"><div class="fs-bar-fill" style="width:78%;background:var(--bull);"></div></div></div>
+            <span class="fs-meta">78%</span>
+          </div>
+          <div class="fs-row">
+            <span class="fs-pair">GBP/USD</span>
+            <div><span class="fs-bias fs-bull">↑ ALCISTA</span>
+            <div class="fs-bar"><div class="fs-bar-fill" style="width:61%;background:var(--bull);"></div></div></div>
+            <span class="fs-meta">61%</span>
+          </div>
+          <div class="fs-row">
+            <span class="fs-pair">USD/JPY</span>
+            <div><span class="fs-bias fs-bear">↓ BAJISTA</span>
+            <div class="fs-bar"><div class="fs-bar-fill" style="width:69%;background:var(--bear);"></div></div></div>
+            <span class="fs-meta">69%</span>
+          </div>
+          <div class="fs-row">
+            <span class="fs-pair">AUD/USD</span>
+            <div><span class="fs-bias fs-neutral">→ NEUTRO</span>
+            <div class="fs-bar"><div class="fs-bar-fill" style="width:51%;background:var(--warn);"></div></div></div>
+            <span class="fs-meta">51%</span>
+          </div>
+          <div class="fs-row">
+            <span class="fs-pair">USD/CAD</span>
+            <div><span class="fs-bias fs-bear">↓ BAJISTA</span>
+            <div class="fs-bar"><div class="fs-bar-fill" style="width:73%;background:var(--bear);"></div></div></div>
+            <span class="fs-meta">73%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 — Bias Engine -->
+    <div class="feat-row rev">
+      <div>
+        <span class="feat-tag up"><span class="feat-num">02</span> Módulo</span>
+        <h2 class="feat-h up up-d1">Bias Engine</h2>
+        <p class="feat-p up up-d2">El motor de análisis detrás del sesgo. Desglosa el posicionamiento CFTC en múltiples factores cuantitativos para darte una puntuación de confianza — no una opinión.</p>
+        <ul class="feat-list up up-d3">
+          <li><span class="check">✓</span>Análisis de posicionamiento neto de gestoras y especuladores</li>
+          <li><span class="check">✓</span>Percentiles históricos — dónde está el posicionamiento vs. los últimos 3 años</li>
+          <li><span class="check">✓</span>Detección de extremos de posicionamiento (reversiones de alta probabilidad)</li>
+          <li><span class="check">✓</span>Factor de momentum: velocidad del cambio en posiciones semanales</li>
+        </ul>
+      </div>
+      <div class="feat-screen up up-d2">
+        <div class="feat-screen-bar">
+          <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
+        </div>
+        <div class="feat-screen-body" style="padding:16px;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sub2);margin-bottom:12px;font-family:var(--mono);">EUR/USD · Bias Score Desglose</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;">
+                <span style="color:var(--sub);">Posición neta gestoras</span>
+                <span style="color:var(--bull);font-weight:700;">+24 pts</span>
+              </div>
+              <div style="height:4px;background:var(--border);border-radius:99px;overflow:hidden;">
+                <div style="width:72%;height:100%;background:var(--bull);border-radius:99px;"></div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;">
+                <span style="color:var(--sub);">Momentum 4 semanas</span>
+                <span style="color:var(--bull);font-weight:700;">+18 pts</span>
+              </div>
+              <div style="height:4px;background:var(--border);border-radius:99px;overflow:hidden;">
+                <div style="width:58%;height:100%;background:var(--bull);border-radius:99px;"></div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;">
+                <span style="color:var(--sub);">Percentil histórico</span>
+                <span style="color:var(--warn);font-weight:700;">+6 pts</span>
+              </div>
+              <div style="height:4px;background:var(--border);border-radius:99px;overflow:hidden;">
+                <div style="width:38%;height:100%;background:var(--warn);border-radius:99px;"></div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;">
+                <span style="color:var(--sub);">Factor diferencial</span>
+                <span style="color:var(--bull);font-weight:700;">+12 pts</span>
+              </div>
+              <div style="height:4px;background:var(--border);border-radius:99px;overflow:hidden;">
+                <div style="width:50%;height:100%;background:var(--bull);border-radius:99px;"></div>
+              </div>
+            </div>
+            <div style="padding:12px;border-radius:10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);margin-top:2px;">
+              <div style="font-size:10px;color:var(--sub2);margin-bottom:4px;font-family:var(--mono);">Bias Score total</div>
+              <div style="font-size:26px;font-weight:900;color:var(--bull);letter-spacing:-0.04em;">+60 <span style="font-size:14px;font-weight:500;color:var(--sub);">/ 100</span></div>
+              <div style="font-size:10px;color:var(--sub2);margin-top:4px;">Sesgo alcista moderado · Alta confianza</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 — Cross Asset Flow -->
+    <div class="feat-row">
+      <div>
+        <span class="feat-tag up"><span class="feat-num">03</span> Módulo</span>
+        <h2 class="feat-h up up-d1">Cross Asset Flow</h2>
+        <p class="feat-p up up-d2">El forex no se mueve solo. El posicionamiento en índices, bonos y materias primas define los flujos en divisas. Cross Asset Flow te muestra la imagen completa del mercado.</p>
+        <ul class="feat-list up up-d3">
+          <li><span class="check">✓</span>Posicionamiento institucional en S&P 500, Nasdaq y bonos de EEUU</li>
+          <li><span class="check">✓</span>Correlaciones en tiempo real: cómo el risk-on/risk-off afecta cada par</li>
+          <li><span class="check">✓</span>Confirmación cruzada: ¿el posicionamiento en índices valida el sesgo en FX?</li>
+          <li><span class="check">✓</span>Divergencias — cuando el flujo en bonos contradice el sesgo en divisas</li>
+        </ul>
+      </div>
+      <div class="feat-screen up up-d2">
+        <div class="feat-screen-bar">
+          <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
+        </div>
+        <div class="feat-screen-body">
+          <div class="ca-grid">
+            <div class="ca-tile">
+              <div class="ca-tile-label">S&P 500</div>
+              <div class="ca-tile-val" style="color:var(--bull);">+42%</div>
+              <div class="ca-tile-sub">inst. largo neto</div>
+              <div class="ca-tile-delta" style="color:var(--bull);">▲ +3.2% esta semana</div>
+            </div>
+            <div class="ca-tile">
+              <div class="ca-tile-label">NASDAQ</div>
+              <div class="ca-tile-val" style="color:var(--bull);">+38%</div>
+              <div class="ca-tile-sub">inst. largo neto</div>
+              <div class="ca-tile-delta" style="color:var(--bull);">▲ +1.8% esta semana</div>
+            </div>
+            <div class="ca-tile">
+              <div class="ca-tile-label">Bonos EEUU 10y</div>
+              <div class="ca-tile-val" style="color:var(--bear);">−28%</div>
+              <div class="ca-tile-sub">inst. corto neto</div>
+              <div class="ca-tile-delta" style="color:var(--bear);">▼ −4.1% esta semana</div>
+            </div>
+            <div class="ca-tile">
+              <div class="ca-tile-label">DXY Index</div>
+              <div class="ca-tile-val" style="color:var(--bear);">−19%</div>
+              <div class="ca-tile-sub">inst. corto neto</div>
+              <div class="ca-tile-delta" style="color:var(--bear);">▼ −2.6% esta semana</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;padding:11px 13px;border-radius:9px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.15);">
+            <div style="font-size:10px;font-weight:700;color:var(--accent3);margin-bottom:4px;">⚡ Confluencia detectada</div>
+            <div style="font-size:11px;color:var(--sub);line-height:1.55;">Risk-on confirmado: institucionales largos en renta variable + cortos en DXY → sesgo alcista EUR/USD validado.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 — Intraday Execution -->
+    <div class="feat-row rev">
+      <div>
+        <span class="feat-tag up"><span class="feat-num">04</span> Módulo</span>
+        <h2 class="feat-h up up-d1">Intraday Execution</h2>
+        <p class="feat-p up up-d2">Saber la dirección es la mitad. Saber cuándo ejecutar es la otra. Intraday Execution te muestra las ventanas de liquidez donde el precio históricamente se mueve con más fuerza y consistencia.</p>
+        <ul class="feat-list up up-d3">
+          <li><span class="check">✓</span>Ventanas horarias de alta liquidez por par y sesión</li>
+          <li><span class="check">✓</span>Análisis de volatilidad intradiaria segmentado por sesión</li>
+          <li><span class="check">✓</span>Desglose de volumen institucional por hora</li>
+          <li><span class="check">✓</span>Filtros para evitar entradas en zonas de trampa de liquidez</li>
+        </ul>
+      </div>
+      <div class="feat-screen up up-d2">
+        <div class="feat-screen-bar">
+          <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
+        </div>
+        <div class="feat-screen-body" style="padding:16px;">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sub2);margin-bottom:12px;font-family:var(--mono);">EUR/USD · Ventanas de Liquidez</div>
+          <div class="intra-slot">
+            <span class="intra-time">02–06h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:20%;background:var(--sub2);"></div></div>
+            <span class="intra-label" style="color:var(--sub2);">Baja</span>
+          </div>
+          <div class="intra-slot">
+            <span class="intra-time">07–09h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:65%;background:var(--warn);"></div></div>
+            <span class="intra-label" style="color:var(--warn);">Media</span>
+          </div>
+          <div class="intra-slot">
+            <span class="intra-time">09–12h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:92%;background:var(--bull);"></div></div>
+            <span class="intra-label" style="color:var(--bull);">Óptima</span>
+          </div>
+          <div class="intra-slot">
+            <span class="intra-time">13–16h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:85%;background:var(--bull);"></div></div>
+            <span class="intra-label" style="color:var(--bull);">Óptima</span>
+          </div>
+          <div class="intra-slot">
+            <span class="intra-time">16–20h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:45%;background:var(--warn);"></div></div>
+            <span class="intra-label" style="color:var(--warn);">Media</span>
+          </div>
+          <div class="intra-slot">
+            <span class="intra-time">20–02h</span>
+            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:12%;background:var(--sub2);"></div></div>
+            <span class="intra-label" style="color:var(--sub2);">Baja</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── TESTIMONIALS ───────────────────────────────────────────────────────────── -->
+<section id="testimonials">
+  <div class="wrap">
+    <div class="text-center">
+      <p class="eyebrow up">Traders reales</p>
+      <h2 class="section-h up up-d1">Lo que dicen los que ya operan con contexto</h2>
+    </div>
+    <div class="testi-grid">
+      <div class="testi-card up up-d1">
+        <div class="testi-stars">
+          <span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span>
+        </div>
+        <p class="testi-quote">Llevaba 2 años operando EUR/USD con análisis técnico decente, pero sin entender por qué a veces el precio ignoraba niveles clave. El Bias Engine me hizo ver que estaba operando contra el posicionamiento institucional. Ahora uso el Market Decision Layer antes de cualquier entrada.</p>
+        <div class="testi-author">
+          <div class="testi-avatar" style="background:rgba(37,99,235,.15);color:#60a5fa;">M</div>
+          <div>
+            <div class="testi-name">Marcos R.</div>
+            <div class="testi-role">Swing trader · Madrid</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card up up-d2">
+        <div class="testi-stars">
+          <span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span>
+        </div>
+        <p class="testi-quote">El calendario macro enriquecido es lo que más uso. No solo te dice el evento — te contextualiza si el posicionamiento institucional va con o contra lo que el mercado espera. Eso cambia completamente cómo gestiono el riesgo alrededor de los datos.</p>
+        <div class="testi-author">
+          <div class="testi-avatar" style="background:rgba(34,197,94,.12);color:var(--bull);">A</div>
+          <div>
+            <div class="testi-name">Andrea F.</div>
+            <div class="testi-role">Trader discrecional · Barcelona</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi-card up up-d3">
+        <div class="testi-stars">
+          <span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span><span class="testi-star">★</span>
+        </div>
+        <p class="testi-quote">Probé muchas herramientas de COT manual — hojas de cálculo, Quandl, incluso haciendo los cálculos yo mismo. COT Tracker lo automatiza todo y encima añade el Cross Asset Flow. Ver cómo el posicionamiento en bonos confirma o contradice el sesgo en FX es el nivel que me faltaba.</p>
+        <div class="testi-author">
+          <div class="testi-avatar" style="background:rgba(245,158,11,.12);color:var(--warn);">J</div>
+          <div>
+            <div class="testi-name">Javier S.</div>
+            <div class="testi-role">Trader independiente · Bilbao</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRICING ─────────────────────────────────────────────────────────────────── -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="pricing-hd up">
+      <p class="eyebrow">Planes</p>
+      <h2 class="section-h">Acceso completo · Elige cuánto ahorras</h2>
+      <p class="section-p">Todos los planes incluyen los 4 módulos completos. La única diferencia es el período de facturación — cuanto más largo, menor es el coste diario.</p>
+    </div>
+
+    <div class="free-notice up">
+      <div style="font-size:24px;flex-shrink:0;">🔓</div>
+      <div>
+        <h4>Comienza gratis — sin tarjeta de crédito</h4>
+        <p>Acceso al Bias Engine básico y al calendario macro. Para el análisis completo, activa un plan premium.</p>
+        <div class="lock-chips">
+          <span class="lock-chip">🔒 Market Decision Layer</span>
+          <span class="lock-chip">🔒 Cross Asset Flow</span>
+          <span class="lock-chip">🔒 Intraday Execution</span>
+          <span class="lock-chip">🔒 Telegram privado</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="plans up up-d1">
+
+      <!-- MENSUAL -->
+      <div class="plan-card">
+        <div class="plan-name">Mensual</div>
+        <div class="plan-price-row">
+          <span class="plan-amt">24€</span><span class="plan-per">/mes</span>
+        </div>
+        <div class="plan-perday">0.80€ / día</div>
+        <div style="height:32px;"></div>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span>Market Decision Layer</li>
+          <li><span class="ck">✓</span>Bias Engine completo</li>
+          <li><span class="ck">✓</span>Cross Asset Flow</li>
+          <li><span class="ck">✓</span>Intraday Execution</li>
+          <li><span class="ck">✓</span>Calendario macro enriquecido</li>
+          <li><span class="ck">✓</span>Comunidad Telegram privada</li>
+        </ul>
+        <button class="cta-outline" onclick="startCheckout('price_1TQdW7B7QeisGCzWnuzk8SLI', this)">
+          Empezar Mensual →
+        </button>
+      </div>
+
+      <!-- TRIMESTRAL (destacado) -->
+      <div class="plan-card hi">
+        <div class="plan-badge">MÁS POPULAR</div>
+        <div class="plan-name" style="color:var(--accent3);">Trimestral</div>
+        <div class="plan-price-row">
+          <span class="plan-amt"><span class="grad-text">59€</span></span><span class="plan-per">/3 meses</span>
+        </div>
+        <div class="plan-perday">0.65€ / día</div>
+        <div class="plan-save" style="background:rgba(37,99,235,.08);color:var(--accent3);border:1px solid rgba(37,99,235,.2);">
+          Ahorra 13€ · 18% descuento
+        </div>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span>Market Decision Layer</li>
+          <li><span class="ck">✓</span>Bias Engine completo</li>
+          <li><span class="ck">✓</span>Cross Asset Flow</li>
+          <li><span class="ck">✓</span>Intraday Execution</li>
+          <li><span class="ck">✓</span>Calendario macro enriquecido</li>
+          <li><span class="ck">✓</span>Comunidad Telegram privada</li>
+        </ul>
+        <button class="cta" onclick="startCheckout('price_1TQdc6B7QeisGCzWYXRSJNGc', this)">
+          Empezar Trimestral →
+        </button>
+      </div>
+
+      <!-- SEMESTRAL -->
+      <div class="plan-card">
+        <div class="plan-name" style="color:#4ade80;">Semestral</div>
+        <div class="plan-price-row">
+          <span class="plan-amt">99€</span><span class="plan-per">/6 meses</span>
+        </div>
+        <div class="plan-perday">0.54€ / día</div>
+        <div class="plan-save" style="background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.2);">
+          Ahorra 45€ · 31% descuento
+        </div>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span>Market Decision Layer</li>
+          <li><span class="ck">✓</span>Bias Engine completo</li>
+          <li><span class="ck">✓</span>Cross Asset Flow</li>
+          <li><span class="ck">✓</span>Intraday Execution</li>
+          <li><span class="ck">✓</span>Calendario macro enriquecido</li>
+          <li><span class="ck">✓</span>Comunidad Telegram privada</li>
+        </ul>
+        <button class="cta-outline" onclick="startCheckout('price_1TQdfUB7QeisGCzWkhQSRQAE', this)">
+          Empezar Semestral →
+        </button>
+      </div>
+
+      <!-- ANUAL -->
+      <div class="plan-card">
+        <div class="plan-badge" style="background:linear-gradient(135deg,#f59e0b,#ef4444);">MEJOR VALOR</div>
+        <div class="plan-name" style="color:#fbbf24;">Anual</div>
+        <div class="plan-price-row">
+          <span class="plan-amt">169€</span><span class="plan-per">/año</span>
+        </div>
+        <div class="plan-perday">0.46€ / día</div>
+        <div class="plan-save" style="background:rgba(251,191,36,.07);color:#fbbf24;border:1px solid rgba(251,191,36,.2);">
+          Ahorra 119€ · 41% descuento
+        </div>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span>Market Decision Layer</li>
+          <li><span class="ck">✓</span>Bias Engine completo</li>
+          <li><span class="ck">✓</span>Cross Asset Flow</li>
+          <li><span class="ck">✓</span>Intraday Execution</li>
+          <li><span class="ck">✓</span>Calendario macro enriquecido</li>
+          <li><span class="ck">✓</span>Comunidad Telegram privada</li>
+        </ul>
+        <button class="cta-outline" style="border-color:rgba(251,191,36,.3);color:#fbbf24;" onclick="startCheckout('price_1TQdhfB7QeisGCzWEoFsJFhm', this)">
+          Empezar Anual →
+        </button>
+      </div>
+
+    </div>
+
+    <p class="pricing-footer up">
+      🔒 Pago seguro con Stripe · Sin permanencia · Cancela cuando quieras · Acceso inmediato tras el pago
+    </p>
+  </div>
+</section>
+
+<!-- ── URGENCY ─────────────────────────────────────────────────────────────────── -->
+<section id="urgency">
+  <div class="wrap-sm" style="position:relative;z-index:1;">
+    <p class="eyebrow up" style="justify-content:center;margin:0 auto 16px;">Sin ventaja competitiva</p>
+    <h2 class="up up-d1">Cada semana que operas sin esto<br>es una semana en desventaja</h2>
+    <p class="up up-d2">El capital institucional ya sabe dónde va. La pregunta es si tú también lo sabrás antes de que el precio confirme el movimiento.</p>
+    <div class="up up-d3" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="https://app.cot-tracker.com" class="btn btn-primary btn-lg">
+        Empezar gratis ahora →
+      </a>
+      <a href="#pricing" class="btn btn-ghost btn-lg">
+        Ver planes
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ────────────────────────────────────────────────────────────────────── -->
+<section id="faq">
+  <div class="wrap">
+    <div class="faq-inner">
+      <p class="eyebrow up" style="justify-content:center;margin:0 auto 12px;">Preguntas frecuentes</p>
+      <h2 class="section-h up up-d1">Todo lo que necesitas saber</h2>
+      <div class="faq-list up up-d2">
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Necesito experiencia previa en trading?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">COT Tracker es más valioso cuando ya tienes una base técnica. No enseña a operar desde cero — te da el contexto institucional que falta para mejorar tus decisiones. Si ya usas análisis técnico, los datos COT multiplican tu ventaja real.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Es solo para forex o también funciona para índices?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">El núcleo está optimizado para forex (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD, USD/CHF, NZD/USD y DXY). El Cross Asset Flow incluye además S&amp;P 500, Nasdaq y bonos de EEUU. Los datos de posicionamiento institucional cubren todos estos activos del informe CFTC TFF Combined.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Genera señales automáticas de entrada?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">No. COT Tracker es un filtro de contexto, no un robot de señales. Te muestra el sesgo institucional, el permiso operativo y las confluencias — tú decides el trade. Esa es exactamente la ventaja: entiendes por qué operas, no solo cuándo.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Puedo cancelar cuando quiera?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">Sí, sin permanencia ni penalizaciones. Cancelas desde tu perfil en cualquier momento y el acceso se mantiene hasta el final del período ya pagado. Sin cargos adicionales ni sorpresas.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Con qué frecuencia se actualizan los datos CFTC?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">El CFTC publica los informes TFF cada viernes a las 21:30h CET. Los datos reflejan las posiciones al cierre del martes de esa semana. COT Tracker los procesa y actualiza el análisis automáticamente.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿El plan gratuito tiene límite de tiempo?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">No. El acceso gratuito al Bias Engine básico y al calendario macro es permanente. No hay trial que expire ni tarjeta que guardar. Si en algún momento quieres acceso completo a los 4 módulos, puedes activar un plan desde tu perfil.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Funciona bien en móvil?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">Sí. La app está diseñada responsive para móvil y tablet. El calendario macro, el Bias Engine y la tabla de pares están adaptados para pantallas pequeñas. Para el análisis más detallado (Cross Asset Flow, desglose de factores) recomendamos desktop o tablet en horizontal.</div></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ──────────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="foot-inner">
+    <div class="foot-brand">
+      <div class="nav-brand-icon" style="width:24px;height:24px;font-size:11px;">📊</div>
+      COT Tracker
+    </div>
+    <div class="foot-links">
+      <a href="https://t.me/COT_TRACKER" target="_blank" rel="noopener noreferrer">Comunidad Telegram</a>
+      <a href="https://app.cot-tracker.com" target="_blank" rel="noopener noreferrer">Acceder a la app</a>
+    </div>
+    <div class="foot-badge">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      Pago seguro con Stripe
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ── Scroll reveal ──────────────────────────────────────────────────────────
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('go'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.06, rootMargin: '0px 0px -24px 0px' });
+  document.querySelectorAll('.up').forEach(el => io.observe(el));
+
+  // ── FAQ ────────────────────────────────────────────────────────────────────
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+    if (!isOpen) item.classList.add('open');
+  }
+
+  // ── Checkout — redirect to app with selected plan ──────────────────────────
+  function startCheckout(priceId, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Redirigiendo…';
+    window.location.href = 'https://app.cot-tracker.com?checkout=' + encodeURIComponent(priceId);
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }, 3500);
+  }
+
+  // ── Twinkling stars in testi section ──────────────────────────────────────
+  document.querySelectorAll('.testi-star').forEach((star, i) => {
+    star.style.color = '#f59e0b';
+    star.style.animationDelay = (i * 0.12) + 's';
+  });
+</script>
+</body>
+</html>
