@@ -2,13 +2,20 @@
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
 const FRED_KEY  = process.env.FRED_API_KEY || '';
 
+// NOTA DE TEMPORALIDAD:
+// DGS10 / DGS2 son series DIARIAS (actualizan cada día hábil).
+// IRLTLT01* son series MENSUALES (actualizan una vez al mes).
+// El spread momentum (direction) compara prev vs. current entre series de
+// frecuencias distintas. Para spreads US-DE/UK/JP, "prev" es el mes anterior,
+// lo que significa que la señal de momentum tiene latencia de 1 mes para las
+// series europeas/asiáticas. Esto es una limitación conocida de FRED gratuito.
 const SERIES = {
-  US10Y: 'DGS10',
-  US2Y:  'DGS2',
-  DE10Y: 'IRLTLT01DEM156N',
-  UK10Y: 'IRLTLT01GBM156N',
-  JP10Y: 'IRLTLT01JPM156N',
-  CN10Y: 'IRLTLT01CNM156N',
+  US10Y: 'DGS10',              // diaria
+  US2Y:  'DGS2',               // diaria
+  DE10Y: 'IRLTLT01DEM156N',    // mensual
+  UK10Y: 'IRLTLT01GBM156N',    // mensual
+  JP10Y: 'IRLTLT01JPM156N',    // mensual
+  CN10Y: 'IRLTLT01CNM156N',    // mensual
 };
 
 async function fetchSeries(seriesId) {

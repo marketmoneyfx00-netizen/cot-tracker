@@ -340,22 +340,28 @@ export function deriveInputsFromPair(pairData) {
     : 0;
 
   // Factor 2 — Price vs Positioning divergence
-  // priceDirection: derived from smartNet sign over last 2 weeks
-  // positioningDirection: derived from leveragedWeeklyChange
+  // priceDirection: 4-week net change in smartNet (longer lookback than the 1-week
+  //   leveragedWeeklyChange used for positioningDirection). Using a different
+  //   window breaks the tautology: the 4-week trend can diverge from the 1-week flow.
+  //   True price data (from priceService) should be injected here when available.
+  // positioningDirection: derived from the immediate weekly change
   const priceDirection = (() => {
-  if (!prev) return null;
-
-  // Use smartNet directional change as HTF directional proxy
-  if (latest.smartNet != null && prev.smartNet != null) {
-    return latest.smartNet > prev.smartNet
-      ? 'up'
-      : latest.smartNet < prev.smartNet
-      ? 'down'
-      : null;
-  }
-
-  return null;
-})();
+    if (!prev) return null;
+    // Use 4-week smoothed direction (week 0 vs week 3) as HTF price proxy.
+    // This is independent from the 1-week leveragedWeeklyChange used below.
+    const week3 = weeks[3] ?? null;
+    if (latest.smartNet != null && week3?.smartNet != null) {
+      const fourWeekChange = latest.smartNet - week3.smartNet;
+      return fourWeekChange > 0 ? 'up' : fourWeekChange < 0 ? 'down' : null;
+    }
+    // Fallback: use 2-week window if 4-week not available
+    if (latest.smartNet != null && prev.smartNet != null) {
+      return latest.smartNet > prev.smartNet ? 'up'
+           : latest.smartNet < prev.smartNet ? 'down'
+           : null;
+    }
+    return null;
+  })();
   const positioningDirection = leveragedWeeklyChange > 0 ? 'up' : leveragedWeeklyChange < 0 ? 'down' : null;
 
   // Factor 3 — Historical percentile of current smartNet vs last 52 weeks

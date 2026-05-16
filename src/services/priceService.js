@@ -6,11 +6,13 @@ import { injectCandle } from '../data/priceStore.js';
 import { supabase }     from '../lib/supabase.js';
 
 // ── Estado interno ─────────────────────────────────────────────
-let _interval       = null;
-let _currentCandle  = null;
-let _currentMinute  = null;
-let _isFetching     = false;
-let _isRunning      = false;
+let _interval         = null;
+let _currentCandle    = null;
+let _currentMinute    = null;
+let _isFetching       = false;
+let _isRunning        = false;
+let _consecutiveFails = 0;
+const MAX_BACKOFF_MS  = 60_000; // 1 min máximo entre reintentos tras fallos
 
 // ── Constructor de vela OHLC 1 minuto ─────────────────────────
 function buildCandle(price) {
@@ -70,15 +72,18 @@ async function fetchPrice(symbol) {
 
     if (typeof data?.price !== 'number' || data.price === 0) {
       console.warn('[priceService] Invalid price:', data);
+      _consecutiveFails++;
       return;
     }
 
+    _consecutiveFails = 0;
     buildCandle(data.price);
 
   } catch (err) {
     if (err?.name !== 'AbortError') {
       console.error('[priceService] Fetch error:', err?.message ?? err);
     }
+    _consecutiveFails++;
   } finally {
     _isFetching = false;
   }
@@ -102,6 +107,12 @@ export function startPricePolling(symbol = 'EUR/USD', intervalMs = 10_000) {
   fetchPrice(symbol);
 
   _interval = setInterval(() => {
+    // Back-off exponencial tras fallos consecutivos (max MAX_BACKOFF_MS)
+    if (_consecutiveFails > 0) {
+      const backoff = Math.min(intervalMs * Math.pow(2, _consecutiveFails - 1), MAX_BACKOFF_MS);
+      const sinceLastFail = Date.now() % backoff;
+      if (sinceLastFail < intervalMs) return; // skip este tick
+    }
     fetchPrice(symbol);
   }, intervalMs);
 }
@@ -112,8 +123,9 @@ export function stopPricePolling() {
     _interval = null;
   }
 
-  _isRunning = false;
-  _isFetching = false;
+  _isRunning        = false;
+  _isFetching       = false;
+  _consecutiveFails = 0;
 
   _currentCandle = null;
   _currentMinute = null;

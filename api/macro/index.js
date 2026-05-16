@@ -3,6 +3,7 @@ import { getYields }        from './getYields.js';
 import { calculateSpreads } from './calculateSpreads.js';
 import { buildMacroSignal } from './buildMacroSignal.js';
 import { verifyAuth }       from '../_lib/auth-middleware.js';
+import { applyRateLimit }   from '../_lib/ratelimit.js';
 
 let _cache   = null;
 let _cacheTs = 0;
@@ -15,6 +16,9 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'GET')    { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+  // Rate limiting — protege cuotas de FRED API
+  if (applyRateLimit(req, res, 'api')) return;
 
   const { user: authUser } = await verifyAuth(req);
   if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
