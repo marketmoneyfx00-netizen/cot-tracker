@@ -14,10 +14,17 @@ const MAX_DELTA_BPS = 200;
 
 // FRED series per bank. Daily series give exact decision dates;
 // monthly OECD series (IRSTCI01*) are used where no daily equivalent exists.
+// Series selection rationale:
+// - FED/BCE: native daily series from FRED → exact decision dates, always current
+// - Others: switched from deprecated IRSTCI01* (OECD, 60-90 day lag) to
+//   more frequently updated FRED alternatives where available.
+//   BOE uses BOERUKQ (quarterly, published ~1 month lag)
+//   SNB/RBNZ/RIX: IRSTCI01 series are no longer updated on FRED — kept as fallback
+//   but data will not advance beyond their last known date.
 const BANK_SERIES = {
-  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 3000 }, // ~12 years of daily data
+  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 3000 },
   BCE:  { id: 'ECBDFR',            freq: 'daily',   limit: 3000 },
-  BOE:  { id: 'IRSTCI01GBM156N',   freq: 'monthly', limit: 240 },  // 20 years monthly
+  BOE:  { id: 'BOERUKQ',           freq: 'monthly', limit: 240 },  // BoE official rate (quarterly → monthly published)
   BOJ:  { id: 'IRSTCI01JPM156N',   freq: 'monthly', limit: 240 },
   SNB:  { id: 'IRSTCI01CHM156N',   freq: 'monthly', limit: 240 },
   RBA:  { id: 'IRSTCI01AUM156N',   freq: 'monthly', limit: 240 },
