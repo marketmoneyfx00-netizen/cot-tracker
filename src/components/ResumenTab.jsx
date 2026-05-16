@@ -24,7 +24,7 @@ function getRegime(fg, vix, riskScore, globalMarketState) {
   if (vix >= 18 || riskScore >= 40) {
     return { label: 'PRECAUCIÓN', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: '🟡', desc: 'Contexto mixto. Operar solo setups A+ con confirmación.' };
   }
-  if (globalMarketState === 'trending' && fg >= 50) {
+  if (globalMarketState === 'expansion' && fg >= 50) {
     return { label: 'TENDENCIAL', color: '#10b981', bg: 'rgba(16,185,129,0.12)', icon: '🟢', desc: 'Condiciones favorables. Priorizar continuaciones de tendencia.' };
   }
   return { label: 'NEUTRAL', color: '#6366f1', bg: 'rgba(99,102,241,0.12)', icon: '🔵', desc: 'Sin sesgo claro. Esperar confluencia antes de entrar.' };

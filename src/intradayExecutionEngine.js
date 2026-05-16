@@ -42,9 +42,9 @@ function minutesSinceEvent(eventDateStr) {
  */
 function isBiasAlignedSurprise(biasDirection, surpriseDir) {
   if (!biasDirection || surpriseDir === 0 || surpriseDir == null) return false;
-  if (biasDirection === 'bullish' && surpriseDir === -1) return true;
+  // Positive surprise (beat) → risk-on / macro strength → confirms bullish bias
   if (biasDirection === 'bullish' && surpriseDir === +1) return true;
-  if (biasDirection === 'bearish' && surpriseDir === +1) return true;
+  // Negative surprise (miss) → risk-off / macro weakness → confirms bearish bias
   if (biasDirection === 'bearish' && surpriseDir === -1) return true;
   return false;
 }
