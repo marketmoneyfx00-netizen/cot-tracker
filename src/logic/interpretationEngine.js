@@ -50,7 +50,7 @@ export function buildInterpretation({ sesgoCompuesto, scoreF, scoreC, scoreT }) 
   }
 
   // ── 3. TEMPLATE: Divergencia (F y T opuestos) ─────────────────────────────
-  if (scoreF !== 0 && scoreT !== 0 && Math.abs(scoreF) > 15 && Math.abs(scoreT) > 15 && Math.sign(scoreF) !== Math.sign(scoreT)) {
+  if (scoreF !== 0 && scoreT !== 0 && Math.abs(scoreF) > 15 && Math.abs(scoreT) > 5 && Math.sign(scoreF) !== Math.sign(scoreT)) {
     return {
       reading: 'Divergencia entre el dato fundamental y la acción del precio. El mercado no sigue la narrativa del dato. Posible trampa institucional o dato ya descontado. Horizonte: corto plazo (1h–4h) para resolución.',
       actions: [

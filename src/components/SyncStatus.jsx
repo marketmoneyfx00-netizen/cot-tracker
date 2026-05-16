@@ -12,10 +12,13 @@ export default function SyncStatus({ lastSync, pairsData, combinedData, darkMode
 
   const nextFriday = () => {
     const now = new Date();
-    const day = now.getUTCDay();
-    const daysUntilFriday = day <= 5 ? 5 - day : 7 - day + 5;
+    const day = now.getUTCDay(); // 0=Sun, 5=Fri, 6=Sat
+    // Days until next Friday: if today is Friday (5) check if 22:00 UTC already passed
+    let daysUntil = (5 - day + 7) % 7;
+    if (daysUntil === 0 && now.getUTCHours() >= 22) daysUntil = 7; // this Friday passed
+    if (daysUntil === 0 && now.getUTCHours() < 22) daysUntil = 0;  // still today
     const next = new Date(now);
-    next.setUTCDate(now.getUTCDate() + (daysUntilFriday === 0 ? 7 : daysUntilFriday));
+    next.setUTCDate(now.getUTCDate() + (daysUntil === 0 ? 0 : daysUntil));
     next.setUTCHours(22, 0, 0, 0);
     return next.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) + ' a las 22:00 UTC';
   };
@@ -101,7 +104,7 @@ export default function SyncStatus({ lastSync, pairsData, combinedData, darkMode
         <Chip
           label="Reporte activo"
           value={reportDate || '—'}
-          sub={reportDate ? 'Fecha del ultimo informe CFTC' : 'Sin datos aun'}
+          sub={reportDate ? `Informe CFTC · ${relativeTime(reportDate + 'T22:00:00Z') ?? reportDate}` : 'Sin datos aun'}
         />
         <Chip
           label="Futuros Only"
