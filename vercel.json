@@ -3,6 +3,10 @@
     {
       "path": "/api/rates/refresh",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cot/sync",
+      "schedule": "0 22 * * 5"
     }
   ],
   "rewrites": [
