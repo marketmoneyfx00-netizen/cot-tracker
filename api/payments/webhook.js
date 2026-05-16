@@ -13,6 +13,8 @@ import {
   fulfillFromCheckoutSession,
   fulfillFromInvoicePaid,
   handleSubscriptionCancelled,
+  handleSubscriptionUpdated,
+  handleChargeRefunded,
 } from './fulfillment.js';
 
 function getRawBody(req) {
@@ -121,9 +123,29 @@ export default async function handler(req, res) {
         return res.status(200).json({ received: true });
       }
 
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        console.log(`[webhook] subscription.updated | sub=${sub.id} | status=${sub.status} | plan=${sub.items?.data?.[0]?.price?.id}`);
+
+        const r = await handleSubscriptionUpdated(sub);
+        if (!r.ok) {
+          console.error('[webhook] handleSubscriptionUpdated FAILED:', r.error);
+        } else {
+          console.log(`[webhook] subscription.updated OK | skipped=${r.skipped ?? false}`);
+        }
+        return res.status(200).json({ received: true });
+      }
+
       case 'charge.refunded': {
         const charge = event.data.object;
-        console.log(`[webhook] charge.refunded | charge=${charge.id}`);
+        console.log(`[webhook] charge.refunded | charge=${charge.id} | refunded=${charge.amount_refunded}/${charge.amount}`);
+
+        const r = await handleChargeRefunded(charge);
+        if (!r.ok) {
+          console.error('[webhook] handleChargeRefunded FAILED:', r.error);
+        } else {
+          console.log(`[webhook] charge.refunded OK | skipped=${r.skipped ?? false}`);
+        }
         return res.status(200).json({ received: true });
       }
 

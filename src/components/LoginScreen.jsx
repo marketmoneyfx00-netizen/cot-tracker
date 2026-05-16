@@ -16,7 +16,7 @@ import {
 
 // ─── Small components ─────────────────────────────────────────────────────────
 const ErrorBox = ({ msg }) => msg ? (
-  <div style={{
+  <div role="alert" style={{
     background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
     borderRadius: 10, padding: '11px 14px', marginBottom: 14,
     fontSize: 13, color: '#fca5a5', lineHeight: 1.55,
@@ -204,10 +204,10 @@ export default function LoginScreen() {
     setLoading(false);
     if (authError) {
       const msg = authError.message?.toLowerCase() ?? '';
-      if (msg.includes('rate limit') || msg.includes('too many')) {
+      if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('demasiados')) {
         setError('Demasiados intentos. Espera unos minutos.');
       } else {
-        setError(`Error: ${authError.message}`);
+        setError('No se pudo enviar el enlace. Inténtalo de nuevo.');
       }
       return;
     }
@@ -226,7 +226,7 @@ export default function LoginScreen() {
     setLoading(false);
     if (authError) {
       const msg = authError.message?.toLowerCase() ?? '';
-      if (msg.includes('rate limit') || msg.includes('too many')) {
+      if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('demasiados')) {
         setError('Demasiados intentos. Espera unos minutos.');
       } else {
         setError('No se pudo enviar el enlace. Inténtalo de nuevo.');
