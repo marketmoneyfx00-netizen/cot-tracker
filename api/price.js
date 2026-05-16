@@ -21,6 +21,7 @@
 
 import { setSecurityHeaders, handleCORS } from './_lib/security.js';
 import { verifyAuth } from './_lib/auth-middleware.js';
+import { applyRateLimit, getClientIP } from './_lib/ratelimit.js';
 
 // ── Caché en memoria ──────────────────────────────────────────────────────────
 const _cache = new Map();
@@ -112,6 +113,9 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Rate limiting — protege cuotas de Finnhub/TwelveData
+  if (applyRateLimit(req, res, 'api')) return;
 
   // Verificar JWT — solo usuarios autenticados pueden usar el proxy de precios
   const { user, error: authError } = await verifyAuth(req);

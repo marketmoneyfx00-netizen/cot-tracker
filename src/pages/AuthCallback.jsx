@@ -21,7 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 
-const APP_URL = 'https://app.cot-tracker.com';
+const APP_URL = import.meta.env.VITE_APP_URL || 'https://app.cot-tracker.com';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

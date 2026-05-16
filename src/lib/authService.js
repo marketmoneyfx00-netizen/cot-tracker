@@ -8,7 +8,7 @@
 import { supabase } from './supabase.js';
 
 // ─── App base URL — single source of truth ───────────────────────────────────
-const APP_URL = 'https://app.cot-tracker.com';
+const APP_URL = import.meta.env.VITE_APP_URL || 'https://app.cot-tracker.com';
 
 // ─── Normalize email ──────────────────────────────────────────────────────────
 export function normalizeEmail(email) {

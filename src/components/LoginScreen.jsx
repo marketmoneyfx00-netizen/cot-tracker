@@ -236,7 +236,7 @@ export default function LoginScreen() {
     setSuccess('Te hemos enviado un enlace para restablecer tu contraseña.');
   };
 
-  const str = (mode === 'password' || mode === 'reset') ? pwStrength(password) : null;
+  const str = mode === 'reset' ? pwStrength(password) : null;
 
   const titles = {
     password:   'Bienvenido a COT Tracker',
