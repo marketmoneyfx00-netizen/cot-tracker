@@ -3167,28 +3167,6 @@ function CalendarioTab({darkMode, T}) {
                         const priceCandles = confirmedCandles;
                         const logic      = getIndicatorLogic(ev.event, ccy, actualVal, ev.estimate, ev.previous, ev, priceCandles);
 
-                        // ── VALIDATION LOG — remove after QA ─────────
-                        if (actualVal !== null) {
-                          console.log('[priceStore READ]', priceCandles);
-                          console.log('[logic]', {
-                            event:    ev.event,
-                            actual:   actualVal,
-                            forecast: ev.estimate,
-                            evType:   logic.evType,
-                            group:    logic.group,
-                            biasScore: logic.macroScore?.score,
-                            biasLabel: logic.macroScore?.label,
-                            primaryBias: logic.primaryBias,
-                            assets: logic.affectedAssets?.map(a => `${a.arrow}${a.asset}`).join(' '),
-                            // v2 composite
-                            compositeScore:   logic.compositeScore?.sesgoCompuesto,
-                            compositeEstado:  logic.compositeScore?.estado,
-                            compositeSemaforo:logic.compositeScore?.semaforo,
-                            fatTail:          logic.compositeScore?.fatTailDetected,
-                            zScore:           logic.compositeScore?.zScore,
-                          });
-                        }
-
                         const evType        = logic.evType;
                         const surprise      = logic.surprise;
                         const delta         = logic.delta;
@@ -3524,8 +3502,7 @@ function CalendarioTab({darkMode, T}) {
                                         decision,
                                         scoreT: cs.scoreT,
                                       });
-                                      alerts.forEach(a => console.log('🚨 ALERT:', a.message));
-
+                
                                       const interp = buildInterpretation({
                                         sesgoCompuesto: cs.sesgoCompuesto,
                                         scoreF:         cs.scoreF,
@@ -4201,13 +4178,6 @@ function AppInner() {
   // appear after a magic link redirect.
   const forceSetup = new URLSearchParams(window.location.search).get('setup') === '1';
   const shouldShowOnboarding = onboarding.show || (forceSetup && profile && !profile.onboarding_completed);
-
-  console.log('[onboarding] state:', {
-    show: onboarding.show,
-    forceSetup,
-    shouldShowOnboarding,
-    onboarding_completed: profile?.onboarding_completed ?? 'no profile yet',
-  });
 
   // ── useMemo hooks — MUST be here before any early returns ─────────────────
   const SIGNAL_ORDER = {buy:0, sell:1, wait:2, indecision:3};

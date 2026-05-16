@@ -312,6 +312,71 @@ export async function handleSubscriptionCancelled(subscription) {
   return { ok: true };
 }
 
+// ── charge.refunded ────────────────────────────────────────────────────────────
+export async function handleChargeRefunded(charge) {
+  // Only act on full refunds
+  if ((charge.amount_refunded ?? 0) < charge.amount) {
+    console.log(`[fulfillment] charge.refunded: partial refund (${charge.amount_refunded}/${charge.amount}) — no action`);
+    return { ok: true, skipped: true };
+  }
+
+  const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id ?? null;
+  if (!customerId) {
+    console.warn('[fulfillment] charge.refunded: no customer_id — skip');
+    return { ok: true, skipped: true };
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('users_access')
+    .update({ status: 'cancelled', valid_until: new Date().toISOString() })
+    .eq('stripe_customer_id', customerId)
+    .eq('status', 'active')
+    .select('auth_user_id');
+
+  if (error) {
+    console.error('[fulfillment] handleChargeRefunded DB error:', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  console.log(`[fulfillment] charge.refunded: revoked ${data?.length ?? 0} access(es) for customer=${customerId}`);
+  return { ok: true };
+}
+
+// ── customer.subscription.updated ──────────────────────────────────────────────
+export async function handleSubscriptionUpdated(subscription) {
+  const status = subscription.status;
+
+  if (status !== 'active' && status !== 'trialing') {
+    console.log(`[fulfillment] subscription.updated: status=${status} — no action`);
+    return { ok: true, skipped: true };
+  }
+
+  const subId      = subscription.id;
+  const priceId    = subscription.items?.data?.[0]?.price?.id ?? null;
+  const planId     = PRICE_ID_TO_PLAN[priceId] ?? null;
+  const periodEnd  = subscription.current_period_end ?? null;
+
+  if (!planId || !periodEnd) {
+    console.warn(`[fulfillment] subscription.updated: unrecognized priceId=${priceId} or no periodEnd — skip`);
+    return { ok: true, skipped: true };
+  }
+
+  const validUntil = new Date(periodEnd * 1000);
+
+  const { error } = await supabaseAdmin
+    .from('users_access')
+    .update({ plan_id: planId, valid_until: validUntil.toISOString(), status: 'active' })
+    .eq('stripe_subscription_id', subId);
+
+  if (error) {
+    console.error('[fulfillment] handleSubscriptionUpdated DB error:', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  console.log(`[fulfillment] subscription.updated: sub=${subId} → plan=${planId} valid_until=${validUntil.toISOString()}`);
+  return { ok: true };
+}
+
 // ── PIPELINE INTERNO ───────────────────────────────────────────────────────────
 async function _pipeline({
   idempotencyKey,
