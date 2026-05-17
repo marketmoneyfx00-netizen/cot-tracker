@@ -157,7 +157,7 @@ export default async function handler(req, res) {
             downloaded_at: new Date().toISOString(),
             parsed_data:   disaggData,
             asset_count:   disaggData.assetCount,
-          }, { onConflict: 'report_type,report_date', ignoreDuplicates: true });
+          }, { onConflict: 'report_type,report_date', ignoreDuplicates: false });
 
         if (upsertErr) throw upsertErr;
         filesDownloaded++;
