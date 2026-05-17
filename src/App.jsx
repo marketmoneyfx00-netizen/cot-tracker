@@ -2950,7 +2950,8 @@ function CalendarioTab({darkMode, T}) {
                   const nowMs    = Date.now();
                   const isPast   = evMs < nowMs;
                   const isUp     = !isPast;
-                  const isExp    = expanded===`${date}-${idx}`;
+                  const evKey    = `${ev.date||date}_${ev.country||''}_${(ev.event||'').replace(/\s+/g,'_').slice(0,30)}`;
+                  const isExp    = expanded===evKey;
                   const stars    = ev.impact==='High'?3:ev.impact==='Medium'?2:1;
                   const iCol     = impColor(ev.impact);
                   const flag     = getEventFlag(ev.country);
@@ -3000,11 +3001,11 @@ function CalendarioTab({darkMode, T}) {
                   }
 
                   return [nowLine,(
-                    <div key={`${date}-${idx}`}>
+                    <div key={evKey}>
                       {isMobile ? (
                         /* ── MÓVIL: CARD LAYOUT ── */
                         <div className="ev-row"
-                          onClick={()=>setExpanded(isExp?null:`${date}-${idx}`)}
+                          onClick={()=>setExpanded(isExp?null:evKey)}
                           style={{padding:'12px 14px',cursor:'pointer',
                             opacity: isPast && !hasAct ? 0.55 : 1,
                             borderLeft:`3px solid ${stars===3?iCol:stars===2?D.amber+'80':'transparent'}`,
@@ -3079,7 +3080,7 @@ function CalendarioTab({darkMode, T}) {
                       ) : (
                         /* ── DESKTOP: TABLE ROW ── */
                         <div className="ev-row"
-                          onClick={()=>setExpanded(isExp?null:`${date}-${idx}`)}
+                          onClick={()=>setExpanded(isExp?null:evKey)}
                           style={{display:'grid',
                             gridTemplateColumns:'64px 80px 1fr 80px 72px 82px 72px 24px',
                             gap:4,padding:'10px 16px',cursor:'pointer',
@@ -3187,8 +3188,7 @@ function CalendarioTab({darkMode, T}) {
                         const confBadge     = hasAct && surprise ? logic.confidence : null;
                         const assetDirs     = hasAct && surprise ? logic.affectedAssets : null;
                         const sc            = logic.scenarios;
-                        // Acordeón avanzado: clave única por evento
-                        const evKey = `${date}-${idx}`;
+                        // Acordeón avanzado: clave única por evento (evKey defined in outer map scope)
                         const isAdvOpen = !isMobile || advancedOpen.has(evKey);
                         const toggleAdv = () => setAdvancedOpen(prev => {
                           const next = new Set(prev);
