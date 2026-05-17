@@ -130,7 +130,7 @@ function PermissionBadge({ permission, score, isMobile }) {
       transition: 'border-color 0.3s, box-shadow 0.3s',
       gap: 1,
     }}>
-      <span style={{ fontSize: 8, fontWeight: 700, color: permission.color, letterSpacing: '0.06em', lineHeight: 1 }}>EXEC</span>
+      <span style={{ fontSize: 8, fontWeight: 700, color: permission.color, letterSpacing: '0.06em', lineHeight: 1 }}>COND.</span>
       <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: permission.color, lineHeight: 1.1, letterSpacing: '-0.3px' }}>{permission.label}</span>
       <span style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: permission.color, opacity: 0.75, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{score}</span>
     </div>

@@ -40,8 +40,8 @@ export function buildDecision({ totalScore, scoreT, scoreF }) {
   if (bias === 'bullish' && scoreT > 0 && scoreF > 0) {
     return {
       type: 'bullish',
-      message: '📈 Flujo alcista',
-      sub: 'Buscar compras en retrocesos',
+      message: '📈 Bullish structural flow',
+      sub: 'Pullback monitoring active — await price structure',
     };
   }
 
@@ -49,15 +49,15 @@ export function buildDecision({ totalScore, scoreT, scoreF }) {
   if (bias === 'bearish' && scoreT < 0 && scoreF < 0) {
     return {
       type: 'bearish',
-      message: '📉 Flujo bajista',
-      sub: 'Vender rebotes',
+      message: '📉 Bearish structural flow',
+      sub: 'Bounce monitoring active — await price structure',
     };
   }
 
   // ⚠️ divergencia
   return {
     type: 'divergence',
-    message: '⚠️ Divergencia detectada',
-    sub: 'Posible manipulación o giro — reducir tamaño',
+    message: '⚠️ Structural divergence',
+    sub: 'HTF and short-term data conflict — reduce exposure',
   };
 }

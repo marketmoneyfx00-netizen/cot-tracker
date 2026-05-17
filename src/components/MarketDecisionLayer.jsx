@@ -4,14 +4,14 @@ import { calculateBiasScore, deriveInputsFromPair } from "../cotBiasEngine.js";
 
 // ─── Confluence config ───────────────────────────────────────────────────────
 const CONFLUENCE_CFG = {
-  CONFIRMED_BULL: { label:"CONFIRMED TREND ▲", color:"#22c55e", bg:"rgba(34,197,94,0.10)",    border:"rgba(34,197,94,0.25)"    },
-  CONFIRMED_BEAR: { label:"CONFIRMED TREND ▼", color:"#ef4444", bg:"rgba(239,68,68,0.10)",    border:"rgba(239,68,68,0.25)"    },
-  CONFLICT:       { label:"HIGH RISK / WAIT",  color:"#f97316", bg:"rgba(249,115,22,0.10)",   border:"rgba(249,115,22,0.25)"   },
-  PULLBACK_BULL:  { label:"PULLBACK / ENTRY ▲",color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
-  PULLBACK_BEAR:  { label:"PULLBACK / ENTRY ▼",color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
-  EARLY_BULL:     { label:"EARLY ROTATION ▲",  color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
-  EARLY_BEAR:     { label:"EARLY ROTATION ▼",  color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
-  NEUTRAL:        { label:"NEUTRAL / WAIT",    color:"#6b7280", bg:"rgba(107,114,128,0.08)",  border:"rgba(107,114,128,0.20)"  },
+  CONFIRMED_BULL: { label:"STRUCTURAL ALIGNMENT ▲", color:"#22c55e", bg:"rgba(34,197,94,0.10)",    border:"rgba(34,197,94,0.25)"    },
+  CONFIRMED_BEAR: { label:"STRUCTURAL ALIGNMENT ▼", color:"#ef4444", bg:"rgba(239,68,68,0.10)",    border:"rgba(239,68,68,0.25)"    },
+  CONFLICT:       { label:"HTF/TACTICAL CONFLICT",  color:"#f97316", bg:"rgba(249,115,22,0.10)",   border:"rgba(249,115,22,0.25)"   },
+  PULLBACK_BULL:  { label:"PULLBACK MONITORING ▲",  color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
+  PULLBACK_BEAR:  { label:"PULLBACK MONITORING ▼",  color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
+  EARLY_BULL:     { label:"EARLY ROTATION ▲",       color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
+  EARLY_BEAR:     { label:"EARLY ROTATION ▼",       color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
+  NEUTRAL:        { label:"NEUTRAL / AWAIT",        color:"#6b7280", bg:"rgba(107,114,128,0.08)",  border:"rgba(107,114,128,0.20)"  },
 };
 
 function buildPairConfluence(biasScore, tacSignal, tacStrength) {
@@ -43,21 +43,21 @@ function buildPairConfluence(biasScore, tacSignal, tacStrength) {
   else                            confluenceKey="NEUTRAL";
 
   const USE_CASES = {
-    CONFIRMED_BULL:"Buscar continuación alcista · Compras en retroceso",
-    CONFIRMED_BEAR:"Buscar continuación bajista · Ventas en rebote",
-    CONFLICT:      "Conflicto HTF/LTF · Alto riesgo · Esperar resolución",
-    PULLBACK_BULL: "Esperar retroceso para compras · HTF alcista",
-    PULLBACK_BEAR: "Esperar rebote para ventas · HTF bajista",
-    EARLY_BULL:    "Rotación alcista incipiente · Confirmar próximo informe",
-    EARLY_BEAR:    "Rotación bajista incipiente · Confirmar próximo informe",
-    NEUTRAL:       "Sin sesgo definido · Aguardar confirmación COT",
+    CONFIRMED_BULL:"Structural momentum aligned · Monitoring pullback levels",
+    CONFIRMED_BEAR:"Structural momentum aligned · Monitoring bounce levels",
+    CONFLICT:      "HTF/Tactical conflict · Await structural resolution",
+    PULLBACK_BULL: "HTF bullish bias · Pullback phase active",
+    PULLBACK_BEAR: "HTF bearish bias · Bounce phase active",
+    EARLY_BULL:    "Early bullish rotation · Pending COT confirmation",
+    EARLY_BEAR:    "Early bearish rotation · Pending COT confirmation",
+    NEUTRAL:       "No directional edge · Await COT confirmation",
   };
 
   const conviction = alignment>=75 ? "HIGH" : alignment>=50 ? "MEDIUM" : "LOW";
   const CONVICTION_CFG = {
-    HIGH:   {label:"Convicción Alta",  color:"#22c55e", dots:3},
-    MEDIUM: {label:"Convicción Media", color:"#f59e0b", dots:2},
-    LOW:    {label:"Convicción Baja",  color:"#ef4444", dots:1},
+    HIGH:   {label:"High Alignment",     color:"#22c55e", dots:3},
+    MEDIUM: {label:"Moderate Alignment", color:"#f59e0b", dots:2},
+    LOW:    {label:"Low Alignment",      color:"#ef4444", dots:1},
   };
 
   return {
@@ -73,7 +73,7 @@ function buildPairConfluence(biasScore, tacSignal, tacStrength) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET DECISION LAYER — Premium interpretation card
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision }) {
+function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, selectedPair }) {
   if (!fxPairs || fxPairs.length===0) return null;
 
   const allowExecution  = finalDecision?.allowExecution ?? true;
@@ -224,26 +224,65 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
               </div>
 
               {/* Macro + Tactical row */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
-                <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
-                  <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>Macro Bias</div>
-                  <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                    <span style={{fontSize:20,fontWeight:900,color:biasColor,fontFamily:"monospace",lineHeight:1}}>
-                      {(bias.score||0)>0?"+":""}{bias.score||0}
-                    </span>
-                    <span style={{fontSize:9,color:T.sub,lineHeight:1.3,maxWidth:60}}>
-                      {(bias.label||"Neutral").split(" ").slice(0,3).join(" ")}
-                    </span>
-                  </div>
-                </div>
-                <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
-                  <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>Tactical Flow</div>
-                  <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <span style={{fontSize:16,fontWeight:800,color:sigCfg.color,lineHeight:1}}>{sigCfg.icon}</span>
-                    <span style={{fontSize:10,fontWeight:700,color:sigCfg.color}}>{sigCfg.label}</span>
-                  </div>
-                </div>
-              </div>
+              {(() => {
+                const isSelected = pair === selectedPair;
+                const hasRealTac = isSelected && tacState && tacState.pressure !== 'insufficient';
+                const biasDir = (bias.score||0) > 1.5 ? 'bullish' : (bias.score||0) < -1.5 ? 'bearish' : null;
+                const tacConflict = hasRealTac && biasDir && biasDir !== tacState.pressure && tacState.pressure !== 'neutral';
+                return (
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom: tacConflict ? 6 : 10}}>
+                      <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>HTF Macro Bias</div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                          <span style={{fontSize:20,fontWeight:900,color:biasColor,fontFamily:"monospace",lineHeight:1}}>
+                            {(bias.score||0)>0?"+":""}{bias.score||0}
+                          </span>
+                          <span style={{fontSize:9,color:T.sub,lineHeight:1.3,maxWidth:60}}>
+                            {(bias.label||"Neutral").split(" ").slice(0,3).join(" ")}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>
+                          {hasRealTac ? "Tactical Pressure" : "Institutional Flow"}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                          {hasRealTac ? (
+                            <>
+                              <span style={{fontSize:11,lineHeight:1}}>{tacState.pressure==='bearish'?'↓':tacState.pressure==='bullish'?'↑':'–'}</span>
+                              <span style={{fontSize:10,fontWeight:700,color:tacState.color}}>{tacState.label}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{fontSize:16,fontWeight:800,color:sigCfg.color,lineHeight:1}}>{sigCfg.icon}</span>
+                              <span style={{fontSize:10,fontWeight:700,color:sigCfg.color}}>{sigCfg.label}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tactical conflict warning */}
+                    {tacConflict && (
+                      <div style={{
+                        marginBottom:10,padding:"6px 10px",borderRadius:7,
+                        background:"rgba(249,115,22,0.08)",border:"1px solid rgba(249,115,22,0.22)",
+                        display:"flex",alignItems:"center",gap:6,
+                      }}>
+                        <span style={{fontSize:10}}>↔</span>
+                        <div style={{flex:1}}>
+                          <span style={{fontSize:9,fontWeight:700,color:"#f97316"}}>
+                            {biasDir==='bullish' ? 'Bullish' : 'Bearish'} HTF bias · Tactical pressure {tacState.pressure}
+                          </span>
+                          <div style={{fontSize:9,color:T.sub,marginTop:1}}>
+                            {tacState.description || 'Short-term price action diverges from structural bias. Monitor for stabilization before acting.'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Alignment score */}
               <div style={{marginBottom:10, position:'relative'}}>
@@ -303,10 +342,10 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
         borderTop:`1px solid ${T.border}`,
       }}>
         {[
-          {label:"CONFIRMED TREND", color:"#22c55e"},
-          {label:"PULLBACK / ENTRY",color:"#f59e0b"},
-          {label:"HIGH RISK / WAIT",color:"#f97316"},
-          {label:"EARLY ROTATION", color:"#06b6d4"},
+          {label:"STRUCTURAL ALIGNMENT", color:"#22c55e"},
+          {label:"PULLBACK MONITORING",  color:"#f59e0b"},
+          {label:"HTF/TACTICAL CONFLICT",color:"#f97316"},
+          {label:"EARLY ROTATION",       color:"#06b6d4"},
         ].map(({label,color})=>(
           <div key={label} style={{display:"flex",alignItems:"center",gap:4}}>
             <div style={{width:6,height:6,borderRadius:1,background:color,flexShrink:0}}/>

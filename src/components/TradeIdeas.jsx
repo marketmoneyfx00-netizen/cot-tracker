@@ -8,9 +8,9 @@ import { useMemo } from 'react';
 import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
 
 const CONF_CFG = {
-  HIGH:   { label: 'Alta probabilidad', color: '#22c55e' },
-  MEDIUM: { label: 'Convicción media',  color: '#f59e0b' },
-  LOW:    { label: 'Baja fiabilidad',   color: '#6b7280' },
+  HIGH:   { label: 'Favorable Context', color: '#22c55e' },
+  MEDIUM: { label: 'Moderate Context',  color: '#f59e0b' },
+  LOW:    { label: 'Low Confluence',    color: '#6b7280' },
 };
 
 function buildIdea(pair, biasScore, signal, strength, marketState) {
@@ -31,23 +31,23 @@ function buildIdea(pair, biasScore, signal, strength, marketState) {
   const dirText  = isLong ? 'alcista' : 'bajista';
 
   const idea = aligned
-    ? (isLong ? `Buscar compras en retrocesos en ${pair}` : `Buscar ventas en rebotes en ${pair}`)
+    ? (isLong ? `Structural bullish bias · Monitoring pullbacks in ${pair}` : `Structural bearish bias · Monitoring bounces in ${pair}`)
     : biasDir
-    ? (isLong ? `Preparar compras en ${pair} — aguardar confirmación técnica` : `Preparar ventas en ${pair} — aguardar confirmación técnica`)
-    : (isLong ? `Señal táctica alcista en ${pair} — revisar sesgo semanal` : `Señal táctica bajista en ${pair} — revisar sesgo semanal`);
+    ? (isLong ? `Bullish HTF bias in ${pair} · Awaiting tactical confirmation` : `Bearish HTF bias in ${pair} · Awaiting tactical confirmation`)
+    : (isLong ? `Bullish tactical signal in ${pair} · No HTF institutional backing` : `Bearish tactical signal in ${pair} · No HTF institutional backing`);
 
   const context = aligned
-    ? `Flujo institucional ${dirText} (${strLabel}) alineado con señal táctica`
+    ? `HTF institutional flow ${dirText} (${strLabel}) — aligned with tactical signal`
     : biasDir
-    ? `Flujo institucional ${dirText} (${strLabel}) sin confirmación táctica aún`
-    : `Señal táctica sin respaldo institucional — menor fiabilidad`;
+    ? `HTF institutional flow ${dirText} (${strLabel}) — tactical confirmation pending`
+    : `Tactical signal only — no HTF institutional backing`;
 
   const confidence = aligned && abs >= 3 ? 'HIGH' : aligned || abs >= 2 ? 'MEDIUM' : 'LOW';
 
   return { pair, dir, isLong, idea, context, confidence, biasScore };
 }
 
-export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade, marketState, intradayScore, tradeReadinessScore, selectedPair, finalDecision }) {
+export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade, marketState, intradayScore, tradeReadinessScore, selectedPair, finalDecision, tacState }) {
   // Use finalDecision as the single source of truth when available.
   // Fallback to local computation for backward compatibility.
   const allowExecution  = finalDecision ? finalDecision.allowExecution : true;
@@ -154,16 +154,39 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, letterSpacing: '0.1em' }}>
-          OPORTUNIDADES DE CONTEXTO
+          CONTEXT OPPORTUNITIES
         </span>
         <span style={{ flex: 1, height: 1, background: T.border }} />
         <span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.05em', fontWeight: 500 }}>
-          COT · NO SON SEÑALES DE ENTRADA
+          COT · STRUCTURAL CONTEXT · NOT ENTRY SIGNALS
         </span>
       </div>
 
+      {/* Tactical state banner — shown when price pressure conflicts with structural bias */}
+      {tacState && tacState.pressure !== 'insufficient' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 12px', marginBottom: 8, borderRadius: 8,
+          background: tacState.pressure === 'bearish' ? 'rgba(249,115,22,0.07)' : 'rgba(34,197,94,0.07)',
+          border: `1px solid ${tacState.pressure === 'bearish' ? 'rgba(249,115,22,0.22)' : 'rgba(34,197,94,0.22)'}`,
+        }}>
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: tacState.color,
+          }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: tacState.color, letterSpacing: '0.04em' }}>
+            MARKET STATE: {tacState.label.toUpperCase()}
+          </span>
+          {tacState.description && (
+            <span style={{ fontSize: 10, color: T.sub, marginLeft: 4 }}>
+              · {tacState.description}
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ fontSize: 11, color: T.sub2, marginBottom: 8, fontStyle: 'italic' }}>
-        Solo se muestran pares con confluencia institucional válida
+        Pairs shown have valid institutional confluence · swing perspective only
       </div>
 
       {showEmpty ? (
@@ -227,7 +250,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
                 <div style={{ fontSize: 13, fontWeight: 600, color: dirColor }}>{idea.idea}</div>
                 <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5 }}>{idea.context}</div>
                 <div style={{ fontSize: 10, color: T.sub2, fontStyle: 'italic', marginTop: 2 }}>
-                  Contexto semanal · no perseguir precio
+                  Weekly COT context · swing perspective · no tactical entry implied
                 </div>
                 {/* Per-card footer status — derived from finalDecision */}
                 {isMacroBlocked && (

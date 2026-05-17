@@ -65,12 +65,12 @@ export function buildInterpretation({ sesgoCompuesto, scoreF, scoreC, scoreT }) 
   // ── 4a. TEMPLATE: Momentum alcista fuerte ─────────────────────────────────
   if (sesgoCompuesto > 50 && scoreT > 15) {
     return {
-      reading: 'Flujo alcista fuerte con alineación fundamental, contextual y técnica. Alta probabilidad de continuación en la dirección alcista. Horizonte: sesión actual (intradía).',
+      reading: 'Strong bullish flow with fundamental, contextual and technical alignment. Favorable structural context for longs. Horizon: current session (intraday). Confirm tactical price structure before positioning.',
       actions: [
-        'Buscar compras en retrocesos hacia niveles de soporte previos',
-        'Stop por debajo del último mínimo relevante',
-        'Take profit parcial en siguiente zona de liquidez',
-        'Escalar posición si el precio aguanta sin romper estructura',
+        'Monitor pullback levels toward prior support zones',
+        'Structural context favors longs — await tactical price confirmation',
+        'Manage size appropriately — structural bias is not a timed entry signal',
+        'Watch for continuation if price holds structure above key levels',
       ],
     };
   }
@@ -78,12 +78,12 @@ export function buildInterpretation({ sesgoCompuesto, scoreF, scoreC, scoreT }) 
   // ── 4b. TEMPLATE: Momentum bajista fuerte ─────────────────────────────────
   if (sesgoCompuesto < -50 && scoreT < 0) {
     return {
-      reading: 'Flujo bajista fuerte con alineación fundamental, contextual y técnica. Alta probabilidad de continuación a la baja. Horizonte: sesión actual (intradía).',
+      reading: 'Strong bearish flow with fundamental, contextual and technical alignment. Favorable structural context for shorts. Horizon: current session (intraday). Confirm tactical price structure before positioning.',
       actions: [
-        'Buscar ventas en rebotes hacia zonas de oferta previas',
-        'Stop por encima del último máximo relevante',
-        'Take profit parcial en siguiente zona de liquidez',
-        'Escalar posición si el precio aguanta sin romper estructura',
+        'Monitor bounce levels toward prior supply zones',
+        'Structural context favors shorts — await tactical price confirmation',
+        'Manage size appropriately — structural bias is not a timed entry signal',
+        'Watch for continuation if price holds structure below key levels',
       ],
     };
   }
@@ -91,25 +91,25 @@ export function buildInterpretation({ sesgoCompuesto, scoreF, scoreC, scoreT }) 
   // ── 5. TEMPLATE: Neutral — sin dirección clara ────────────────────────────
   if (absTotal <= 20) {
     return {
-      reading: 'Sesgo neutral sin confirmación técnica. Alta probabilidad de rango o movimiento diferido. El mercado aún no ha decidido. Horizonte: esperar ruptura antes de operar.',
+      reading: 'Neutral structural bias — no clear directional confirmation from price. Market in range or deferring direction. Horizon: await breakout before assessing.',
       actions: [
-        'Evitar entradas inmediatas después de la noticia',
-        'Esperar barrida de liquidez y posterior desplazamiento',
-        'Buscar confirmación en estructura 1m–5m antes de entrar',
-        'Solo entrar ante ruptura clara con volumen',
+        'Avoid positioning immediately after the release',
+        'Wait for liquidity sweep and subsequent displacement',
+        'Look for structural confirmation on short timeframes (1m–5m) before acting',
+        'Only position on clear structural breakout with displacement',
       ],
     };
   }
 
   // ── 6. TEMPLATE: Sesgo moderado (fallback) ────────────────────────────────
-  const dir = sesgoCompuesto > 0 ? 'alcista' : 'bajista';
+  const dir = sesgoCompuesto > 0 ? 'bullish' : 'bearish';
   return {
-    reading: `Sesgo ${dir} moderado con confirmación parcial del precio. Operable con gestión de riesgo ajustada. Horizonte: corto plazo (1h–4h).`,
+    reading: `Moderate ${dir} structural bias with partial price confirmation. Favorable context — confirm price structure before positioning. Horizon: short-term (1h–4h).`,
     actions: [
-      `Priorizar entradas en la dirección ${dir} si el precio lo confirma`,
-      'Reducir tamaño respecto a setups de alta convicción',
-      'Usar stops ajustados ante posible reversión',
-      'Confirmar en al menos un timeframe superior',
+      `Monitor ${dir} setups with tactical price confirmation`,
+      'Reduce position size relative to high-conviction setups',
+      'Use defined risk parameters — possible short-term reversal',
+      'Confirm on at least one higher timeframe before acting',
     ],
   };
 }

@@ -53,10 +53,10 @@ function detectState(results) {
       title: `Flujo institucional en fase de expansión — dominancia ${dirLabel}`,
       message: `Posicionamiento institucional activo y direccional. ${pp.join(' y ')} lideran el movimiento con sesgo ${dirLabel}.`,
       action: dirLabel === 'alcista'
-        ? 'Buscar compras en retrocesos — confirmar estructura antes de entrar'
+        ? 'Monitoring pullback entries in aligned pairs — confirm price structure before trading'
         : dirLabel === 'bajista'
-        ? 'Buscar ventas en rebotes — confirmar estructura antes de entrar'
-        : 'Seleccionar pares con mayor convicción — evitar cruces mixtos',
+        ? 'Monitoring bounce entries in aligned pairs — confirm price structure before trading'
+        : 'Focus on highest-conviction pairs — avoid mixed-flow crosses',
       footer: 'Basado en flujo institucional semanal (CFTC)',
     };
   }

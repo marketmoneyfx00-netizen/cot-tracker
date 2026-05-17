@@ -63,13 +63,13 @@ function buildText(results) {
     lines.push(`Divergencia detectada en ${conflicts[0].pair} vs DXY — aumenta el riesgo de movimientos erráticos. Evitar este par hasta resolución.`);
   }
 
-  // Closing decision line
+  // Closing structural context line
   if (usdWeak && bullish.length >= 1) {
-    lines.push(`Sesgo institucional favorable para buscar compras en retrocesos.`);
+    lines.push(`Sesgo estructural HTF favorable para posiciones largas en correcciones — confirmar contexto táctico antes de ejecutar.`);
   } else if (usdStr && bearish.length >= 1) {
-    lines.push(`Sesgo institucional favorable para buscar ventas en retrocesos.`);
+    lines.push(`Sesgo estructural HTF favorable para posiciones cortas en rebotes — confirmar contexto táctico antes de ejecutar.`);
   } else {
-    lines.push(`Sesgo institucional débil o mixto — priorizar preservación de capital esta semana.`);
+    lines.push(`Sesgo estructural débil o mixto — sin ventaja direccional institucional definida esta semana.`);
   }
 
   return { lines, top, top2, bullish, bearish, conflicts };
@@ -90,7 +90,7 @@ export default function ContextSummary({ fxPairs, darkMode, T }) {
   if (!data) return null;
 
   const { lines } = data;
-  const isDecision = (l) => l.includes('favorable para') || l.includes('preservación');
+  const isDecision = (l) => l.includes('Sesgo estructural') && (l.includes('favorable') || l.includes('mixto'));
 
   return (
     <div style={{
