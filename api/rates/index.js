@@ -1,5 +1,5 @@
 // api/rates/index.js
-// Serves central bank rate data to InterestRatePanel.jsx.
+// Serves central bank rate data + carry differentials to InterestRatePanel.jsx.
 // Reads from central_bank_rates (Supabase), populated by api/rates/refresh.js.
 // Auth-protected (requires valid Supabase JWT).
 
@@ -9,6 +9,54 @@ import { verifyAuth }    from '../_lib/auth-middleware.js';
 let _cache   = null;
 let _cacheTs = 0;
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+// ── Freshness engine (TAREA 0.2) ─────────────────────────────────────────────
+// Computes LIVE / DELAYED / STALE / ERROR based on minutes since last DB write.
+function freshnessStatus(fetched_at) {
+  if (!fetched_at) return 'ERROR';
+  const mins = (Date.now() - new Date(fetched_at).getTime()) / 60_000;
+  if (mins > 1440) return 'STALE';    // > 24 h
+  if (mins > 180)  return 'DELAYED';  // > 3 h
+  return 'LIVE';
+}
+
+// ── Interest Rate Differential Engine (TAREA 1.2) ────────────────────────────
+// Computes carry direction and normalised score for each FX pair.
+// carry_direction: 'long_base' | 'long_quote' | 'neutral'
+// carry_score:     proportional to |rate_diff_bps|, capped at ±10
+
+const FX_PAIRS = [
+  { pair: 'EURUSD', base: 'EUR', quote: 'USD', base_bank: 'BCE',  quote_bank: 'FED'  },
+  { pair: 'GBPUSD', base: 'GBP', quote: 'USD', base_bank: 'BOE',  quote_bank: 'FED'  },
+  { pair: 'USDJPY', base: 'USD', quote: 'JPY', base_bank: 'FED',  quote_bank: 'BOJ'  },
+  { pair: 'USDCHF', base: 'USD', quote: 'CHF', base_bank: 'FED',  quote_bank: 'SNB'  },
+  { pair: 'AUDUSD', base: 'AUD', quote: 'USD', base_bank: 'RBA',  quote_bank: 'FED'  },
+  { pair: 'NZDUSD', base: 'NZD', quote: 'USD', base_bank: 'RBNZ', quote_bank: 'FED'  },
+  { pair: 'USDCAD', base: 'USD', quote: 'CAD', base_bank: 'FED',  quote_bank: 'BOC'  },
+  { pair: 'GBPJPY', base: 'GBP', quote: 'JPY', base_bank: 'BOE',  quote_bank: 'BOJ'  },
+  { pair: 'EURJPY', base: 'EUR', quote: 'JPY', base_bank: 'BCE',  quote_bank: 'BOJ'  },
+  { pair: 'EURGBP', base: 'EUR', quote: 'GBP', base_bank: 'BCE',  quote_bank: 'BOE'  },
+  { pair: 'AUDCAD', base: 'AUD', quote: 'CAD', base_bank: 'RBA',  quote_bank: 'BOC'  },
+  { pair: 'AUDNZD', base: 'AUD', quote: 'NZD', base_bank: 'RBA',  quote_bank: 'RBNZ' },
+];
+
+function buildDifferentials(latestRates) {
+  return FX_PAIRS.map(({ pair, base, quote, base_bank, quote_bank }) => {
+    const baseRate  = latestRates[base_bank];
+    const quoteRate = latestRates[quote_bank];
+    if (baseRate == null || quoteRate == null) {
+      return { pair, base_currency: base, quote_currency: quote, base_bank, quote_bank,
+               base_rate: null, quote_rate: null, rate_diff_bps: null,
+               carry_direction: 'neutral', carry_score: 0 };
+    }
+    const diffBps       = Math.round((baseRate - quoteRate) * 100);
+    const carry_score   = parseFloat(Math.min(10, Math.max(-10, diffBps / 50)).toFixed(2));
+    const carry_direction = diffBps > 10 ? 'long_base' : diffBps < -10 ? 'long_quote' : 'neutral';
+    return { pair, base_currency: base, quote_currency: quote, base_bank, quote_bank,
+             base_rate: baseRate, quote_rate: quoteRate, rate_diff_bps: diffBps,
+             carry_direction, carry_score };
+  });
+}
 
 export default async function handler(req, res) {
   const allowedOrigin = process.env.FRONTEND_ORIGIN || 'https://app.cot-tracker.com';
@@ -27,10 +75,13 @@ export default async function handler(req, res) {
     return res.status(200).json(_cache);
   }
 
-  // Fetch all historical rows (for chart) ordered asc, then we'll slice for decisions
   const { data, error } = await supabaseAdmin
     .from('central_bank_rates')
-    .select('bank_id, rate, previous_rate, decision_date, decision_label, signal_label')
+    .select(
+      'bank_id, rate, previous_rate, decision_date, decision_label, signal_label,' +
+      ' rate_type, rate_low, rate_mid, rate_high, stance_score, stance_label,' +
+      ' change_bps, fetched_at'
+    )
     .order('decision_date', { ascending: true });
 
   if (error) {
@@ -43,30 +94,31 @@ export default async function handler(req, res) {
   }
 
   if (!data?.length) {
-    // DB not yet seeded — return empty so frontend falls back to static data
     res.setHeader('X-Rates-Cache', 'EMPTY');
-    return res.status(200).json({ timestamp: new Date().toISOString(), banks: {} });
+    return res.status(200).json({ timestamp: new Date().toISOString(), banks: {}, pairs: [] });
   }
 
-  // Group rows by bank_id
+  // ── Build per-bank summaries ──────────────────────────────────────────────
   const groups = {};
   for (const row of data) {
     if (!groups[row.bank_id]) groups[row.bank_id] = [];
     groups[row.bank_id].push(row);
   }
 
-  const banks = {};
-  for (const [bankId, rows] of Object.entries(groups)) {
-    const latest   = rows.at(-1);
-    const prev     = rows.at(-2);
+  const banks       = {};
+  const latestRates = {};
 
-    // history: all change points formatted for the SVG chart (d: 'YYYY-MM')
+  for (const [bankId, rows] of Object.entries(groups)) {
+    const latest = rows.at(-1);
+    const prev   = rows.at(-2);
+
+    latestRates[bankId] = parseFloat(latest.rate);
+
     const history = rows.map(r => ({
-      d: r.decision_date.slice(0, 7), // 'YYYY-MM'
+      d: r.decision_date.slice(0, 7),
       r: parseFloat(r.rate),
     }));
 
-    // decisions: last 6 rows reversed (most-recent first), for the table
     const decisions = [...rows].reverse().slice(0, 6).map(r => ({
       date:     formatDate(r.decision_date),
       rate:     parseFloat(r.rate).toFixed(2) + '%',
@@ -80,18 +132,34 @@ export default async function handler(req, res) {
     }));
 
     banks[bankId] = {
-      current:     parseFloat(latest.rate),
-      previous:    prev ? parseFloat(prev.rate) : parseFloat(latest.rate),
-      signalLabel: latest.signal_label ?? 'NEUTRO',
-      lastDate:    latest.decision_date,
+      current:      parseFloat(latest.rate),
+      previous:     prev ? parseFloat(prev.rate) : parseFloat(latest.rate),
+      signalLabel:  latest.signal_label ?? 'NEUTRO',
+      lastDate:     latest.decision_date,
+      // Rate range (FED publishes upper bound; lower = rate - 25bps)
+      rateType:     latest.rate_type   ?? 'single',
+      rateLow:      latest.rate_low    != null ? parseFloat(latest.rate_low)  : parseFloat(latest.rate),
+      rateMid:      latest.rate_mid    != null ? parseFloat(latest.rate_mid)  : parseFloat(latest.rate),
+      rateHigh:     latest.rate_high   != null ? parseFloat(latest.rate_high) : parseFloat(latest.rate),
+      // Hawkish / Dovish stance (TAREA 1.1)
+      stanceScore:  latest.stance_score  ?? 0,
+      stanceLabel:  latest.stance_label  ?? 'Neutral',
+      changeBps:    latest.change_bps    ?? 0,
+      // Freshness (TAREA 0.2)
+      freshness:    freshnessStatus(latest.fetched_at),
+      fetchedAt:    latest.fetched_at,
       history,
       decisions,
     };
   }
 
+  // ── Interest Rate Differential Engine (TAREA 1.2) ─────────────────────────
+  const pairs = buildDifferentials(latestRates);
+
   const payload = {
     timestamp: new Date().toISOString(),
     banks,
+    pairs,
   };
 
   _cache   = payload;

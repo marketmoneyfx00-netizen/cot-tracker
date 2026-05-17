@@ -158,20 +158,84 @@ CREATE TABLE IF NOT EXISTS central_bank_rates (
   bank_id         TEXT         NOT NULL,
   rate            NUMERIC(6,3) NOT NULL,
   previous_rate   NUMERIC(6,3),
-  observation_date DATE        NOT NULL,
+  decision_date   DATE         NOT NULL,
   decision_label  TEXT,
   signal_label    TEXT,
   source          TEXT         NOT NULL DEFAULT 'FRED',
   fetched_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  UNIQUE (bank_id, observation_date)
+  UNIQUE (bank_id, decision_date)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cbr_bank_date
-  ON central_bank_rates (bank_id, observation_date DESC);
+  ON central_bank_rates (bank_id, decision_date DESC);
 
 ALTER TABLE central_bank_rates ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY IF NOT EXISTS "cbr_read_authenticated"
   ON central_bank_rates FOR SELECT
+  TO authenticated USING (true);
+
+-- ── central_bank_rates — Phase 0 additions ───────────────────────────────────
+-- Adds normalised rate fields, hawkish/dovish stance, freshness, and carry
+-- context. Run once on existing DBs (all statements are idempotent).
+
+-- Fix column name mismatch if DB was created with the old migration (observation_date).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'central_bank_rates' AND column_name = 'observation_date'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'central_bank_rates' AND column_name = 'decision_date'
+  ) THEN
+    ALTER TABLE central_bank_rates RENAME COLUMN observation_date TO decision_date;
+  END IF;
+END $$;
+
+ALTER TABLE central_bank_rates
+  ADD COLUMN IF NOT EXISTS rate_low         NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS rate_high        NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS rate_mid         NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS rate_type        TEXT,        -- 'range' | 'single'
+  ADD COLUMN IF NOT EXISTS stance_label     TEXT,        -- 'Extremadamente Hawkish' … 'Expansivo agresivo'
+  ADD COLUMN IF NOT EXISTS stance_score     SMALLINT,    -- -5 to +5
+  ADD COLUMN IF NOT EXISTS change_bps       INT,         -- signed bps vs previous_rate
+  ADD COLUMN IF NOT EXISTS next_meeting_at  TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS source_url       TEXT,
+  ADD COLUMN IF NOT EXISTS source_name      TEXT,
+  ADD COLUMN IF NOT EXISTS official_release_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS freshness_minutes   INT;
+
+-- Drop+recreate index in case the column was renamed
+DROP INDEX IF EXISTS idx_cbr_bank_date;
+CREATE INDEX IF NOT EXISTS idx_cbr_bank_date
+  ON central_bank_rates (bank_id, decision_date DESC);
+
+-- ── pair_rate_differentials table ─────────────────────────────────────────────
+-- Computed carry/rate differentials per FX pair. Upserted by api/rates/index.js
+-- on each cache refresh. Drives Interest Rate Differential Engine (TAREA 1.2).
+
+CREATE TABLE IF NOT EXISTS pair_rate_differentials (
+  id              BIGSERIAL    PRIMARY KEY,
+  pair            TEXT         NOT NULL UNIQUE,   -- e.g. 'EURUSD'
+  base_currency   TEXT         NOT NULL,
+  quote_currency  TEXT         NOT NULL,
+  base_bank       TEXT         NOT NULL,
+  quote_bank      TEXT         NOT NULL,
+  base_rate       NUMERIC(6,3),
+  quote_rate      NUMERIC(6,3),
+  rate_diff_bps   INT,                            -- (base_rate - quote_rate) * 100
+  carry_direction TEXT,                           -- 'long_base' | 'long_quote' | 'neutral'
+  carry_score     NUMERIC(5,2),                   -- normalised -10..+10
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_prd_pair ON pair_rate_differentials (pair);
+
+ALTER TABLE pair_rate_differentials ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY IF NOT EXISTS "prd_read_authenticated"
+  ON pair_rate_differentials FOR SELECT
   TO authenticated USING (true);
 

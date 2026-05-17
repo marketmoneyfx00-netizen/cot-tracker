@@ -22,17 +22,37 @@ const MAX_DELTA_BPS = 200;
 //   SNB/RBNZ/RIX: IRSTCI01 series are no longer updated on FRED — kept as fallback
 //   but data will not advance beyond their last known date.
 const BANK_SERIES = {
-  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 3000 },
-  BCE:  { id: 'ECBDFR',            freq: 'daily',   limit: 3000 },
-  BOE:  { id: 'BOERUKQ',           freq: 'monthly', limit: 240 },  // BoE official rate (quarterly → monthly published)
-  BOJ:  { id: 'IRSTCI01JPM156N',   freq: 'monthly', limit: 240 },
-  SNB:  { id: 'IRSTCI01CHM156N',   freq: 'monthly', limit: 240 },
-  RBA:  { id: 'IRSTCI01AUM156N',   freq: 'monthly', limit: 240 },
-  BOC:  { id: 'IRSTCI01CAM156N',   freq: 'monthly', limit: 240 },
-  RBNZ: { id: 'IRSTCI01NZM156N',   freq: 'monthly', limit: 240 },
-  NB:   { id: 'IRSTCI01NOM156N',   freq: 'monthly', limit: 240 },
-  RIX:  { id: 'IRSTCI01SEM156N',   freq: 'monthly', limit: 240 },
+  FED:  { id: 'DFEDTARU',          freq: 'daily',   limit: 3000, rateType: 'range'  },
+  BCE:  { id: 'ECBDFR',            freq: 'daily',   limit: 3000, rateType: 'single' },
+  BOE:  { id: 'BOERUKQ',           freq: 'monthly', limit: 240,  rateType: 'single' },
+  BOJ:  { id: 'IRSTCI01JPM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  SNB:  { id: 'IRSTCI01CHM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  RBA:  { id: 'IRSTCI01AUM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  BOC:  { id: 'IRSTCI01CAM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  RBNZ: { id: 'IRSTCI01NZM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  NB:   { id: 'IRSTCI01NOM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
+  RIX:  { id: 'IRSTCI01SEM156N',   freq: 'monthly', limit: 240,  rateType: 'single' },
 };
+
+// Rate-range breakdown (FED publishes upper bound; lower bound is 25 bps below).
+function rateRange(bankId, rate) {
+  if (bankId === 'FED') {
+    return { rate_high: rate, rate_low: parseFloat((rate - 0.25).toFixed(3)), rate_mid: parseFloat((rate - 0.125).toFixed(3)) };
+  }
+  return { rate_high: rate, rate_low: rate, rate_mid: rate };
+}
+
+// Hawkish/Dovish stance score (-5 to +5) derived from last rate change magnitude.
+// Scale: +5 emergency hike ≥75bps, +3 hike ≥25bps, 0 hold, -3 cut ≥25bps, -5 large cut ≥75bps.
+function computeStance(rate, prevRate) {
+  if (prevRate == null) return { score: 0, label: 'Neutral' };
+  const bps = Math.round((rate - prevRate) * 100);
+  if (bps >= 75)  return { score: 5,  label: 'Extremadamente Hawkish' };
+  if (bps >= 25)  return { score: 3,  label: 'Hawkish' };
+  if (bps === 0)  return { score: 0,  label: 'Neutral' };
+  if (bps >= -50) return { score: -3, label: 'Dovish' };
+  return              { score: -5, label: 'Expansivo agresivo' };
+}
 
 function signalLabel(rate, prevRate) {
   if (prevRate == null) return 'NEUTRO';
@@ -208,16 +228,30 @@ export default async function handler(req, res) {
 
         const prevRate = prev?.rate ?? null;
 
+        const stance    = computeStance(point.rate, prevRate);
+        const rangeCols = rateRange(bankId, point.rate);
+        const changeBps = prevRate != null ? Math.round((point.rate - prevRate) * 100) : null;
+
         const { error: insertErr } = await supabaseAdmin
           .from('central_bank_rates')
           .insert({
             bank_id:          bankId,
             rate:             point.rate,
             previous_rate:    prevRate,
-            decision_date: point.date,
+            decision_date:    point.date,
             decision_label:   decisionLabel(point.rate, prevRate),
             signal_label:     signalLabel(point.rate, prevRate),
+            rate_type:        seriesCfg.rateType,
+            rate_low:         rangeCols.rate_low,
+            rate_high:        rangeCols.rate_high,
+            rate_mid:         rangeCols.rate_mid,
+            stance_score:     stance.score,
+            stance_label:     stance.label,
+            change_bps:       changeBps,
             source:           'FRED',
+            source_name:      'FRED — St. Louis Fed',
+            source_url:       `https://fred.stlouisfed.org/series/${seriesCfg.id}`,
+            freshness_minutes: 0,
             fetched_at:       new Date().toISOString(),
           });
 

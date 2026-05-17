@@ -282,9 +282,18 @@ const SIGNAL_COLORS = {
   NEUTRO:       '#f59e0b',
 };
 
+// ─── FRESHNESS BADGE ──────────────────────────────────────────────────────────
+const FRESHNESS_META = {
+  LIVE:    { color: '#22c55e', label: 'LIVE' },
+  DELAYED: { color: '#f59e0b', label: 'DELAYED' },
+  STALE:   { color: '#ef4444', label: 'STALE' },
+  ERROR:   { color: '#6b7280', label: 'ERROR' },
+};
+
 // ─── DYNAMIC RATES HOOK ────────────────────────────────────────────────────────
 function useDynamicRates() {
   const [data,      setData]      = useState(null);
+  const [pairs,     setPairs]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
 
@@ -302,6 +311,7 @@ function useDynamicRates() {
         setData(json.banks);
         setFetchedAt(json.timestamp);
       }
+      if (Array.isArray(json.pairs)) setPairs(json.pairs);
     } catch (e) {
       console.warn('[InterestRatePanel] API unavailable — using static data:', e.message);
     } finally {
@@ -311,7 +321,7 @@ function useDynamicRates() {
 
   useEffect(() => { load(); }, [load]);
 
-  return { data, loading, fetchedAt, reload: load };
+  return { data, pairs, loading, fetchedAt, reload: load };
 }
 
 // ─── MERGE STATIC + DYNAMIC ───────────────────────────────────────────────────
@@ -333,15 +343,22 @@ function mergeBank(staticBank, dynamicBanks) {
 
   return {
     ...staticBank,
-    current:  dyn.current,
-    previous: dyn.previous,
+    current:     dyn.current,
+    previous:    dyn.previous,
     signal: {
       ...staticBank.signal,
       label: dyn.signalLabel ?? staticBank.signal.label,
       color: signalColor,
     },
-    decisions: dyn.decisions?.length > 0 ? dyn.decisions : staticBank.decisions,
-    history:   mergedHistory,
+    decisions:   dyn.decisions?.length > 0 ? dyn.decisions : staticBank.decisions,
+    history:     mergedHistory,
+    stanceScore: dyn.stanceScore ?? 0,
+    stanceLabel: dyn.stanceLabel ?? 'Neutral',
+    changeBps:   dyn.changeBps   ?? 0,
+    freshness:   dyn.freshness   ?? 'LIVE',
+    rateType:    dyn.rateType    ?? 'single',
+    rateLow:     dyn.rateLow     != null ? dyn.rateLow  : dyn.current,
+    rateHigh:    dyn.rateHigh    != null ? dyn.rateHigh : dyn.current,
   };
 }
 
@@ -501,10 +518,13 @@ function RateChart({ history, color, darkMode }) {
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function InterestRatePanel({ darkMode, T, isMobile }) {
   const [selectedId, setSelectedId] = useState('FED');
-  const { data: dynamicRates, loading, fetchedAt, reload } = useDynamicRates();
+  const { data: dynamicRates, pairs, loading, fetchedAt, reload } = useDynamicRates();
 
   const staticBank = BANKS.find(b => b.id === selectedId) || BANKS[0];
   const bank = mergeBank(staticBank, dynamicRates);
+
+  // Freshness of the selected bank
+  const freshMeta  = FRESHNESS_META[bank.freshness ?? (dynamicRates ? 'LIVE' : 'ERROR')];
 
   const lastUpdated = fetchedAt
     ? new Date(fetchedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -534,11 +554,21 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 11, color: T.sub2, display: 'flex', alignItems: 'center', gap: 5 }}>
+            {/* Freshness badge (TAREA 0.2) */}
             <span style={{
-              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: dynamicRates ? '#22c55e' : '#6b7280',
-            }}/>
-            {dynamicRates ? 'En vivo' : 'Estático'}: {lastUpdated}
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 7px', borderRadius: 5,
+              background: freshMeta.color + '20',
+              border: `1px solid ${freshMeta.color}50`,
+              fontSize: 9, fontWeight: 800, color: freshMeta.color, letterSpacing: '0.08em',
+            }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%',
+                background: freshMeta.color,
+              }}/>
+              {freshMeta.label}
+            </span>
+            {lastUpdated}
           </span>
           <button
             onClick={reload}
@@ -718,6 +748,37 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
                 </div>
                 <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>{bank.signal.desc}</div>
               </div>
+              {/* Stance score (TAREA 1.1) — only shown when API data is available */}
+              {bank.stanceLabel && bank.stanceScore !== undefined && (
+                <div style={{
+                  padding: '8px 14px', borderRadius: 10,
+                  background: darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.025)',
+                  border: `1px solid ${T.border}`,
+                }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 3 }}>
+                    POSTURA
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{
+                      fontSize: 18, fontWeight: 800, fontFamily: 'monospace',
+                      color: bank.stanceScore > 0 ? '#ef4444' : bank.stanceScore < 0 ? '#22c55e' : T.sub,
+                    }}>
+                      {bank.stanceScore > 0 ? '+' : ''}{bank.stanceScore}
+                    </span>
+                    <span style={{ fontSize: 10, color: T.sub }}>/5</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: T.sub, marginTop: 2 }}>{bank.stanceLabel}</div>
+                  {bank.changeBps !== 0 && (
+                    <div style={{
+                      fontSize: 9, marginTop: 3,
+                      color: bank.changeBps > 0 ? '#ef4444' : '#22c55e',
+                      fontFamily: 'monospace',
+                    }}>
+                      {bank.changeBps > 0 ? '+' : ''}{bank.changeBps} pb
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -727,8 +788,34 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
             gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             borderBottom: `1px solid ${T.border}`,
           }}>
+            {/* ACTUAL tile — shows rate range for FED */}
+            <div style={{ padding: '16px 20px', borderRight: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 6 }}>
+                ACTUAL
+              </div>
+              {bank.rateType === 'range' && bank.rateLow != null && bank.rateHigh != null ? (
+                <>
+                  <div style={{
+                    fontSize: isMobile ? 20 : 26, fontWeight: 800, fontFamily: 'monospace',
+                    color: bank.signal.color, letterSpacing: '-0.5px', lineHeight: 1,
+                  }}>
+                    {bank.rateLow.toFixed(2)}–{bank.rateHigh.toFixed(2)}%
+                  </div>
+                  <div style={{ fontSize: 10, color: T.sub2, marginTop: 4, fontFamily: 'monospace' }}>
+                    mid {((bank.rateLow + bank.rateHigh) / 2).toFixed(3)}%
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  fontSize: isMobile ? 26 : 32, fontWeight: 800, fontFamily: 'monospace',
+                  color: bank.signal.color, letterSpacing: '-0.5px', lineHeight: 1,
+                }}>
+                  {bank.current.toFixed(2)}%
+                </div>
+              )}
+            </div>
+
             {[
-              { label: 'ACTUAL',    value: bank.current.toFixed(2) + '%', color: bank.signal.color, big: true },
               { label: 'ANTERIOR',  value: bank.previous.toFixed(2) + '%' },
               { label: 'CONSENSO',  value: bank.consensus.toFixed(2) + '%' },
               {
@@ -736,19 +823,17 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
                 value: (bank.surprise >= 0 ? '+' : '') + bank.surprise.toFixed(2) + '%',
                 color: surpriseColor,
               },
-            ].map(({ label, value, color, big }, i) => (
+            ].map(({ label, value, color }, i) => (
               <div key={label} style={{
                 padding: '16px 20px',
-                borderRight: i < 3 ? `1px solid ${T.border}` : 'none',
+                borderRight: i < 2 ? `1px solid ${T.border}` : 'none',
               }}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 6 }}>
                   {label}
                 </div>
                 <div style={{
-                  fontSize: big ? (isMobile ? 26 : 32) : (isMobile ? 18 : 22),
-                  fontWeight: 800, fontFamily: 'monospace',
-                  color: color || T.txt, letterSpacing: '-0.5px',
-                  lineHeight: 1,
+                  fontSize: isMobile ? 18 : 22, fontWeight: 800, fontFamily: 'monospace',
+                  color: color || T.txt, letterSpacing: '-0.5px', lineHeight: 1,
                 }}>
                   {value}
                 </div>
@@ -854,6 +939,143 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
           </div>
         </div>
       </div>
+
+      {/* ── CARRY DIFFERENTIALS PANEL (TAREA 1.2) ────────────────────────────── */}
+      {pairs.length > 0 && (
+        <div style={{
+          marginTop: 24,
+          background: T.card,
+          border: `1px solid ${T.border}`,
+          borderRadius: 14,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '14px 20px',
+            borderBottom: `1px solid ${T.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: T.txt }}>
+                Interest Rate Differentials
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: T.sub }}>
+                Carry direction por par — diferencial de tasas base vs quote (pb)
+              </p>
+            </div>
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: T.sub2,
+              letterSpacing: '0.08em', padding: '3px 8px',
+              border: `1px solid ${T.border}`, borderRadius: 5,
+            }}>
+              TAREA 1.2
+            </span>
+          </div>
+
+          {/* Grid header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile
+              ? '70px 80px 1fr 80px'
+              : '90px 90px 90px 120px 1fr 100px',
+            gap: 4, padding: '8px 20px',
+            borderBottom: `1px solid ${T.border}`,
+          }}>
+            {(isMobile
+              ? ['PAR','DIFF (pb)','CARRY','SCORE']
+              : ['PAR','BASE','QUOTE','DIFF (pb)','CARRY','SCORE']
+            ).map(h => (
+              <span key={h} style={{
+                fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em',
+              }}>{h}</span>
+            ))}
+          </div>
+
+          {/* Rows */}
+          {pairs.filter(p => p.rate_diff_bps != null).map((p, i) => {
+            const isPositive = p.carry_direction === 'long_base';
+            const isNegative = p.carry_direction === 'long_quote';
+            const diffColor  = isPositive ? '#22c55e' : isNegative ? '#ef4444' : T.sub;
+            const barPct     = Math.min(100, Math.abs(p.carry_score ?? 0) * 10);
+            return (
+              <div key={p.pair} style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile
+                  ? '70px 80px 1fr 80px'
+                  : '90px 90px 90px 120px 1fr 100px',
+                gap: 4, padding: '10px 20px',
+                borderBottom: i < pairs.length - 1 ? `1px solid ${T.border}` : 'none',
+                alignItems: 'center',
+              }}>
+                {/* Par */}
+                <span style={{
+                  fontSize: 12, fontWeight: 700, color: T.txt, fontFamily: 'monospace',
+                }}>{p.pair}</span>
+
+                {/* Base rate */}
+                {!isMobile && (
+                  <span style={{ fontSize: 11, color: T.sub, fontFamily: 'monospace' }}>
+                    {p.base_rate != null ? p.base_rate.toFixed(2) + '%' : '—'}
+                    <span style={{ fontSize: 9, color: T.sub2, marginLeft: 3 }}>({p.base_bank})</span>
+                  </span>
+                )}
+
+                {/* Quote rate */}
+                {!isMobile && (
+                  <span style={{ fontSize: 11, color: T.sub, fontFamily: 'monospace' }}>
+                    {p.quote_rate != null ? p.quote_rate.toFixed(2) + '%' : '—'}
+                    <span style={{ fontSize: 9, color: T.sub2, marginLeft: 3 }}>({p.quote_bank})</span>
+                  </span>
+                )}
+
+                {/* Differential in bps */}
+                <span style={{
+                  fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
+                  color: diffColor,
+                }}>
+                  {p.rate_diff_bps > 0 ? '+' : ''}{p.rate_diff_bps} pb
+                </span>
+
+                {/* Visual bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    flex: 1, height: 4, borderRadius: 2,
+                    background: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%', width: barPct + '%', borderRadius: 2,
+                      background: diffColor,
+                      transition: 'width 0.4s ease',
+                    }}/>
+                  </div>
+                  <span style={{ fontSize: 9, color: T.sub2, whiteSpace: 'nowrap', minWidth: 70 }}>
+                    {p.carry_direction === 'long_base'  ? `Long ${p.base_currency}`  :
+                     p.carry_direction === 'long_quote' ? `Long ${p.quote_currency}` : 'Neutral'}
+                  </span>
+                </div>
+
+                {/* Score */}
+                <span style={{
+                  fontSize: 12, fontWeight: 700, fontFamily: 'monospace',
+                  color: diffColor,
+                  textAlign: 'right',
+                }}>
+                  {p.carry_score > 0 ? '+' : ''}{p.carry_score?.toFixed(1)}
+                </span>
+              </div>
+            );
+          })}
+
+          <div style={{
+            padding: '10px 20px',
+            borderTop: `1px solid ${T.border}`,
+          }}>
+            <span style={{ fontSize: 9, color: T.sub2, fontStyle: 'italic' }}>
+              Score normalizado ±10 · Carry positivo = ventaja estructural de la divisa base · Fuente: FRED
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

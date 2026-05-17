@@ -405,3 +405,121 @@ export function deriveInputsFromPair(pairData) {
     dealersExtreme,
   };
 }
+
+// ─── TAREA 2.2 — Z-SCORE EXTREMES ────────────────────────────────────────────
+/**
+ * computeZScoreExtremes
+ *
+ * Normalises current net position against its 52-week history.
+ * Replaces raw contract counts with statistically meaningful context.
+ *
+ * Z > +2  → Extreme Long  (historically overbought — contrarian reversal risk)
+ * Z < -2  → Extreme Short (historically oversold  — contrarian reversal risk)
+ *
+ * @param {number}   currentNet   - Current week smartNet contracts
+ * @param {number[]} weeklyNets   - Array of last 52 weekly smartNet values (oldest first)
+ * @returns {{ zscore: number, percentile: number, state: string, label: string }}
+ */
+export function computeZScoreExtremes(currentNet, weeklyNets) {
+  const series = Array.isArray(weeklyNets)
+    ? weeklyNets.filter(n => typeof n === 'number' && !isNaN(n))
+    : [];
+
+  if (series.length < 4 || typeof currentNet !== 'number') {
+    return { zscore: 0, percentile: 50, state: 'NORMAL', label: 'Insufficient history' };
+  }
+
+  const n    = series.length;
+  const mean = series.reduce((s, v) => s + v, 0) / n;
+  const variance = series.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+  const std  = Math.sqrt(variance);
+
+  const zscore    = std > 0 ? parseFloat(((currentNet - mean) / std).toFixed(2)) : 0;
+  const below     = series.filter(v => v < currentNet).length;
+  const percentile = Math.round((below / n) * 100);
+
+  let state, label;
+  if (zscore > 2)       { state = 'EXTREME_LONG';  label = 'Extreme Long — Reversal Risk'; }
+  else if (zscore < -2) { state = 'EXTREME_SHORT'; label = 'Extreme Short — Reversal Risk'; }
+  else if (zscore > 1)  { state = 'ELEVATED_LONG'; label = 'Elevated Long Positioning'; }
+  else if (zscore < -1) { state = 'ELEVATED_SHORT';label = 'Elevated Short Positioning'; }
+  else                  { state = 'NORMAL';         label = 'Normal Positioning Range'; }
+
+  return { zscore, percentile, state, label };
+}
+
+// ─── TAREA 2.1 — COT DIVERGENCE ENGINE ───────────────────────────────────────
+/**
+ * detectCOTDivergence
+ *
+ * Institutional signal: detects when price direction and COT positioning
+ * change in opposite directions — a real accumulation / distribution signal.
+ *
+ * Divergence = sign(ΔPrice) ≠ sign(ΔCOT)
+ *
+ * Returns:
+ *   BULLISH_DIVERGENCE  — price down, institutions buying → Accumulation
+ *   BEARISH_DIVERGENCE  — price up,   institutions selling → Distribution
+ *   EXHAUSTION          — both aligned but Z-score extreme → Possible reversal
+ *   ALIGNED_BULLISH     — both up (no divergence, trend continuation)
+ *   ALIGNED_BEARISH     — both down (no divergence, trend continuation)
+ *   NEUTRAL             — inconclusive
+ *
+ * @param {Object} params
+ * @param {number}   params.priceChangePct    - % price change over lookback (positive = up)
+ * @param {number}   params.cotNetChange      - ΔCOT net contracts (positive = buying)
+ * @param {number}   [params.zscore]          - Optional z-score for exhaustion detection
+ * @param {number}   [params.threshold=0.1]   - Minimum absolute % price move to count
+ * @returns {{ state: string, label: string, reading: string, strength: number }}
+ */
+export function detectCOTDivergence({ priceChangePct, cotNetChange, zscore, threshold = 0.1 }) {
+  const priceFlat = Math.abs(priceChangePct ?? 0) < threshold;
+  const cotFlat   = Math.abs(cotNetChange ?? 0) < 500;  // < 500 contracts = noise
+
+  if (priceFlat && cotFlat) {
+    return { state: 'NEUTRAL', label: 'Sin divergencia', reading: 'Sin señal — movimiento insuficiente', strength: 0 };
+  }
+
+  const priceUp = (priceChangePct ?? 0) > 0;
+  const cotUp   = (cotNetChange   ?? 0) > 0;
+
+  // Check exhaustion only when both are aligned but positioning is extreme
+  if (priceUp === cotUp && typeof zscore === 'number' && Math.abs(zscore) > 2) {
+    return {
+      state: 'EXHAUSTION',
+      label: 'Agotamiento',
+      reading: 'Posible reversión — posicionamiento extremo + tendencia alineada',
+      strength: Math.min(1, Math.abs(zscore) / 3),
+    };
+  }
+
+  if (!priceUp && cotUp) {
+    const strength = Math.min(1, Math.abs(cotNetChange) / 15000);
+    return {
+      state: 'BULLISH_DIVERGENCE',
+      label: 'Divergencia Alcista',
+      reading: 'Acumulación institucional — smart money comprando contra la caída de precio',
+      strength,
+    };
+  }
+
+  if (priceUp && !cotUp) {
+    const strength = Math.min(1, Math.abs(cotNetChange) / 15000);
+    return {
+      state: 'BEARISH_DIVERGENCE',
+      label: 'Divergencia Bajista',
+      reading: 'Distribución institucional — smart money vendiendo contra la subida de precio',
+      strength,
+    };
+  }
+
+  // Aligned (no divergence)
+  return {
+    state: priceUp ? 'ALIGNED_BULLISH' : 'ALIGNED_BEARISH',
+    label: priceUp ? 'Alineado Alcista' : 'Alineado Bajista',
+    reading: priceUp
+      ? 'Precio y COT alineados al alza — tendencia institucional confirmada'
+      : 'Precio y COT alineados a la baja — tendencia institucional confirmada',
+    strength: 0.5,
+  };
+}

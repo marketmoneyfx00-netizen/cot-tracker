@@ -13,7 +13,7 @@
  * No state, no side effects — pure function.
  */
 
-import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
+import { calculateBiasScore, deriveInputsFromPair, computeZScoreExtremes, detectCOTDivergence } from '../cotBiasEngine.js';
 import { calculateExecutionScore }                  from '../intradayExecutionEngine.js';
 import { detectTradingOpportunityWithVerdict }      from '../utils/alertEngine.js';
 
@@ -115,7 +115,31 @@ export function buildBiasArray(fxPairs) {
     if (!p || p.pair.includes('Index')) return null;
     const inp  = deriveInputsFromPair(p);   if (!inp)  return null;
     const bias = calculateBiasScore(inp);   if (!bias) return null;
-    return { pair: p.pair, score: bias.score, state: derivePairMarketState(p), bias };
+
+    // Z-Score Extremes (TAREA 2.2)
+    const weeklyNets = (p.weeks || []).map(w => w.smartNet).filter(n => typeof n === 'number');
+    const currentNet = p.weeks?.[0]?.smartNet ?? 0;
+    const zscoreData = computeZScoreExtremes(currentNet, weeklyNets);
+
+    // COT Divergence (TAREA 2.1)
+    const week4Net       = p.weeks?.[3]?.smartNet ?? currentNet;
+    const priceChangePct = weeklyNets.length >= 4
+      ? ((currentNet - week4Net) / (Math.abs(week4Net) || 1)) * 100
+      : 0;
+    const divergence = detectCOTDivergence({
+      priceChangePct,
+      cotNetChange: inp.leveragedWeeklyChange,
+      zscore:       zscoreData.zscore,
+    });
+
+    return {
+      pair:      p.pair,
+      score:     bias.score,
+      state:     derivePairMarketState(p),
+      bias,
+      zscore:    zscoreData,
+      divergence,
+    };
   }).filter(Boolean);
 }
 
@@ -214,6 +238,10 @@ export function buildPairContext({
     biasScore:       pairBias?.score ?? 0,
     pairMarketState: pairBias?.state ?? 'compression',
     globalMarketState,
+
+    // Quantitative signals (TAREA 2.1 + 2.2)
+    zscoreExtremes: pairBias?.zscore    ?? null,
+    cotDivergence:  pairBias?.divergence ?? null,
 
     // Ideas
     pairIdeas,

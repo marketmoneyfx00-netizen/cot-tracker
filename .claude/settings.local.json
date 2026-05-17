@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\aleja\\\\OneDrive\\\\Escritorio\\\\cot-tracker\\\\.claude\\\\worktrees\\\\sharp-saha-bb6be6\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Head -30)",
+      "Bash(npm run *)",
+      "mcp__72a978a6-3340-4edc-a1ef-1239f98d8ee7__list_projects",
+      "mcp__72a978a6-3340-4edc-a1ef-1239f98d8ee7__apply_migration",
+      "mcp__72a978a6-3340-4edc-a1ef-1239f98d8ee7__execute_sql",
+      "Bash(git add *)"
+    ]
+  }
+}
