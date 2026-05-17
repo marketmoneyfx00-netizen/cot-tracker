@@ -152,16 +152,6 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, letterSpacing: '0.1em' }}>
-          CONTEXT OPPORTUNITIES
-        </span>
-        <span style={{ flex: 1, height: 1, background: T.border }} />
-        <span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.05em', fontWeight: 500 }}>
-          COT · STRUCTURAL CONTEXT · NOT ENTRY SIGNALS
-        </span>
-      </div>
-
       {/* Tactical state banner — shown when price pressure conflicts with structural bias */}
       {tacState && tacState.pressure !== 'insufficient' && (
         <div style={{
