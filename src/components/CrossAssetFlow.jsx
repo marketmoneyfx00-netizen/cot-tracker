@@ -160,9 +160,9 @@ function CrossAssetFlow({ combinedData, darkMode, T, isMobile, isPremium = true,
   const flowBias  = totalAbsNet > 0 ? Math.round((weightedBull / totalAbsNet) * 100) : 50;
   const flowColor = flowBias >= 55 ? "#22c55e" : flowBias <= 45 ? "#ef4444" : "#f59e0b";
 
-  const GROUP_LABELS = { fx:"FX & USD", index:"Índices", bonds:"Bonos EE.UU." };
-  const GROUP_ICONS  = { fx:"💱", index:"📈", bonds:"🏛️" };
-  const GROUP_COLS   = { fx:4, index:3, bonds:4 };
+  const GROUP_LABELS = { fx:"FX & USD", index:"Índices", bonds:"Bonos EE.UU.", commodities:"Materias Primas" };
+  const GROUP_ICONS  = { fx:"💱", index:"📈", bonds:"🏛️", commodities:"🥇" };
+  const GROUP_COLS   = { fx:4, index:3, bonds:4, commodities:4 };
 
   return (
     <div style={{
@@ -230,7 +230,7 @@ function CrossAssetFlow({ combinedData, darkMode, T, isMobile, isPremium = true,
       {/* ASSET GRID */}
       <div style={{padding: isMobile ? "12px" : "16px 20px", position:'relative'}}>
         <style>{"@keyframes cafFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}"}</style>
-        {["fx","index","bonds"].map((groupKey, groupIdx) => {
+        {["fx","index","bonds","commodities"].map((groupKey, groupIdx) => {
           const groupAssets = displayAssets.filter(a => a.group === groupKey);
           if (groupAssets.length === 0) return null;
           const cols = isMobile ? 2 : Math.min(groupAssets.length, GROUP_COLS[groupKey]||4);

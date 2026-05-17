@@ -106,6 +106,14 @@ export const CONTRACT_MAP_COMBINED = [
     label:   "Nikkei 225",
     emoji:   "🇯🇵",
   },
+  // ── COMMODITIES ──────────────────────────────────────────────────────────────
+  {
+    keys:    ["GOLD - COMMODITY EXCHANGE INC.", "GOLD - COMEX", "GOLD"],
+    pair:    "GOLD", asset: "GOLD", cat: "commodities", group: "commodities",
+    invert:  false,
+    label:   "Gold (COMEX)",
+    emoji:   "🥇",
+  },
   // ── BONDS ────────────────────────────────────────────────────────────────────
   {
     keys:    ["UST 10Y NOTE - CHICAGO BOARD", "ULTRA UST 10Y - CHICAGO BOARD"],
@@ -138,7 +146,7 @@ export const CONTRACT_MAP_COMBINED = [
 ];
 
 // Cross Asset Flow display config — which assets appear in the CAF module
-export const CROSS_ASSET_FLOW_ASSETS = ["EURUSD","DXY","SP500","NAS100","US10Y","US2Y","GBPUSD","USDJPY"];
+export const CROSS_ASSET_FLOW_ASSETS = ["EURUSD","DXY","SP500","NAS100","US10Y","US2Y","GBPUSD","USDJPY","GOLD"];
 
 // ─── REQUIRED COLUMNS FOR VALIDATION ─────────────────────────────────────────
 const REQUIRED_COLUMNS = [
@@ -199,6 +207,11 @@ export function detectCftcFileType(text) {
   const firstNewline = text.indexOf("\n");
   const headerLine   = firstNewline > -1 ? text.slice(0, firstNewline) : text.slice(0, 2000);
   const lower        = headerLine.toLowerCase();
+
+  // Disaggregated Futures: has m_money (Managed Money) and prod_merc columns
+  const hasDisaggCols = lower.includes("m_money_positions_long_all") ||
+                        lower.includes("prod_merc_positions_long_all");
+  if (hasDisaggCols) return "disaggregated";
 
   // Combined: has _all suffix columns AND FutOnly_or_Combined column
   const hasCombinedCols = lower.includes("lev_money_positions_long_all") &&
@@ -453,7 +466,7 @@ export function parseTiffCombined(text) {
   // ── BUILD CLEAN DATASET ────────────────────────────────────────────────────
   // Sort weeks descending (newest first), build clean records, no raw data kept
   const byAsset = {};
-  const byGroup = { fx: [], index: [], bonds: [] };
+  const byGroup = { fx: [], index: [], bonds: [], commodities: [] };
 
   let mostRecentDate = "";
 
@@ -589,4 +602,167 @@ function generateCombinedSignal(weeks) {
   }
   return { signal: "wait", strength: 0,
     reason: `Posicionamiento neutro sin sesgo definido [${sourceNote}]` };
+}
+
+// ─── DISAGGREGATED FUTURES PARSER ────────────────────────────────────────────
+/**
+ * Parses CFTC Disaggregated Futures & Options Combined report.
+ * Used to extract gold and other physical commodities.
+ *
+ * Column mapping to TFF-equivalent fields:
+ *   M_Money_Positions_Long_All  → levLong  (Managed Money ≈ Leveraged Money)
+ *   M_Money_Positions_Short_All → levShort
+ *   Prod_Merc_Positions_Long_All→ dealerLong (Producers/Merchants ≈ Commercial)
+ *   Other_Rept_Positions_Long_All→assetLong  (Other Reportables ≈ Asset Managers)
+ *
+ * @param {string} text Raw CSV text of Disaggregated report
+ * @returns Same shape as parseTiffCombined() — compatible with CrossAssetFlow
+ */
+export function parseDisaggregated(text) {
+  if (!text || typeof text !== "string") {
+    throw new Error("Archivo vacío o formato inválido.");
+  }
+
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) {
+    throw new Error("El archivo no contiene datos.");
+  }
+
+  const rawHeaders = parseCsvLine(lines[0]);
+  const headers    = rawHeaders.map(h => h.toLowerCase().trim());
+  const fi         = name => headers.findIndex(h => h.includes(name.toLowerCase()));
+
+  const iMrkt       = fi("market_and_exchange") !== -1 ? fi("market_and_exchange") : 0;
+  const iDateISO    = fi("report_date_as_yyyy");
+  const iDateYYMMDD = fi("as_of_date_in_form");
+  const iOI         = fi("open_interest_all");
+
+  // Disaggregated columns → mapped to TFF-equivalent fields
+  const iLevL    = fi("m_money_positions_long_all");
+  const iLevS    = fi("m_money_positions_short_all");
+  const iDealerL = fi("prod_merc_positions_long_all");
+  const iDealerS = fi("prod_merc_positions_short_all");
+  const iAssetL  = fi("other_rept_positions_long_all");
+  const iAssetS  = fi("other_rept_positions_short_all");
+  const iChgLevL = fi("change_in_m_money_long_all");
+  const iChgLevS = fi("change_in_m_money_short_all");
+
+  if (iLevL === -1 || iLevS === -1) {
+    throw new Error(
+      "No se encontraron columnas de Managed Money. " +
+      "Verifica que el archivo sea el Disaggregated Futures and Options Combined."
+    );
+  }
+
+  const rawByPair = {};
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+
+    const cols   = parseCsvLine(line);
+    const market = (cols[iMrkt] || "").toUpperCase().trim();
+    if (!market) continue;
+
+    const contract = matchCombinedContract(market);
+    if (!contract || contract.group !== "commodities") continue;
+
+    let isoDate = "";
+    if (iDateISO !== -1 && cols[iDateISO]) isoDate = parseIsoDate(cols[iDateISO]);
+    if (!isoDate && iDateYYMMDD !== -1 && cols[iDateYYMMDD]) isoDate = parseYYMMDD(cols[iDateYYMMDD]);
+    if (!isoDate) continue;
+
+    const rawRow = {
+      isoDate,
+      displayDate: isoDate,
+      openInterest: iOI !== -1 ? toInt(cols[iOI]) : 0,
+      dealerLong:   iDealerL !== -1 ? toInt(cols[iDealerL]) : 0,
+      dealerShort:  iDealerS !== -1 ? toInt(cols[iDealerS]) : 0,
+      assetLong:    iAssetL  !== -1 ? toInt(cols[iAssetL])  : 0,
+      assetShort:   iAssetS  !== -1 ? toInt(cols[iAssetS])  : 0,
+      levLong:      toInt(cols[iLevL]),
+      levShort:     toInt(cols[iLevS]),
+      levChgLong:   iChgLevL !== -1 ? toInt(cols[iChgLevL]) : 0,
+      levChgShort:  iChgLevS !== -1 ? toInt(cols[iChgLevS]) : 0,
+    };
+
+    if (rawRow.levLong === 0 && rawRow.levShort === 0) continue;
+
+    const key = contract.pair;
+    if (!rawByPair[key]) rawByPair[key] = { contract, rows: [] };
+    rawByPair[key].rows.push(rawRow);
+  }
+
+  if (Object.keys(rawByPair).length === 0) {
+    throw new Error("No se reconocieron activos de commodities en el archivo Disaggregated.");
+  }
+
+  const byAsset = {};
+  const byGroup = { fx: [], index: [], bonds: [], commodities: [] };
+  let mostRecentDate = "";
+
+  for (const [pair, { contract, rows }] of Object.entries(rawByPair)) {
+    rows.sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+    const weeks = rows.map(raw => ({
+      ...buildCombinedRecord(contract, raw),
+      source: "disaggregated",
+    })).filter(Boolean);
+    if (weeks.length === 0) continue;
+
+    const latest = weeks[0];
+    if (!mostRecentDate || latest.isoDate > mostRecentDate) mostRecentDate = latest.isoDate;
+
+    const signal   = generateCombinedSignal(weeks);
+    const assetData = {
+      pair,
+      asset:     contract.asset,
+      cat:       contract.cat,
+      group:     contract.group,
+      label:     contract.label,
+      emoji:     contract.emoji,
+      weeks,
+      latest,
+      signal,
+      weekCount: weeks.length,
+      source:    "disaggregated",
+    };
+
+    byAsset[contract.asset] = assetData;
+    byGroup[contract.group] = byGroup[contract.group] ?? [];
+    byGroup[contract.group].push(assetData);
+  }
+
+  return {
+    byAsset,
+    byGroup,
+    reportDate: mostRecentDate,
+    assetCount: Object.keys(byAsset).length,
+    source:     "disaggregated",
+  };
+}
+
+/**
+ * Merges two parsed datasets (e.g. TFF + Disaggregated) into one.
+ * Used when the user uploads both files.
+ */
+export function mergeCombinedData(base, incoming) {
+  if (!base) return incoming;
+  if (!incoming) return base;
+
+  const byAsset = { ...base.byAsset, ...incoming.byAsset };
+  const byGroup = {};
+  for (const g of ["fx", "index", "bonds", "commodities"]) {
+    byGroup[g] = [...(base.byGroup[g] ?? []), ...(incoming.byGroup[g] ?? [])];
+  }
+
+  const reportDate = base.reportDate > incoming.reportDate
+    ? base.reportDate : incoming.reportDate;
+
+  return {
+    byAsset,
+    byGroup,
+    reportDate,
+    assetCount: Object.keys(byAsset).length,
+    source: "merged",
+  };
 }

@@ -38,6 +38,8 @@ import { logout, updatePassword } from './lib/authService.js';
 import {
   detectCftcFileType,
   parseTiffCombined,
+  parseDisaggregated,
+  mergeCombinedData,
   CROSS_ASSET_FLOW_ASSETS,
 } from './parseTiffCombined.js';
 import { buildTheme, injectCSSVars } from './lib/theme.js';
@@ -4180,8 +4182,19 @@ function AppInner() {
   const handleFileCombined = useCallback((text, name) => {
     setErrorCombined(null);
     try {
-      // Guard: reject Futures Only files loaded in the wrong slot
       const fileType = detectCftcFileType(text);
+
+      // Disaggregated Futures (gold / commodities) — merge into existing data
+      if (fileType === "disaggregated") {
+        const disaggDataset = parseDisaggregated(text);
+        if (!disaggDataset || disaggDataset.assetCount === 0) {
+          throw new Error("No se encontraron activos de commodities en el archivo Disaggregated.");
+        }
+        setCombinedData(prev => mergeCombinedData(prev, disaggDataset));
+        setSourceCombined(prev => prev ? `${prev} + ${name}` : name);
+        return;
+      }
+
       if (fileType === "futures_only") {
         throw new Error(
           "Este archivo es Futures Only, no Combined. " +
@@ -4190,15 +4203,19 @@ function AppInner() {
       }
       if (fileType === "unknown") {
         throw new Error(
-          "Formato no reconocido. Asegúrate de usar el archivo " +
-          "TFF Futures and Options Combined del CFTC."
+          "Formato no reconocido. Acepta: TFF Futures+Options Combined o Disaggregated Futures Combined del CFTC."
         );
       }
+
+      // Standard TFF Combined
       const dataset = parseTiffCombined(text);
       if (!dataset || dataset.assetCount === 0) {
         throw new Error("No se encontraron activos reconocibles en el archivo Combined.");
       }
-      setCombinedData(dataset);
+      setCombinedData(prev => prev?.source === "disaggregated"
+        ? mergeCombinedData(dataset, prev)
+        : dataset
+      );
       setSourceCombined(name);
     } catch(e) { setErrorCombined(e.message); }
   }, []);
