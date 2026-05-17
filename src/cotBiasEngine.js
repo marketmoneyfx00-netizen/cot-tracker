@@ -24,13 +24,29 @@
 // ─── FACTOR 1 — LEVERAGED MONEY WEEKLY CHANGE ────────────────────────────────
 // Primary driver. Large institutional repositioning this week.
 // Input: data.leveragedWeeklyChange (integer, contract count delta)
+// V1: absolute thresholds (backward compat fallback)
 function scoreLeveragedFlow(change) {
   if (typeof change !== 'number' || isNaN(change)) return 0;
   if (change >= 10000)  return  2;
   if (change >= 3000)   return  1;
   if (change <= -10000) return -2;
   if (change <= -3000)  return -1;
-  return 0; // -3000 < change < 3000 → neutral
+  return 0;
+}
+
+// V2: z-score relative to pair's own historical weekly changes.
+// A 3K move in NZD (z=2.5) is far more significant than 3K in EUR (z=0.3).
+// Input: data.leveragedFlowZScore (float — computed in deriveInputsFromPair)
+function scoreLeveragedFlowZ(z) {
+  if (typeof z !== 'number' || isNaN(z)) return 0;
+  if (z >= 2.0)  return  2;
+  if (z >= 1.0)  return  1;
+  if (z <= -2.0) return -2;
+  if (z <= -1.0) return -1;
+  // Smooth gradient between ±0.5 and ±1.0 to avoid cliff edges
+  if (z > 0.5)  return  parseFloat((z - 0.5).toFixed(2));
+  if (z < -0.5) return  parseFloat((z + 0.5).toFixed(2));
+  return 0;
 }
 
 // ─── FACTOR 2 — PRICE VS POSITIONING DIVERGENCE ──────────────────────────────
@@ -51,21 +67,28 @@ function scoreDivergence(priceDir, posDir) {
 // ─── FACTOR 3 — HISTORICAL EXTREMITY (PERCENTILE) ────────────────────────────
 // Extreme positioning is a contrarian signal: overextended longs are fuel for selloffs.
 // Input: data.positionPercentile (0–100)
+// V2: smooth continuous function instead of binary step.
+// Eliminates the cliff between percentile 79 (0) and 81 (-1).
+// Output range preserved at [-1, +1] for V2_MAX_RAW compatibility.
 function scorePercentile(percentile) {
   if (typeof percentile !== 'number' || isNaN(percentile)) return 0;
-  if (percentile > 80) return -1; // historically long → contrarian bearish
-  if (percentile < 20) return  1; // historically short → contrarian bullish
-  return 0;
+  // Extremes keep full weight; gradient tapers smoothly through the middle.
+  if (percentile >= 85) return -1;
+  if (percentile <= 15) return  1;
+  // Linear gradient: 85 → -1.0 ... 50 → 0 ... 15 → +1.0
+  return parseFloat(Math.max(-1, Math.min(1, -(percentile - 50) / 35)).toFixed(2));
 }
 
 // ─── FACTOR 4 — ASSET MANAGERS CONFIRMATION ──────────────────────────────────
 // Asset managers are slower money but confirm trend when aligned with Leveraged.
 // Input: data.assetManagersChange (integer, delta contracts)
+// V2: magnitude-aware. 100K AM move ≠ 1K AM move.
+// Normalized at 25K contracts = full ±1 score; scales linearly below.
 function scoreAssetManagers(change) {
   if (typeof change !== 'number' || isNaN(change)) return 0;
-  if (change > 0) return  1;
-  if (change < 0) return -1;
-  return 0;
+  if (change === 0) return 0;
+  const magnitude = Math.min(1, Math.abs(change) / 25000);
+  return parseFloat((Math.sign(change) * magnitude).toFixed(2));
 }
 
 // ─── FACTOR 5 — DEALERS EXTREME FILTER ───────────────────────────────────────
@@ -176,7 +199,10 @@ export function calculateInstitutionalBiasV2(data = {}) {
   if (!data) return calculateBiasScore(null);
 
   try {
-    const leveragedFlow   = scoreLeveragedFlow(data.leveragedWeeklyChange);
+    // Prefer z-score relative flow when available (market-size-aware)
+    const leveragedFlow   = data.leveragedFlowZScore != null
+      ? scoreLeveragedFlowZ(data.leveragedFlowZScore)
+      : scoreLeveragedFlow(data.leveragedWeeklyChange);
     const divergence      = scoreDivergence(data.priceDirection, data.positioningDirection);
     const historicalEx    = scorePercentile(data.positionPercentile);
     const assetManagers   = scoreAssetManagers(data.assetManagersChange);
@@ -325,10 +351,12 @@ export function calculateBiasScore(data = {}) {
  * Helper to compute bias engine inputs from the native COT Tracker
  * pair object (built by buildProcessedRow + pairsData structure in App.jsx).
  *
- * @param {Object} pairData  - from pairsData: { latest, weeks, signal, pair }
- * @returns {Object}         - ready-to-pass to calculateBiasScore()
+ * @param {Object} pairData          - from pairsData: { latest, weeks, signal, pair }
+ * @param {number|null} realPrice4W  - Optional: real 4-week price % change (from candleMap).
+ *                                     When provided, replaces the COT-proxy price direction.
+ * @returns {Object}                 - ready-to-pass to calculateBiasScore()
  */
-export function deriveInputsFromPair(pairData) {
+export function deriveInputsFromPair(pairData, realPrice4W = null) {
   if (!pairData || !pairData.latest || !pairData.weeks) return null;
 
   const { latest, weeks } = pairData;
@@ -339,22 +367,40 @@ export function deriveInputsFromPair(pairData) {
     ? (latest.smartNet - prev.smartNet)
     : 0;
 
+  // Factor 1 V2 — Z-score of weekly change relative to pair's own history.
+  // Normalises flow significance by market size: 3K in NZD ≠ 3K in EUR.
+  const leveragedFlowZScore = (() => {
+    const changes = [];
+    for (let i = 1; i < weeks.length; i++) {
+      const c = weeks[i - 1], p = weeks[i];
+      if (c.smartNet != null && p.smartNet != null) changes.push(c.smartNet - p.smartNet);
+    }
+    if (changes.length < 4) return null;
+    const mean = changes.reduce((s, v) => s + v, 0) / changes.length;
+    const variance = changes.reduce((s, v) => s + (v - mean) ** 2, 0) / changes.length;
+    const std = Math.sqrt(variance);
+    if (std < 1) return null;
+    return parseFloat(((leveragedWeeklyChange - mean) / std).toFixed(2));
+  })();
+
   // Factor 2 — Price vs Positioning divergence
-  // priceDirection: 4-week net change in smartNet (longer lookback than the 1-week
-  //   leveragedWeeklyChange used for positioningDirection). Using a different
-  //   window breaks the tautology: the 4-week trend can diverge from the 1-week flow.
-  //   True price data (from priceService) should be injected here when available.
-  // positioningDirection: derived from the immediate weekly change
+  // priceDirection: prefer injected real price return; fall back to COT 4-week proxy.
+  // positioningDirection: derived from the immediate weekly change (COT-native, correct).
   const priceDirection = (() => {
+    // Source 1: real 4-week price % change injected from candleMap (best signal)
+    if (typeof realPrice4W === 'number' && !isNaN(realPrice4W)) {
+      const threshold = 0.3; // ignore sub-0.3% moves as noise
+      if (realPrice4W > threshold)  return 'up';
+      if (realPrice4W < -threshold) return 'down';
+      return null;
+    }
+    // Source 2: 4-week COT smartNet change as HTF proxy (fallback — not ideal)
     if (!prev) return null;
-    // Use 4-week smoothed direction (week 0 vs week 3) as HTF price proxy.
-    // This is independent from the 1-week leveragedWeeklyChange used below.
     const week3 = weeks[3] ?? null;
     if (latest.smartNet != null && week3?.smartNet != null) {
-      const fourWeekChange = latest.smartNet - week3.smartNet;
-      return fourWeekChange > 0 ? 'up' : fourWeekChange < 0 ? 'down' : null;
+      const d = latest.smartNet - week3.smartNet;
+      return d > 0 ? 'up' : d < 0 ? 'down' : null;
     }
-    // Fallback: use 2-week window if 4-week not available
     if (latest.smartNet != null && prev.smartNet != null) {
       return latest.smartNet > prev.smartNet ? 'up'
            : latest.smartNet < prev.smartNet ? 'down'
@@ -398,6 +444,7 @@ export function deriveInputsFromPair(pairData) {
 
   return {
     leveragedWeeklyChange,
+    leveragedFlowZScore,
     priceDirection,
     positioningDirection,
     positionPercentile,

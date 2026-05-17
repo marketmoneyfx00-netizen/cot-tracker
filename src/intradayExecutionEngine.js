@@ -125,14 +125,36 @@ function scoreMacroRisk(events, biasDirection, riskScore) {
 }
 
 // ─── FACTOR 3 — FEAR / GREED (15 pts max) ────────────────────────────────────
-function scoreFearGreed(fg) {
+// Contrarian logic: extreme sentiment AGAINST the institutional thesis is the
+// best execution context (fear = opportunity for bulls, greed = opportunity for bears).
+// Neutral bias → prefer calm markets (original distance-from-50 logic).
+function scoreFearGreed(fg, biasDirection = 'neutral') {
   if (typeof fg !== 'number' || isNaN(fg)) return 8;
+
+  if (biasDirection === 'bullish') {
+    // Extreme fear = market panic = best long entry context
+    if (fg <= 20) return 15;
+    if (fg <= 35) return 12;
+    if (fg <= 50) return 9;
+    if (fg <= 65) return 6;
+    return 3; // extreme greed = crowded longs = dangerous
+  }
+
+  if (biasDirection === 'bearish') {
+    // Extreme greed = market euphoria = best short entry context
+    if (fg >= 80) return 15;
+    if (fg >= 65) return 12;
+    if (fg >= 50) return 9;
+    if (fg >= 35) return 6;
+    return 3; // extreme fear = crowded shorts = dangerous
+  }
+
+  // Neutral bias: prefer calm, mid-range markets
   const dist = Math.abs(fg - 50);
-  if (dist <= 10) return 15;
-  if (dist <= 20) return 12;
-  if (dist <= 30) return 8;
-  if (dist <= 40) return 4;
-  return 2;
+  if (dist <= 10) return 12;
+  if (dist <= 20) return 9;
+  if (dist <= 30) return 6;
+  return 4;
 }
 
 // ─── FACTOR 4 — VOLATILITY (15 pts max) ──────────────────────────────────────
@@ -199,6 +221,7 @@ export function getBiasAlignment(biasDirection) {
  * @param {number|string} params.vix             - volatility estimate
  * @param {number}        params.highCount       - high-impact events count today
  * @param {number}        params.midCount        - medium-impact events count today
+ * @param {number|null}   [params.carryScore]    - carry differential from /api/rates (±10 scale)
  *
  * @returns {Object} — same shape as before: { score, permission, biasAlignment,
  *                     macroRisk, volatilityState, breakdown }
@@ -215,16 +238,28 @@ export function calculateExecutionScore(params = {}) {
     vix           = 18,
     highCount     = 0,
     midCount      = 0,
+    carryScore    = null,
   } = params;
 
   const htfBiasPoints    = scoreHTFBias(biasScore);
   const macroRiskPoints  = scoreMacroRisk(events, biasDirection, riskScore);
-  const fearGreedPoints  = scoreFearGreed(fg);
+  const fearGreedPoints  = scoreFearGreed(fg, biasDirection);
   const volatilityPoints = scoreVolatility(vix);
   const calSentPoints    = scoreCalendarSentiment(highCount, midCount);
 
+  // Carry alignment modifier (±5) — applied after base sum, capped at 100.
+  // Aligned carry = yield differential confirms directional thesis = +5 pts.
+  // Opposed carry = cost to hold position diverges from thesis = -5 pts.
+  let carryMod = 0;
+  if (typeof carryScore === 'number' && !isNaN(carryScore) && biasDirection !== 'neutral') {
+    const aligned = (biasDirection === 'bullish' && carryScore > 0) ||
+                    (biasDirection === 'bearish' && carryScore < 0);
+    if (aligned)            carryMod =  5;
+    else if (carryScore !== 0) carryMod = -5;
+  }
+
   const rawTotal = htfBiasPoints + macroRiskPoints + fearGreedPoints + volatilityPoints + calSentPoints;
-  const score    = Math.max(0, Math.min(100, rawTotal));
+  const score    = Math.max(0, Math.min(100, rawTotal + carryMod));
 
   return {
     score,
@@ -238,6 +273,7 @@ export function calculateExecutionScore(params = {}) {
       fearGreed:     { points: fearGreedPoints,    weight: '15%', max: 15 },
       volatility:    { points: volatilityPoints,   weight: '15%', max: 15 },
       calSentiment:  { points: calSentPoints,      weight: '10%', max: 10 },
+      carry:         { points: carryMod,           weight: 'modifier', max: 5 },
     },
   };
 }

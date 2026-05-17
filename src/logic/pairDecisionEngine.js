@@ -16,6 +16,7 @@
 import { calculateBiasScore, deriveInputsFromPair, computeZScoreExtremes, detectCOTDivergence } from '../cotBiasEngine.js';
 import { calculateExecutionScore }                  from '../intradayExecutionEngine.js';
 import { detectTradingOpportunityWithVerdict }      from '../utils/alertEngine.js';
+import { computeConfluenceScore }                   from '../confluenceEngine.js';
 
 // ─── FINAL DECISION ───────────────────────────────────────────────────────────
 // Single source of truth for execution permission.
@@ -108,37 +109,120 @@ export function deriveGlobalMarketState(biasArr) {
   return 'mixed';
 }
 
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+// Real 4-week price % change from 4H candle array (oldest→newest).
+// Returns null when insufficient candles or price data is missing.
+function computeRealPrice4W(candles) {
+  if (!Array.isArray(candles) || candles.length < 10) return null;
+  const oldest = candles[0]?.close;
+  const newest  = candles[candles.length - 1]?.close;
+  if (!oldest || !newest || oldest <= 0) return null;
+  return parseFloat(((newest - oldest) / oldest * 100).toFixed(4));
+}
+
+// Macro confidence multiplier for the V2 bias engine.
+// Start at 1.0; apply a mild boost/penalty if macro and carry align/conflict.
+// Clamped [0.5, 1.0] so we never zero-out the institutional bias score.
+function computePairMacroConfidence(pair, biasDirection, macroSignal, carryScore) {
+  let conf = 1.0;
+
+  if (macroSignal?.bias && typeof macroSignal.confidence === 'number' && macroSignal.confidence >= 5) {
+    const usdIsBase   = (pair || '').startsWith('USD/');
+    const usdStrong   = macroSignal.bias === 'USD_STRONG';
+    const expectedDir = usdStrong
+      ? (usdIsBase ? 'bullish' : 'bearish')
+      : (usdIsBase ? 'bearish' : 'bullish');
+    const macroConf   = macroSignal.confidence / 10; // 0-1
+    if (expectedDir === biasDirection && biasDirection !== 'neutral') {
+      conf = Math.min(1.0, conf + macroConf * 0.1);
+    } else if (biasDirection !== 'neutral') {
+      conf = Math.max(0.5, conf - macroConf * 0.15);
+    }
+  }
+
+  if (typeof carryScore === 'number' && !isNaN(carryScore) && biasDirection !== 'neutral') {
+    const aligned = (biasDirection === 'bullish' && carryScore > 0) ||
+                    (biasDirection === 'bearish' && carryScore < 0);
+    if (aligned)              conf = Math.min(1.0, conf + 0.05);
+    else if (carryScore !== 0) conf = Math.max(0.5, conf - 0.08);
+  }
+
+  return parseFloat(conf.toFixed(2));
+}
+
 // ─── BIAS ARRAY ───────────────────────────────────────────────────────────────
-// Pre-compute per-pair bias + state for all fxPairs.
-export function buildBiasArray(fxPairs) {
+/**
+ * Pre-compute per-pair bias + state for all fxPairs.
+ *
+ * @param {Array}  fxPairs   — from App.jsx pairsData
+ * @param {Object} [opts]
+ * @param {Object} [opts.candleMap]   — { 'EUR/USD': [{open,high,low,close},...] }
+ * @param {Object} [opts.ratesData]   — from /api/rates: { pairs: [{pair, carry_score, ...}] }
+ * @param {Object} [opts.macroSignal] — from /api/macro: { bias, confidence }
+ */
+export function buildBiasArray(fxPairs, { candleMap = {}, ratesData = null, macroSignal = null } = {}) {
+  const pairsRates = ratesData?.pairs ?? [];
+
   return (fxPairs || []).map(p => {
     if (!p || p.pair.includes('Index')) return null;
-    const inp  = deriveInputsFromPair(p);   if (!inp)  return null;
-    const bias = calculateBiasScore(inp);   if (!bias) return null;
 
-    // Z-Score Extremes (TAREA 2.2)
+    // Real 4-week price % change from candleMap (eliminates COT-as-price tautology)
+    const realPrice4W = computeRealPrice4W(candleMap?.[p.pair]);
+
+    const inp = deriveInputsFromPair(p, realPrice4W);
+    if (!inp) return null;
+
+    // Carry data for this pair
+    const pairRates  = pairsRates.find(r => r.pair === p.pair) ?? null;
+    const carryScore = pairRates?.carry_score ?? null;
+    const stanceScore = pairRates?.stanceScore ?? null;
+
+    // macroConfidence: dampen/amplify V2 bias based on macro + carry alignment
+    const biasDir = inp.leveragedWeeklyChange > 0 ? 'bullish'
+      : inp.leveragedWeeklyChange < 0 ? 'bearish' : 'neutral';
+    const macroConf = computePairMacroConfidence(p.pair, biasDir, macroSignal, carryScore);
+
+    const bias = calculateBiasScore({ ...inp, macroConfidence: macroConf });
+    if (!bias) return null;
+
+    // Z-Score Extremes
     const weeklyNets = (p.weeks || []).map(w => w.smartNet).filter(n => typeof n === 'number');
     const currentNet = p.weeks?.[0]?.smartNet ?? 0;
     const zscoreData = computeZScoreExtremes(currentNet, weeklyNets);
 
-    // COT Divergence (TAREA 2.1)
+    // COT Divergence — use real price change when available
     const week4Net       = p.weeks?.[3]?.smartNet ?? currentNet;
-    const priceChangePct = weeklyNets.length >= 4
+    const cotPriceChange = realPrice4W ?? (weeklyNets.length >= 4
       ? ((currentNet - week4Net) / (Math.abs(week4Net) || 1)) * 100
-      : 0;
+      : 0);
     const divergence = detectCOTDivergence({
-      priceChangePct,
-      cotNetChange: inp.leveragedWeeklyChange,
-      zscore:       zscoreData.zscore,
+      priceChangePct: cotPriceChange,
+      cotNetChange:   inp.leveragedWeeklyChange,
+      zscore:         zscoreData.zscore,
+    });
+
+    // Confluence Score — how many independent signals agree
+    const confluence = computeConfluenceScore({
+      biasScore:     bias.score,
+      biasDirection: bias.direction,
+      carryScore,
+      macroSignal,
+      pair:          p.pair,
+      stanceScore,
+      zScore:        zscoreData.zscore,
     });
 
     return {
-      pair:      p.pair,
-      score:     bias.score,
-      state:     derivePairMarketState(p),
+      pair:            p.pair,
+      score:           bias.score,
+      state:           derivePairMarketState(p),
       bias,
-      zscore:    zscoreData,
+      zscore:          zscoreData,
       divergence,
+      confluence,
+      carryScore,
+      macroConfidence: macroConf,
     };
   }).filter(Boolean);
 }
@@ -169,7 +253,7 @@ export function buildPairContext({
     || [...biasArr].sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0]
     || null;
 
-  // 2. Intraday score for this pair
+  // 2. Intraday score for this pair (carry alignment factor included)
   const intradayResult = pairBias ? calculateExecutionScore({
     biasScore:     pairBias.score,
     biasDirection: pairBias.score > 0 ? 'bullish' : pairBias.score < 0 ? 'bearish' : 'neutral',
@@ -178,6 +262,7 @@ export function buildPairContext({
     vix:           sentimentData?.vix ?? 18,
     highCount:     sentimentData?.highCount ?? 0,
     midCount:      sentimentData?.midCount ?? 0,
+    carryScore:    pairBias.carryScore ?? null,
   }) : null;
   const intradayScore = intradayResult?.score ?? 100;
 

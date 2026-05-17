@@ -22,6 +22,8 @@ import { startPricePolling, stopPricePolling } from './services/priceService.js'
 import { startMultiPricePolling, stopMultiPricePolling } from './services/multiPriceService.js';
 import { useAllPairCandles } from './hooks/useAllPairCandles.js';
 import { useLivePrices }     from './hooks/useLivePrices.js';
+import { useMacroSignal }    from './hooks/useMacroSignal.js';
+import { useRatesData }      from './hooks/useRatesData.js';
 import SyncStatus from './components/SyncStatus.jsx';
 import CrossAssetFlow from './components/CrossAssetFlow.jsx';
 import ContextSummary from './components/ContextSummary.jsx';
@@ -4025,7 +4027,10 @@ function AppInner() {
   const livePrices = useLivePrices();
 
   // ── 4H historical candles for all pairs (tactical momentum context) ──────
-  const candleMap = useAllPairCandles();
+  const candleMap    = useAllPairCandles();
+  // ── Macro signal + rates data (confluence + macroConfidence wiring) ────────
+  const macroSignal  = useMacroSignal();
+  const ratesData    = useRatesData();
 
   // ── Legacy 1-min candles for TradeReadinessChecklist backward compat ─────
   const liveCandles = usePriceStore(20);
@@ -4259,7 +4264,10 @@ function AppInner() {
 
   // ── PAIR DECISION ENGINE — placed here: after fxPairs, before early returns ──
   // All useMemo hooks that depend on fxPairs MUST be declared after it to avoid TDZ.
-  const biasArr = useMemo(() => buildBiasArray(fxPairs), [fxPairs]);
+  const biasArr = useMemo(
+    () => buildBiasArray(fxPairs, { candleMap, ratesData, macroSignal }),
+    [fxPairs, candleMap, ratesData, macroSignal],
+  );
 
   // ── PAIR-SPECIFIC CURRENCY MAP ─────────────────────────────────────────────
   // Maps each tradeable pair to the currencies whose macro events are relevant.
@@ -4841,7 +4849,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={null}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal}/>
             </div>
           )}
 

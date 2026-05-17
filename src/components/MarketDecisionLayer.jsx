@@ -168,10 +168,11 @@ function MarketDecisionLayer({
         gap: isMobile ? 8 : 12,
       }}>
         {sorted.map(({ pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative }) => {
-          const biasColor  = bias.score > 0 ? '#22c55e' : bias.score < 0 ? '#ef4444' : '#6b7280';
+          const biasColor     = bias.score > 0 ? '#22c55e' : bias.score < 0 ? '#ef4444' : '#6b7280';
           // Key visual rule: when conflict present, card border uses decay color (amber/orange)
-          const cardBorder = decay.color;
-          const execCfg    = EXECUTION_READINESS_CFG[execReadiness] ?? EXECUTION_READINESS_CFG.await_confirmation;
+          const cardBorder    = decay.color;
+          const execCfg       = EXECUTION_READINESS_CFG[execReadiness] ?? EXECUTION_READINESS_CFG.await_confirmation;
+          const confluenceData = biasArr.find(r => r.pair === pair)?.confluence ?? null;
 
           // Conflict warning: show when levels are weak or structural_conflict
           const showConflictBanner = decay.conflictLevel === 'moderate' || decay.conflictLevel === 'severe';
@@ -257,6 +258,27 @@ function MarketDecisionLayer({
                   </div>
                 </div>
               </div>
+
+              {/* Confluence strip — multi-factor signal agreement */}
+              {confluenceData && confluenceData.confluenceScore > 0 && (
+                <div style={{
+                  marginBottom: 6, padding: '5px 10px', borderRadius: 7,
+                  background: `${confluenceData.color}0d`,
+                  border: `1px solid ${confluenceData.color}22`,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: confluenceData.color, letterSpacing: '0.07em' }}>
+                    CONFLUENCE
+                  </span>
+                  <div style={{ flex: 1, height: 3, background: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${confluenceData.confluenceScore}%`, height: '100%', background: confluenceData.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
+                  </div>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: confluenceData.color, fontFamily: 'monospace', minWidth: 24, textAlign: 'right' }}>
+                    {confluenceData.confluenceScore}
+                  </span>
+                  <span style={{ fontSize: 8, color: T.sub2 }}>{confluenceData.label}</span>
+                </div>
+              )}
 
               {/* Conflict warning — shown when decay is weak/structural */}
               {showConflictBanner && hasRealTac && (
