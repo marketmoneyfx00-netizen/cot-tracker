@@ -114,6 +114,20 @@ export const CONTRACT_MAP_COMBINED = [
     label:   "Gold (COMEX)",
     emoji:   "🥇",
   },
+  {
+    keys:    ["SILVER - COMMODITY EXCHANGE INC.", "SILVER - COMEX", "SILVER"],
+    pair:    "SILVER", asset: "SILVER", cat: "commodities", group: "commodities",
+    invert:  false,
+    label:   "Silver (COMEX)",
+    emoji:   "🥈",
+  },
+  {
+    keys:    ["CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE", "CRUDE OIL - NEW YORK MERCANTILE", "WTI CRUDE OIL", "CRUDE OIL"],
+    pair:    "WTI", asset: "WTI", cat: "commodities", group: "commodities",
+    invert:  false,
+    label:   "Crude Oil WTI (NYMEX)",
+    emoji:   "🛢️",
+  },
   // ── BONDS ────────────────────────────────────────────────────────────────────
   {
     keys:    ["UST 10Y NOTE - CHICAGO BOARD", "ULTRA UST 10Y - CHICAGO BOARD"],
@@ -146,7 +160,7 @@ export const CONTRACT_MAP_COMBINED = [
 ];
 
 // Cross Asset Flow display config — which assets appear in the CAF module
-export const CROSS_ASSET_FLOW_ASSETS = ["EURUSD","DXY","SP500","NAS100","US10Y","US2Y","GBPUSD","USDJPY","GOLD"];
+export const CROSS_ASSET_FLOW_ASSETS = ["EURUSD","DXY","SP500","NAS100","US10Y","US2Y","GBPUSD","USDJPY","GOLD","SILVER","WTI"];
 
 // ─── REQUIRED COLUMNS FOR VALIDATION ─────────────────────────────────────────
 const REQUIRED_COLUMNS = [
