@@ -210,7 +210,7 @@ export function buildBiasArray(fxPairs, { candleMap = {}, ratesData = null, macr
 
     // COT Divergence — use real price change when available
     const week4Net       = p.weeks?.[3]?.smartNet ?? currentNet;
-    const cotPriceChange = realPrice4W ?? (weeklyNets.length >= 4
+    const cotPriceChange = realPriceChangePct ?? (weeklyNets.length >= 4
       ? ((currentNet - week4Net) / (Math.abs(week4Net) || 1)) * 100
       : 0);
     const divergence = detectCOTDivergence({
