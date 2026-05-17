@@ -19,6 +19,9 @@ import { calculateBiasScore, deriveInputsFromPair } from './cotBiasEngine.js';
 import IntradayExecutionCard from './components/IntradayExecutionCard.jsx';
 import TooltipInfo from './components/TooltipInfo.jsx';
 import { startPricePolling, stopPricePolling } from './services/priceService.js';
+import { startMultiPricePolling, stopMultiPricePolling } from './services/multiPriceService.js';
+import { useAllPairCandles } from './hooks/useAllPairCandles.js';
+import { useLivePrices }     from './hooks/useLivePrices.js';
 import SyncStatus from './components/SyncStatus.jsx';
 import CrossAssetFlow from './components/CrossAssetFlow.jsx';
 import ContextSummary from './components/ContextSummary.jsx';
@@ -3996,28 +3999,55 @@ function AppInner() {
   // Sync CSS custom properties with current theme
   useEffect(() => { injectCSSVars(darkMode); }, [darkMode]);
 
-  // ── Precio real de mercado para scoreT ──────────────────────────────────────
-  // Arranca SOLO cuando el perfil está cargado — evita conflictos de auth.
+  // ── Precio real de mercado — arranca SOLO cuando el perfil está cargado ────
   const priceStartedRef = useRef(false);
 
   useEffect(() => {
     if (!profile) return;
     if (priceStartedRef.current) return;
-
     priceStartedRef.current = true;
+
+    // Legacy single-pair polling kept for TradeReadinessChecklist (uses usePriceStore)
     startPricePolling('EUR/USD');
+    // Multi-pair polling for live prices on all FX pairs
+    startMultiPricePolling();
 
     return () => {
       stopPricePolling();
+      stopMultiPricePolling();
       priceStartedRef.current = false;
     };
   }, [profile]);
 
-  // ── Live price candles (20 min buffer for tactical momentum engine) ──────
+  // ── Live prices for all pairs (spot, updated every ~15s) ────────────────
+  const livePrices = useLivePrices();
+
+  // ── 4H historical candles for all pairs (tactical momentum context) ──────
+  const candleMap = useAllPairCandles();
+
+  // ── Legacy 1-min candles for TradeReadinessChecklist backward compat ─────
   const liveCandles = usePriceStore(20);
 
-  // ── Tactical momentum from live price candles (selected pair) ────────────
-  const tacState = useMemo(() => computeTacticalMomentum(liveCandles), [liveCandles]);
+  // ── Tactical momentum per pair (using 4H candles, fallback to 1-min) ─────
+  const tacStateMap = useMemo(() => {
+    const map = {};
+    for (const pair of Object.keys({ ...candleMap, 'EUR/USD': true })) {
+      const candles = candleMap[pair];
+      if (candles?.length >= 5) {
+        map[pair] = computeTacticalMomentum(candles);
+      }
+    }
+    // Fallback for selected pair: use live 1-min candles if no 4H yet
+    if (!map[selectedPair] || map[selectedPair]?.pressure === 'insufficient') {
+      if (liveCandles?.length >= 5) {
+        map[selectedPair] = computeTacticalMomentum(liveCandles);
+      }
+    }
+    return map;
+  }, [candleMap, liveCandles, selectedPair]);
+
+  // Backward-compat alias for components that still use single tacState
+  const tacState = tacStateMap[selectedPair] ?? null;
 
   // ── Shared calendar events for TradeReadinessChecklist ──────────────────
   const [sharedEvents, setSharedEvents] = useState([]);
@@ -4783,7 +4813,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} selectedPair={selectedPair}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair}/>
             </div>
           )}
 

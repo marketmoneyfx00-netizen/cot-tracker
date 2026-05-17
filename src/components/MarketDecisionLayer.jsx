@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import TooltipInfo from "./TooltipInfo.jsx";
 import { calculateBiasScore, deriveInputsFromPair } from "../cotBiasEngine.js";
+import { useLivePrices } from "../hooks/useLivePrices.js";
 
 // ─── Confluence config ───────────────────────────────────────────────────────
 const CONFLUENCE_CFG = {
@@ -73,8 +74,9 @@ function buildPairConfluence(biasScore, tacSignal, tacStrength) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET DECISION LAYER — Premium interpretation card
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, selectedPair }) {
+function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, tacStateMap, selectedPair }) {
   if (!fxPairs || fxPairs.length===0) return null;
+  const livePrices = useLivePrices();
 
   const allowExecution  = finalDecision?.allowExecution ?? true;
   const isMacroBlocked  = finalDecision?.isMacroBlocked  ?? false;
@@ -199,9 +201,17 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
             }}>
               {/* Pair + confluence badge */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <span style={{fontSize:16,fontWeight:800,color:T.txt,fontFamily:"monospace",letterSpacing:"0.03em"}}>
-                  {pair}
-                </span>
+                <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                  <span style={{fontSize:16,fontWeight:800,color:T.txt,fontFamily:"monospace",letterSpacing:"0.03em"}}>
+                    {pair}
+                  </span>
+                  {livePrices[pair]?.price && (
+                    <span style={{fontSize:10,fontWeight:600,color:T.sub,fontFamily:"monospace",letterSpacing:"0.02em"}}>
+                      {livePrices[pair].price.toFixed(pair.includes('JPY') ? 3 : 5)}
+                      <span style={{fontSize:8,color:T.sub2,marginLeft:4,letterSpacing:"0.04em"}}>LIVE</span>
+                    </span>
+                  )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   {!allowExecution && (
                     <span style={{
@@ -225,10 +235,11 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
 
               {/* Macro + Tactical row */}
               {(() => {
-                const isSelected = pair === selectedPair;
-                const hasRealTac = isSelected && tacState && tacState.pressure !== 'insufficient';
+                // Use per-pair tacState from tacStateMap if available, else fall back to selectedPair tacState
+                const pairTac = (tacStateMap && tacStateMap[pair]) || (pair === selectedPair ? tacState : null);
+                const hasRealTac = pairTac && pairTac.pressure !== 'insufficient';
                 const biasDir = (bias.score||0) > 1.5 ? 'bullish' : (bias.score||0) < -1.5 ? 'bearish' : null;
-                const tacConflict = hasRealTac && biasDir && biasDir !== tacState.pressure && tacState.pressure !== 'neutral';
+                const tacConflict = hasRealTac && biasDir && biasDir !== pairTac.pressure && pairTac.pressure !== 'neutral';
                 return (
                   <>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom: tacConflict ? 6 : 10}}>
@@ -250,8 +261,8 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
                         <div style={{display:"flex",alignItems:"center",gap:5}}>
                           {hasRealTac ? (
                             <>
-                              <span style={{fontSize:11,lineHeight:1}}>{tacState.pressure==='bearish'?'↓':tacState.pressure==='bullish'?'↑':'–'}</span>
-                              <span style={{fontSize:10,fontWeight:700,color:tacState.color}}>{tacState.label}</span>
+                              <span style={{fontSize:11,lineHeight:1}}>{pairTac.pressure==='bearish'?'↓':pairTac.pressure==='bullish'?'↑':'–'}</span>
+                              <span style={{fontSize:10,fontWeight:700,color:pairTac.color}}>{pairTac.label}</span>
                             </>
                           ) : (
                             <>
@@ -272,10 +283,10 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
                         <span style={{fontSize:10}}>↔</span>
                         <div style={{flex:1}}>
                           <span style={{fontSize:9,fontWeight:700,color:"#f97316"}}>
-                            {biasDir==='bullish' ? 'Bullish' : 'Bearish'} HTF bias · Tactical pressure {tacState.pressure}
+                            {biasDir==='bullish' ? 'Bullish' : 'Bearish'} HTF bias · Tactical pressure {pairTac.pressure}
                           </span>
                           <div style={{fontSize:9,color:T.sub,marginTop:1}}>
-                            {tacState.description || 'Short-term price action diverges from structural bias. Monitor for stabilization before acting.'}
+                            {pairTac.description || 'Short-term price action diverges from structural bias. Monitor for stabilization before acting.'}
                           </div>
                         </div>
                       </div>
