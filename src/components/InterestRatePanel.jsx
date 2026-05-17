@@ -15,6 +15,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { getNextMeeting } from '../lib/cbMeetingCalendar.js';
 
 // ─── DATOS ────────────────────────────────────────────────────────────────────
 // Historial real de cada banco central (fecha de cambio, tasa resultante en %)
@@ -25,7 +26,6 @@ const BANKS = [
     desc: 'Tipo objetivo de los fondos federales (límite superior)',
     // Última reunión 7 may 2025: mantiene en 4.50% (pausa prolongada)
     current: 4.50, previous: 4.75, consensus: 4.50, surprise: 0.00,
-    nextMeeting: '17-18 jun 2025',
     signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Política monetaria restrictiva — pausa extendida' },
     history: [
       { d: '2015-12', r: 0.50 }, { d: '2016-12', r: 0.75 }, { d: '2017-03', r: 1.00 },
@@ -53,7 +53,6 @@ const BANKS = [
     id: 'BCE', name: 'BCE – Banco Central Europeo', country: 'EU', flag: '🇪🇺', flagCode: 'eu', ccy: 'EUR',
     desc: 'Tipo de interés de las operaciones principales de financiación',
     current: 2.40, previous: 2.65, consensus: 2.40, surprise: 0.00,
-    nextMeeting: '05 jun 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes en marcha — convergencia hacia neutral' },
     history: [
       { d: '2015-01', r: 0.05 }, { d: '2016-03', r: 0.00 }, { d: '2019-09', r: 0.00 },
@@ -77,7 +76,6 @@ const BANKS = [
     desc: 'Tipo de interés bancario oficial (Bank Rate)',
     // 8 may 2025: recorte 25 pb → 4.25% (votación 5-4)
     current: 4.25, previous: 4.50, consensus: 4.25, surprise: 0.00,
-    nextMeeting: '19 jun 2025',
     signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Recortes graduales — ritmo cauteloso' },
     history: [
       { d: '2015-01', r: 0.50 }, { d: '2016-08', r: 0.25 }, { d: '2017-11', r: 0.50 },
@@ -101,7 +99,6 @@ const BANKS = [
     id: 'BOJ', name: 'BOJ – Bank of Japan', country: 'JP', flag: '🇯🇵', flagCode: 'jp', ccy: 'JPY',
     desc: 'Tipo de interés objetivo a un día (OCR)',
     current: 0.50, previous: 0.25, consensus: 0.50, surprise: 0.00,
-    nextMeeting: '16-17 jun 2025',
     signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Normalización monetaria gradual — ritmo dependiente de datos' },
     history: [
       { d: '2015-01', r: 0.10 }, { d: '2016-01', r: -0.10 }, { d: '2019-12', r: -0.10 },
@@ -120,7 +117,6 @@ const BANKS = [
     id: 'SNB', name: 'SNB – Swiss National Bank', country: 'CH', flag: '🇨🇭', flagCode: 'ch', ccy: 'CHF',
     desc: 'Tipo de interés de referencia SNB',
     current: 0.25, previous: 0.50, consensus: 0.25, surprise: 0.00,
-    nextMeeting: '19 jun 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes completado — cerca del límite inferior' },
     history: [
       { d: '2015-01', r: -0.75 }, { d: '2019-12', r: -0.75 }, { d: '2022-06', r: -0.25 },
@@ -141,7 +137,6 @@ const BANKS = [
     id: 'RBA', name: 'RBA – Reserve Bank of Australia', country: 'AU', flag: '🇦🇺', flagCode: 'au', ccy: 'AUD',
     desc: 'Tipo de interés oficial al contado (cash rate)',
     current: 4.10, previous: 4.35, consensus: 4.10, surprise: 0.00,
-    nextMeeting: '20 may 2025',
     signal: { label: 'NEUTRO', color: '#f59e0b', desc: 'Inicio de ciclo de recortes — ritmo incierto' },
     history: [
       { d: '2015-02', r: 2.25 }, { d: '2016-05', r: 1.75 }, { d: '2016-08', r: 1.50 },
@@ -165,7 +160,6 @@ const BANKS = [
     id: 'BOC', name: 'BOC – Bank of Canada', country: 'CA', flag: '🇨🇦', flagCode: 'ca', ccy: 'CAD',
     desc: 'Tipo de interés objetivo a un día (overnight rate)',
     current: 2.75, previous: 3.00, consensus: 2.75, surprise: 0.00,
-    nextMeeting: '04 jun 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes activo — pausa temporal' },
     history: [
       { d: '2015-01', r: 0.75 }, { d: '2015-07', r: 0.50 }, { d: '2017-07', r: 0.75 },
@@ -191,7 +185,6 @@ const BANKS = [
     id: 'RBNZ', name: 'RBNZ – Reserve Bank of New Zealand', country: 'NZ', flag: '🇳🇿', flagCode: 'nz', ccy: 'NZD',
     desc: 'Tasa oficial de efectivo (OCR)',
     current: 3.50, previous: 3.75, consensus: 3.50, surprise: 0.00,
-    nextMeeting: '28 may 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes agresivo en marcha' },
     history: [
       { d: '2021-10', r: 0.50 }, { d: '2021-11', r: 0.75 }, { d: '2022-02', r: 1.00 },
@@ -213,7 +206,6 @@ const BANKS = [
     id: 'NB', name: 'Norges Bank – Banco de Noruega', country: 'NO', flag: '🇳🇴', flagCode: 'no', ccy: 'NOK',
     desc: 'Tipo de interés de referencia (policy rate)',
     current: 4.50, previous: 4.50, consensus: 4.50, surprise: 0.00,
-    nextMeeting: '18-19 jun 2025',
     signal: { label: 'RESTRICTIVO', color: '#ef4444', desc: 'Último banco del G10 en mantener — primer recorte esperado en verano' },
     history: [
       { d: '2015-06', r: 1.00 }, { d: '2016-03', r: 0.50 }, { d: '2019-09', r: 1.50 },
@@ -235,7 +227,6 @@ const BANKS = [
     id: 'RIX', name: 'Riksbank – Banco de Suecia', country: 'SE', flag: '🇸🇪', flagCode: 'se', ccy: 'SEK',
     desc: 'Tipo de interés de referencia (repo rate)',
     current: 2.25, previous: 2.50, consensus: 2.25, surprise: 0.00,
-    nextMeeting: '18 jun 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Ciclo de recortes avanzado — posible pausa en 2025' },
     history: [
       { d: '2015-02', r: -0.10 }, { d: '2016-02', r: -0.50 }, { d: '2019-12', r: 0.00 },
@@ -257,7 +248,6 @@ const BANKS = [
     id: 'PBOC', name: 'PBoC – Banco Popular de China', country: 'CN', flag: '🇨🇳', flagCode: 'cn', ccy: 'CNY',
     desc: 'Tasa Prime de Préstamos a 1 año (LPR 1Y)',
     current: 3.10, previous: 3.35, consensus: 3.10, surprise: 0.00,
-    nextMeeting: '20 may 2025',
     signal: { label: 'ACOMODATICIO', color: '#22c55e', desc: 'Estímulo selectivo — soporte al crecimiento' },
     history: [
       { d: '2019-08', r: 4.25 }, { d: '2020-02', r: 4.05 }, { d: '2020-04', r: 3.85 },
@@ -708,17 +698,25 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
 
             {/* Meta chips */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              {/* Próxima reunión */}
-              <div style={{
-                padding: '8px 14px', borderRadius: 10,
-                background: darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.025)',
-                border: `1px solid ${T.border}`,
-              }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 3 }}>
-                  PRÓXIMA REUNIÓN
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{bank.nextMeeting}</div>
-              </div>
+              {/* Próxima reunión — computed dynamically from cbMeetingCalendar */}
+              {(() => {
+                const mtg = getNextMeeting(bank.id);
+                return (
+                  <div style={{
+                    padding: '8px 14px', borderRadius: 10,
+                    background: darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.025)',
+                    border: `1px solid ${T.border}`,
+                  }}>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 3 }}>
+                      PRÓXIMA REUNIÓN
+                    </div>
+                    {mtg
+                      ? <div style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{mtg.label}</div>
+                      : <div style={{ fontSize: 11, fontWeight: 500, color: T.sub, fontStyle: 'italic' }}>No disponible</div>
+                    }
+                  </div>
+                );
+              })()}
               {/* Impacto */}
               <div style={{
                 padding: '8px 14px', borderRadius: 10,
