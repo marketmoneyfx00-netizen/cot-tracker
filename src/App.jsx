@@ -52,6 +52,7 @@ import MacroTab from './components/MacroTab.jsx';
 import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
 import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
+import { computeContextualImpact } from './eventImpactEngine.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2424,7 +2425,7 @@ function calcSentiment(events, liveVix = null) {
 }
 
 // ─── MAIN CALENDARIO COMPONENT ───────────────────────────────────────────────
-function CalendarioTab({darkMode, T}) {
+function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
   // Suscripción reactiva al priceStore — se re-renderiza con cada nueva vela
   // liveCandles es el valor que se pasa a getIndicatorLogic en el render
   const liveCandles = usePriceStore(3);
@@ -2471,6 +2472,19 @@ function CalendarioTab({darkMode, T}) {
   const [lastFetchTime, setLastFetchTime] = useState(null);
   const [emptyReason,   setEmptyReason]   = useState(null);
   const [watchdogActive, setWatchdogActive] = useState(false);
+
+  // Enrich every event with contextual impact score — recomputes when
+  // events, COT data (biasArr), macro signal, or VIX change.
+  const contextualEvents = useMemo(() => {
+    if (!events.length) return events;
+    const ctx = {
+      biasArr:    biasArr    ?? [],
+      macroSignal: macroSignal ?? null,
+      liveVix,
+      allEvents: events,
+    };
+    return events.map(ev => ({ ...ev, _ctx: computeContextualImpact(ev, ctx) }));
+  }, [events, biasArr, macroSignal, liveVix]);
 
   useEffect(()=>{
     const handler = ()=>setIsMobile(window.innerWidth < 700);
@@ -2613,8 +2627,8 @@ function CalendarioTab({darkMode, T}) {
   const todayStr = now.toLocaleDateString('sv-SE', {timeZone: userTZ}); // YYYY-MM-DD en timezone local
   const nowHHMM  = now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:userTZ});
 
-  // Apply filters
-  const filtered = events.filter(ev => {
+  // Apply filters — use contextualEvents so ev._ctx is available downstream
+  const filtered = contextualEvents.filter(ev => {
     // Filtro HOY
     if (todayOnly && ev.date?.slice(0,10) !== todayStr) return false;
     if (filters.impact.size > 0 && !filters.impact.has(ev.impact)) return false;
@@ -2952,8 +2966,10 @@ function CalendarioTab({darkMode, T}) {
                   const isUp     = !isPast;
                   const evKey    = `${ev.date||date}_${ev.country||''}_${(ev.event||'').replace(/\s+/g,'_').slice(0,30)}`;
                   const isExp    = expanded===evKey;
-                  const stars    = ev.impact==='High'?3:ev.impact==='Medium'?2:1;
-                  const iCol     = impColor(ev.impact);
+                  // Contextual impact replaces static stars / color
+                  const ctx      = ev._ctx;
+                  const stars    = ctx ? ctx.stars    : (ev.impact==='High'?3:ev.impact==='Medium'?2:1);
+                  const iCol     = ctx ? ctx.color    : impColor(ev.impact);
                   const flag     = getEventFlag(ev.country);
                   const flagCode = getEventFlagCode(ev.country);
                   const ccy      = getEventCcy(ev.country);
@@ -3008,7 +3024,7 @@ function CalendarioTab({darkMode, T}) {
                           onClick={()=>setExpanded(isExp?null:evKey)}
                           style={{padding:'12px 14px',cursor:'pointer',
                             opacity: isPast && !hasAct ? 0.55 : 1,
-                            borderLeft:`3px solid ${stars===3?iCol:stars===2?D.amber+'80':'transparent'}`,
+                            borderLeft:`3px solid ${stars>=3?iCol:stars===2?D.amber+'80':'transparent'}`,
                             background:isExp?D.card2:'transparent',
                             borderBottom:idx<dayEvents.length-1?`1px solid ${D.border}`:'none'}}>
                           {/* Row 1: time + flag+ccy + impact badge + chevron */}
@@ -3038,24 +3054,34 @@ function CalendarioTab({darkMode, T}) {
                               <span style={{fontSize:14,fontWeight:800,color:D.accent,
                                 letterSpacing:'0.05em'}}>{ccy}</span>
                             </div>
-                            {/* Stars */}
-                            <div style={{display:'flex',gap:2}}>
-                              {[1,2,3].map(i=>(
-                                <span key={i} style={{fontSize:14,color:i<=stars?iCol:darkMode?'#2a2d33':'#d1d5db'}}>★</span>
+                            {/* Stars — contextual (1-4) */}
+                            <div style={{display:'flex',gap:2,alignItems:'center'}}>
+                              {[1,2,3,4].map(i=>(
+                                <span key={i} style={{fontSize:i===4?11:14,
+                                  color:i<=stars?iCol:darkMode?'#2a2d33':'#d1d5db',
+                                  opacity:i===4&&stars<4?0:1}}>★</span>
                               ))}
                             </div>
-                            {/* Impact */}
+                            {/* Impact label — contextual */}
                             <span style={{fontSize:12,fontWeight:700,color:iCol,
                               background:iCol+'20',padding:'4px 10px',borderRadius:99}}>
-                              {ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo'}
+                              {ctx?.label ?? (ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo')}
                             </span>
                             <span style={{fontSize:14,color:D.sub2}}>{isExp?'∧':'∨'}</span>
                           </div>
                           {/* Row 2: event name */}
                           <div className="ev-name"
-                            style={{fontSize:14,fontWeight:600,color:D.txt,marginBottom:6,lineHeight:1.3}}>
+                            style={{fontSize:14,fontWeight:600,color:D.txt,marginBottom:ctx?.isContextualBoost?2:6,lineHeight:1.3}}>
                             {ev.event}
                           </div>
+                          {/* Contextual sensitivity note — only when engine elevated this event */}
+                          {ctx?.isContextualBoost&&ctx.explanation&&(
+                            <div style={{fontSize:10,color:iCol,marginBottom:5,
+                              display:'flex',alignItems:'center',gap:3,opacity:0.85}}>
+                              <span style={{fontSize:8}}>◉</span>
+                              <span>{ctx.explanation}</span>
+                            </div>
+                          )}
                           {/* Row 3: P / F / A */}
                           <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
                             {ev.previous!=null&&(
@@ -3085,7 +3111,7 @@ function CalendarioTab({darkMode, T}) {
                             gridTemplateColumns:'64px 80px 1fr 80px 72px 82px 72px 24px',
                             gap:4,padding:'10px 16px',cursor:'pointer',
                             opacity: isPast && !hasAct ? 0.55 : 1,
-                            borderLeft:`3px solid ${stars===3?iCol:stars===2?D.amber+'70':'transparent'}`,
+                            borderLeft:`3px solid ${stars>=3?iCol:stars===2?D.amber+'70':'transparent'}`,
                             background:isExp?D.card2:'transparent',
                             borderBottom:idx<dayEvents.length-1?`1px solid ${D.border}`:'none'}}>
                           {/* Time */}
@@ -3126,18 +3152,33 @@ function CalendarioTab({darkMode, T}) {
                                 overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                               {ev.event}
                             </div>
-                            <div style={{display:'flex',gap:2,marginTop:2}}>
-                              {[1,2,3].map(i=>(
-                                <span key={i} style={{fontSize:10,
-                                  color:i<=stars?iCol:darkMode?'#2a2d33':'#d1d5db'}}>★</span>
+                            {/* Stars — contextual (1-4) */}
+                            <div style={{display:'flex',gap:2,marginTop:2,alignItems:'center'}}>
+                              {[1,2,3,4].map(i=>(
+                                <span key={i} style={{fontSize:i===4?8:10,
+                                  color:i<=stars?iCol:darkMode?'#2a2d33':'#d1d5db',
+                                  opacity:i===4&&stars<4?0:1}}>★</span>
                               ))}
+                              {ctx?.isContextualBoost&&(
+                                <span style={{fontSize:8,fontWeight:700,color:iCol,
+                                  marginLeft:2,letterSpacing:'0.03em',opacity:0.8}}>↑</span>
+                              )}
                             </div>
+                            {/* Contextual sensitivity note — desktop */}
+                            {ctx?.isContextualBoost&&ctx.explanation&&(
+                              <div style={{fontSize:9,color:iCol,marginTop:1,
+                                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                                opacity:0.8,display:'flex',alignItems:'center',gap:2}}>
+                                <span style={{fontSize:7}}>◉</span>
+                                <span>{ctx.explanation}</span>
+                              </div>
+                            )}
                           </div>
-                          {/* Impact badge */}
+                          {/* Impact badge — contextual */}
                           <div style={{display:'flex',alignItems:'center'}}>
                             <span style={{fontSize:10,fontWeight:700,color:iCol,background:iCol+'20',
                               padding:'3px 7px',borderRadius:99,whiteSpace:'nowrap'}}>
-                              {ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo'}
+                              {ctx?.label ?? (ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo')}
                             </span>
                           </div>
                           {/* Actual */}
@@ -3198,8 +3239,38 @@ function CalendarioTab({darkMode, T}) {
                         return (
                         <div style={{background:D.card2,borderBottom:`1px solid ${D.border}`,
                           padding:isMobile?'12px 14px 16px':'16px 20px 20px',
-                          borderLeft:`3px solid ${stars===3?iCol:stars===2?D.amber+'80':'transparent'}`,
+                          borderLeft:`3px solid ${stars>=3?iCol:stars===2?D.amber+'80':'transparent'}`,
                           boxSizing:'border-box',width:'100%',overflow:'visible'}}>
+
+                          {/* ── CONTEXTUAL SENSITIVITY CARD (shown when engine elevated this event) ── */}
+                          {ctx?.contextualReasons?.length>0&&(
+                            <div style={{
+                              background: iCol+'12',
+                              border:`1px solid ${iCol}30`,
+                              borderRadius:10,
+                              padding:isMobile?'8px 10px':'8px 14px',
+                              marginBottom:isMobile?10:12,
+                              display:'flex',flexDirection:'column',gap:4,
+                            }}>
+                              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                                <span style={{fontSize:9,fontWeight:800,color:iCol,letterSpacing:'0.1em'}}>
+                                  SENSIBILIDAD CONTEXTUAL
+                                </span>
+                                {ctx.isContextualBoost&&(
+                                  <span style={{fontSize:9,fontWeight:700,color:'white',
+                                    background:iCol,padding:'1px 6px',borderRadius:99}}>
+                                    +{ctx.finalImpactScore - ctx.baseScore}pts ↑
+                                  </span>
+                                )}
+                              </div>
+                              {ctx.contextualReasons.map((r,i)=>(
+                                <div key={i} style={{display:'flex',alignItems:'flex-start',gap:5,fontSize:isMobile?10:11,color:D.txt}}>
+                                  <span style={{color:iCol,marginTop:1,flexShrink:0}}>▸</span>
+                                  <span>{r}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           {/* ── BADGE ROW ── */}
                           <div style={{display:'flex',gap:isMobile?5:6,marginBottom:isMobile?12:16,flexWrap:'wrap',alignItems:'center'}}>
@@ -3207,7 +3278,7 @@ function CalendarioTab({darkMode, T}) {
                               padding:isMobile?'3px 9px':'4px 12px',borderRadius:99,letterSpacing:'0.05em',border:`1px solid ${sc.col}35`}}>{sc.cat}</span>)}
                             <span style={{fontSize:isMobile?10:11,fontWeight:700,padding:isMobile?'3px 9px':'4px 12px',borderRadius:99,
                               background:iCol+'18',color:iCol,border:`1px solid ${iCol}30`}}>
-                              {ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo'}
+                              {ctx?.label ?? (ev.impact==='High'?'Alto':ev.impact==='Medium'?'Medio':'Bajo')}
                             </span>
                             <span style={{fontSize:isMobile?10:11,color:D.sub,padding:isMobile?'3px 9px':'4px 12px',borderRadius:99,
                               background:D.card,border:`1px solid ${D.border}`}}>
@@ -4699,7 +4770,13 @@ if (!authUser || forceResetMode) {
 
       {/* ── TAB 1: CALENDARIO ── */}
       {mainTab==="calendario"&&(
-        <CalendarioTab darkMode={darkMode} T={_thm} lang={lang}/>
+        <CalendarioTab
+          darkMode={darkMode}
+          T={_thm}
+          lang={lang}
+          biasArr={biasArr}
+          macroSignal={macroSignal}
+        />
       )}
 
       {/* ── TAB: MACRO ── */}
