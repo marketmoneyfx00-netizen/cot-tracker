@@ -1,6 +1,5 @@
 import { useMemo }                           from "react";
 import TooltipInfo                           from "./TooltipInfo.jsx";
-import { calculateBiasScore, deriveInputsFromPair } from "../cotBiasEngine.js";
 import { computeConfidenceDecay, computeExecutionReadiness, EXECUTION_READINESS_CFG } from "../confidenceDecayEngine.js";
 import { buildNarrative }                    from "../narrativeEngine.js";
 import { computeMarketRegime }               from "../marketRegimeEngine.js";
@@ -36,16 +35,15 @@ function MarketDecisionLayer({
   );
 
   // ── Per-pair data ────────────────────────────────────────────────────────
+  // Single source of truth: use biasArr (already computed with macroConfidence,
+  // real price change, carry, and z-score) — no re-derivation from fxPairs.
   const pairData = useMemo(() => {
-    return (fxPairs ?? []).map(p => {
-      if (!p) return null;
-      const inputs = deriveInputsFromPair(p);
-      if (!inputs) return null;
-      const bias = calculateBiasScore(inputs);
-      if (!bias) return null;
+    return (biasArr ?? []).map(entry => {
+      if (!entry?.bias) return null;
+      const { pair, bias } = entry;
 
       const biasDir    = bias.score > 1.5 ? 'bullish' : bias.score < -1.5 ? 'bearish' : 'neutral';
-      const pairTac    = (tacStateMap && tacStateMap[p.pair]) ?? (p.pair === selectedPair ? tacState : null);
+      const pairTac    = (tacStateMap && tacStateMap[pair]) ?? (pair === selectedPair ? tacState : null);
       const hasRealTac = pairTac && pairTac.pressure !== 'insufficient';
 
       // Confidence decay
@@ -65,16 +63,16 @@ function MarketDecisionLayer({
 
       // Narrative
       const narrative = buildNarrative({
-        biasScore:        bias.score,
-        biasDirection:    biasDir,
-        tacState:         hasRealTac ? pairTac : null,
-        conflictLevel:    decay.conflictLevel,
+        biasScore:          bias.score,
+        biasDirection:      biasDir,
+        tacState:           hasRealTac ? pairTac : null,
+        conflictLevel:      decay.conflictLevel,
         executionReadiness: execReadiness,
       });
 
-      return { pair: p.pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative };
+      return { pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative };
     }).filter(Boolean);
-  }, [fxPairs, tacStateMap, tacState, selectedPair]);
+  }, [biasArr, tacStateMap, tacState, selectedPair]);
 
   if (pairData.length === 0) return null;
 

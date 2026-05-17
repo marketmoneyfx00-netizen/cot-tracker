@@ -351,12 +351,14 @@ export function calculateBiasScore(data = {}) {
  * Helper to compute bias engine inputs from the native COT Tracker
  * pair object (built by buildProcessedRow + pairsData structure in App.jsx).
  *
- * @param {Object} pairData          - from pairsData: { latest, weeks, signal, pair }
- * @param {number|null} realPrice4W  - Optional: real 4-week price % change (from candleMap).
- *                                     When provided, replaces the COT-proxy price direction.
- * @returns {Object}                 - ready-to-pass to calculateBiasScore()
+ * @param {Object} pairData                 - from pairsData: { latest, weeks, signal, pair }
+ * @param {number|null} realPriceChangePct  - Optional: real price % change over the available
+ *                                            candle window (passed from candleMap; window size
+ *                                            depends on hook config — currently ~5 days at 4H).
+ *                                            When provided, replaces the COT-proxy price direction.
+ * @returns {Object}                        - ready-to-pass to calculateBiasScore()
  */
-export function deriveInputsFromPair(pairData, realPrice4W = null) {
+export function deriveInputsFromPair(pairData, realPriceChangePct = null) {
   if (!pairData || !pairData.latest || !pairData.weeks) return null;
 
   const { latest, weeks } = pairData;
@@ -387,11 +389,11 @@ export function deriveInputsFromPair(pairData, realPrice4W = null) {
   // priceDirection: prefer injected real price return; fall back to COT 4-week proxy.
   // positioningDirection: derived from the immediate weekly change (COT-native, correct).
   const priceDirection = (() => {
-    // Source 1: real 4-week price % change injected from candleMap (best signal)
-    if (typeof realPrice4W === 'number' && !isNaN(realPrice4W)) {
-      const threshold = 0.3; // ignore sub-0.3% moves as noise
-      if (realPrice4W > threshold)  return 'up';
-      if (realPrice4W < -threshold) return 'down';
+    // Source 1: real price % change injected from candleMap (eliminates COT-as-price tautology)
+    if (typeof realPriceChangePct === 'number' && !isNaN(realPriceChangePct)) {
+      const threshold = 0.15; // 5-day window → tighter noise threshold than 4-week
+      if (realPriceChangePct > threshold)  return 'up';
+      if (realPriceChangePct < -threshold) return 'down';
       return null;
     }
     // Source 2: 4-week COT smartNet change as HTF proxy (fallback — not ideal)

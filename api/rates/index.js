@@ -40,21 +40,31 @@ const FX_PAIRS = [
   { pair: 'AUDNZD', base: 'AUD', quote: 'NZD', base_bank: 'RBA',  quote_bank: 'RBNZ' },
 ];
 
-function buildDifferentials(latestRates) {
+// banks: the already-built per-bank summaries (contains stanceScore per bank_id)
+function buildDifferentials(latestRates, banks = {}) {
   return FX_PAIRS.map(({ pair, base, quote, base_bank, quote_bank }) => {
     const baseRate  = latestRates[base_bank];
     const quoteRate = latestRates[quote_bank];
+
+    // Stance scores from the CB summaries — positive = hawkish, negative = dovish
+    const base_stance  = banks[base_bank]?.stanceScore  ?? 0;
+    const quote_stance = banks[quote_bank]?.stanceScore ?? 0;
+    // stanceDivergence > 0 → base CB more hawkish → structurally bullish for pair
+    const stance_divergence = parseFloat((base_stance - quote_stance).toFixed(1));
+
     if (baseRate == null || quoteRate == null) {
       return { pair, base_currency: base, quote_currency: quote, base_bank, quote_bank,
                base_rate: null, quote_rate: null, rate_diff_bps: null,
-               carry_direction: 'neutral', carry_score: 0 };
+               carry_direction: 'neutral', carry_score: 0,
+               base_stance, quote_stance, stance_divergence };
     }
     const diffBps       = Math.round((baseRate - quoteRate) * 100);
     const carry_score   = parseFloat(Math.min(10, Math.max(-10, diffBps / 50)).toFixed(2));
     const carry_direction = diffBps > 10 ? 'long_base' : diffBps < -10 ? 'long_quote' : 'neutral';
     return { pair, base_currency: base, quote_currency: quote, base_bank, quote_bank,
              base_rate: baseRate, quote_rate: quoteRate, rate_diff_bps: diffBps,
-             carry_direction, carry_score };
+             carry_direction, carry_score,
+             base_stance, quote_stance, stance_divergence };
   });
 }
 
@@ -154,7 +164,7 @@ export default async function handler(req, res) {
   }
 
   // ── Interest Rate Differential Engine (TAREA 1.2) ─────────────────────────
-  const pairs = buildDifferentials(latestRates);
+  const pairs = buildDifferentials(latestRates, banks);
 
   const payload = {
     timestamp: new Date().toISOString(),

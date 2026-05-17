@@ -111,9 +111,17 @@ export function deriveGlobalMarketState(biasArr) {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-// Real 4-week price % change from 4H candle array (oldest→newest).
-// Returns null when insufficient candles or price data is missing.
-function computeRealPrice4W(candles) {
+// Normalize pair key: converts 'EUR/USD' ↔ 'EURUSD' for cross-module lookups.
+// /api/rates uses no-slash format; COT Tracker uses slash format.
+function normalizePairKey(str) {
+  if (!str) return '';
+  return str.replace('/', '').toUpperCase();
+}
+
+// Real price % change from 4H candle array (oldest→newest).
+// Window size: determined by useAllPairCandles config (currently 30 × 4H ≈ 5 days).
+// Named conservatively to reflect actual window, not an assumed timeframe.
+function computeRealPriceChange(candles) {
   if (!Array.isArray(candles) || candles.length < 10) return null;
   const oldest = candles[0]?.close;
   const newest  = candles[candles.length - 1]?.close;
@@ -123,28 +131,36 @@ function computeRealPrice4W(candles) {
 
 // Macro confidence multiplier for the V2 bias engine.
 // Start at 1.0; apply a mild boost/penalty if macro and carry align/conflict.
+// Handles both definitive (USD_STRONG) and leaning (USD_LEANING_STRONG) variants.
 // Clamped [0.5, 1.0] so we never zero-out the institutional bias score.
 function computePairMacroConfidence(pair, biasDirection, macroSignal, carryScore) {
   let conf = 1.0;
 
   if (macroSignal?.bias && typeof macroSignal.confidence === 'number' && macroSignal.confidence >= 5) {
-    const usdIsBase   = (pair || '').startsWith('USD/');
-    const usdStrong   = macroSignal.bias === 'USD_STRONG';
-    const expectedDir = usdStrong
-      ? (usdIsBase ? 'bullish' : 'bearish')
-      : (usdIsBase ? 'bearish' : 'bullish');
-    const macroConf   = macroSignal.confidence / 10; // 0-1
-    if (expectedDir === biasDirection && biasDirection !== 'neutral') {
-      conf = Math.min(1.0, conf + macroConf * 0.1);
-    } else if (biasDirection !== 'neutral') {
-      conf = Math.max(0.5, conf - macroConf * 0.15);
+    const usdIsBase  = (pair || '').startsWith('USD/');
+    const usdBullish = macroSignal.bias === 'USD_STRONG' || macroSignal.bias === 'USD_LEANING_STRONG';
+    const usdBearish = macroSignal.bias === 'USD_WEAK'   || macroSignal.bias === 'USD_LEANING_WEAK';
+    const isLeaning  = macroSignal.bias.includes('LEANING');
+
+    let expectedDir = null;
+    if (usdBullish) expectedDir = usdIsBase ? 'bullish' : 'bearish';
+    if (usdBearish) expectedDir = usdIsBase ? 'bearish' : 'bullish';
+
+    if (expectedDir && biasDirection !== 'neutral') {
+      const macroConf = macroSignal.confidence / 10;
+      const weight    = isLeaning ? 0.6 : 1.0;
+      if (expectedDir === biasDirection) {
+        conf = Math.min(1.0, conf + macroConf * 0.1 * weight);
+      } else {
+        conf = Math.max(0.5, conf - macroConf * 0.15 * weight);
+      }
     }
   }
 
   if (typeof carryScore === 'number' && !isNaN(carryScore) && biasDirection !== 'neutral') {
     const aligned = (biasDirection === 'bullish' && carryScore > 0) ||
                     (biasDirection === 'bearish' && carryScore < 0);
-    if (aligned)              conf = Math.min(1.0, conf + 0.05);
+    if (aligned)               conf = Math.min(1.0, conf + 0.05);
     else if (carryScore !== 0) conf = Math.max(0.5, conf - 0.08);
   }
 
@@ -167,16 +183,17 @@ export function buildBiasArray(fxPairs, { candleMap = {}, ratesData = null, macr
   return (fxPairs || []).map(p => {
     if (!p || p.pair.includes('Index')) return null;
 
-    // Real 4-week price % change from candleMap (eliminates COT-as-price tautology)
-    const realPrice4W = computeRealPrice4W(candleMap?.[p.pair]);
+    // Real price % change from candleMap (window = whatever useAllPairCandles provides)
+    const realPriceChangePct = computeRealPriceChange(candleMap?.[p.pair]);
 
-    const inp = deriveInputsFromPair(p, realPrice4W);
+    const inp = deriveInputsFromPair(p, realPriceChangePct);
     if (!inp) return null;
 
-    // Carry data for this pair
-    const pairRates  = pairsRates.find(r => r.pair === p.pair) ?? null;
-    const carryScore = pairRates?.carry_score ?? null;
-    const stanceScore = pairRates?.stanceScore ?? null;
+    // Carry data: /api/rates uses no-slash format (EURUSD); normalize for lookup
+    const pairKey    = normalizePairKey(p.pair);
+    const pairRates  = pairsRates.find(r => normalizePairKey(r.pair) === pairKey) ?? null;
+    const carryScore      = pairRates?.carry_score      ?? null;
+    const stanceDivergence = pairRates?.stance_divergence ?? null;
 
     // macroConfidence: dampen/amplify V2 bias based on macro + carry alignment
     const biasDir = inp.leveragedWeeklyChange > 0 ? 'bullish'
@@ -204,13 +221,13 @@ export function buildBiasArray(fxPairs, { candleMap = {}, ratesData = null, macr
 
     // Confluence Score — how many independent signals agree
     const confluence = computeConfluenceScore({
-      biasScore:     bias.score,
-      biasDirection: bias.direction,
+      biasScore:       bias.score,
+      biasDirection:   bias.direction,
       carryScore,
       macroSignal,
-      pair:          p.pair,
-      stanceScore,
-      zScore:        zscoreData.zscore,
+      pair:            p.pair,
+      stanceDivergence,
+      zScore:          zscoreData.zscore,
     });
 
     return {
