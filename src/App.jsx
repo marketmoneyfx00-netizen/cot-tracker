@@ -5305,6 +5305,7 @@ if (!authUser || forceResetMode) {
           lastSync={lastSync}
           pairsData={pairsData}
           combinedData={combinedData}
+          sourceCombined={sourceCombined}
           darkMode={darkMode}
           T={_thm}
         />

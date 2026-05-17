@@ -1,4 +1,4 @@
-export default function SyncStatus({ lastSync, pairsData, combinedData, darkMode, T }) {
+export default function SyncStatus({ lastSync, pairsData, combinedData, sourceCombined, darkMode, T }) {
   const { at, status, reportDate, errorMessage } = lastSync || {};
 
   const relativeTime = (isoStr) => {
@@ -109,12 +109,17 @@ export default function SyncStatus({ lastSync, pairsData, combinedData, darkMode
         <Chip
           label="Futuros Only"
           value={pairsData ? `${pairsData.length} pares` : '—'}
-          sub={pairsData ? 'Bias Engine - Tabla FX - Intraday' : 'Sin datos aun'}
+          sub={pairsData ? 'Bias Engine · Tabla FX · Intraday' : 'Sin datos aun'}
         />
         <Chip
-          label="Combined (FX+Indices+Bonos)"
-          value={combinedData ? `${combinedData.assetCount} activos` : '—'}
-          sub={combinedData ? 'Cross Asset Flow activo' : 'Sin datos aun'}
+          label="Combined (FX + Indices + Bonos)"
+          value={combinedData?.byGroup ? `${(combinedData.byGroup.fx?.length ?? 0) + (combinedData.byGroup.index?.length ?? 0) + (combinedData.byGroup.bonds?.length ?? 0)} activos` : combinedData ? `${combinedData.assetCount} activos` : '—'}
+          sub={combinedData ? 'Cross Asset Flow · FX · Indices · Bonos' : 'Sin datos aun'}
+        />
+        <Chip
+          label="Disaggregated (Materias Primas)"
+          value={combinedData?.byGroup?.commodities?.length > 0 ? `${combinedData.byGroup.commodities.length} activos` : '—'}
+          sub={combinedData?.byGroup?.commodities?.length > 0 ? 'Cross Asset Flow · Gold · Commodities' : 'Pendiente de sync'}
         />
         <Chip
           label="Proxima comprobacion"
@@ -133,7 +138,7 @@ export default function SyncStatus({ lastSync, pairsData, combinedData, darkMode
           Como funciona?
         </div>
         {[
-          ['🕙', 'Descarga automatica', 'Cada viernes a las 22:00 UTC el sistema descarga los dos reportes TFF del CFTC automaticamente.'],
+          ['🕙', 'Descarga automatica', 'Cada viernes a las 22:00 UTC el sistema descarga los tres archivos CFTC automaticamente: Futures Only, Combined y Disaggregated (materias primas).'],
           ['🔍', 'Validacion idempotente', 'Si el reporte ya existe en la base de datos, se ignora. No hay duplicados.'],
           ['📊', 'Disponible al instante', 'Los datos aparecen en el dashboard en cuanto abres la app. Sin descargas manuales.'],
           ['🔒', 'Fuente oficial', 'Los archivos vienen directamente de cftc.gov - la misma fuente que antes, ahora automatizada.'],
