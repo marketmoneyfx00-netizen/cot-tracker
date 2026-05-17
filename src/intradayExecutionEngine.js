@@ -159,9 +159,9 @@ function scoreCalendarSentiment(highCount, midCount) {
 
 // ─── LABELS (unchanged) ───────────────────────────────────────────────────────
 export function getPermissionLevel(score) {
-  if (score >= 70) return { label: 'HIGH',   color: '#22c55e', bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)' };
-  if (score >= 45) return { label: 'MEDIUM', color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',   border: 'rgba(245,158,11,0.3)' };
-  return                  { label: 'LOW',    color: '#ef4444', bg: 'rgba(239,68,68,0.10)',    border: 'rgba(239,68,68,0.25)' };
+  if (score >= 70) return { label: 'FAVORABLE',  color: '#22c55e', bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)' };
+  if (score >= 45) return { label: 'IMPROVING',  color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',   border: 'rgba(245,158,11,0.3)' };
+  return                  { label: 'RESTRICTED', color: '#ef4444', bg: 'rgba(239,68,68,0.10)',    border: 'rgba(239,68,68,0.25)' };
 }
 
 export function getMacroRiskLabel(riskScore) {

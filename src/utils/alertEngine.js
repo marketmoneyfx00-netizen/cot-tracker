@@ -83,8 +83,8 @@ export function detectTradingOpportunity({ marketState, ideas }) {
   if (state === 'expansion') {
     message = `Flujo institucional ${dirLabel} con expansión activa. ${pairText} lideran el movimiento.`;
     action  = dirLabel === 'alcista'
-      ? 'Buscar compras en retrocesos — no perseguir precio'
-      : 'Buscar ventas en rebotes — no perseguir precio';
+      ? 'Pullback monitoring active in bullish pairs — confirm price structure before acting'
+      : 'Bounce monitoring active in bearish pairs — confirm price structure before acting';
   } else {
     message = `Confluencia ${dirLabel} parcial. ${pairs.slice(0, 2).join(' y ')} presentan sesgo definido pero el mercado no está en expansión plena.`;
     action  = 'Reducir tamaño — solo operar pares con confluencia institucional confirmada';

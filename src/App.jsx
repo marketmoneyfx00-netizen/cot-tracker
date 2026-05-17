@@ -28,6 +28,7 @@ import { calculateExecutionScore }  from './intradayExecutionEngine.js';
 import MarketState    from './components/MarketState.jsx';
 import TradeIdeas     from './components/TradeIdeas.jsx';
 import MarketDecisionLayer from './components/MarketDecisionLayer.jsx';
+import { computeTacticalMomentum } from './tacticalMomentumEngine.js';
 import { useAuth } from './context/AuthProvider.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import { logout, updatePassword } from './lib/authService.js';
@@ -4012,8 +4013,11 @@ function AppInner() {
     };
   }, [profile]);
 
-  // ── Live price candles for TradeReadinessChecklist ───────────────────────
-  const liveCandles = usePriceStore(3);
+  // ── Live price candles (20 min buffer for tactical momentum engine) ──────
+  const liveCandles = usePriceStore(20);
+
+  // ── Tactical momentum from live price candles (selected pair) ────────────
+  const tacState = useMemo(() => computeTacticalMomentum(liveCandles), [liveCandles]);
 
   // ── Shared calendar events for TradeReadinessChecklist ──────────────────
   const [sharedEvents, setSharedEvents] = useState([]);
@@ -4745,10 +4749,10 @@ if (!authUser || forceResetMode) {
             <div style={{marginBottom:16}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
-                  IDEAS DE TRADING
+                  CONTEXT OPPORTUNITIES
                 </span>
                 <span style={{flex:1,height:1,background:_thm.border}}/>
-                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>COT · NO SON SEÑALES DE ENTRADA</span>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>COT · STRUCTURAL CONTEXT · NOT ENTRY SIGNALS</span>
               </div>
               <TradeIdeas
                 fxPairs={fxPairs}
@@ -4761,6 +4765,7 @@ if (!authUser || forceResetMode) {
                 tradeReadinessScore={tradeReadinessScore}
                 selectedPair={selectedPair}
                 finalDecision={finalDecision}
+                tacState={tacState}
               />
             </div>
           )}
@@ -4778,7 +4783,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} selectedPair={selectedPair}/>
             </div>
           )}
 

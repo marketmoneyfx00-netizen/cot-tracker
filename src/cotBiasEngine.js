@@ -99,13 +99,13 @@ function getDirection(score) {
 
 // ─── RECOMMENDATION ENGINE ───────────────────────────────────────────────────
 function getRecommendation(score) {
-  if (score >= 4)  return 'Only look for long setups this week. Avoid shorts.';
-  if (score >= 2)  return 'Prioritize longs. Short setups need extra confirmation.';
-  if (score === 1) return 'Slight long edge. Wait for clean structure before entering.';
-  if (score === 0) return 'No directional edge. Wait for structure confirmation before trading.';
-  if (score >= -2) return 'Slight short edge. Wait for clean structure before entering.';
-  if (score >= -4) return 'Prioritize shorts. Long setups need extra confirmation.';
-  return                  'Only look for short setups in HTF zones. Avoid longs.';
+  if (score >= 4)  return 'Strong bullish structural edge. Long bias preferred — confirm tactical context before acting.';
+  if (score >= 2)  return 'Bullish structural bias. Favorable for longs — await tactical alignment and price structure.';
+  if (score === 1) return 'Slight bullish structural edge. Monitor for tactical confirmation before positioning.';
+  if (score === 0) return 'No structural directional edge. Await COT confirmation and price structure.';
+  if (score >= -2) return 'Slight bearish structural edge. Monitor for tactical confirmation before positioning.';
+  if (score >= -4) return 'Bearish structural bias. Favorable for shorts — await tactical alignment and price structure.';
+  return                  'Strong bearish structural edge. Short bias preferred — confirm tactical context before acting.';
 }
 
 // ─── COLOR HELPER (for UI use) ────────────────────────────────────────────────
@@ -146,18 +146,18 @@ function getLabelV2(score) {
 // ─── V2 RECOMMENDATION ────────────────────────────────────────────────────────
 function getRecommendationV2(score) {
   if (score >= 4)
-    return 'Strong institutional alignment. Only look for long setups this week.';
+    return 'Strong bullish structural edge. Long bias preferred — confirm tactical context and price structure before acting.';
 
   if (score >= 1.5)
-    return 'Moderate bullish bias confirmed. Prioritize longs with HTF confirmation.';
+    return 'Moderate bullish structural bias. Favorable for longs — await tactical alignment before positioning.';
 
   if (score > -1.5)
-    return 'No clear directional edge. Wait for structure confirmation before trading.';
+    return 'No structural directional edge. Await COT confirmation and price structure.';
 
   if (score > -4)
-    return 'Moderate bearish bias confirmed. Prioritize shorts with HTF confirmation.';
+    return 'Moderate bearish structural bias. Favorable for shorts — await tactical alignment before positioning.';
 
-  return 'Strong institutional alignment. Only look for short setups in HTF zones.';
+  return 'Strong bearish structural edge. Short bias preferred — confirm tactical context and price structure before acting.';
 }
 
 // ─── V2 SCORING ENGINE ────────────────────────────────────────────────────────

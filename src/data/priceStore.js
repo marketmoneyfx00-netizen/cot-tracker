@@ -5,7 +5,7 @@ let listeners = [];
 
 let candles = [];
 
-const MAX = 10;
+const MAX = 20;
 
 // ── NOTIFICAR CAMBIOS ─────────────────────────────────
 function notify() {
