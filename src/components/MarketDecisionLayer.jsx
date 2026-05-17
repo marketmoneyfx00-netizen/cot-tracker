@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import TooltipInfo from "./TooltipInfo.jsx";
 import { calculateBiasScore, deriveInputsFromPair } from "../cotBiasEngine.js";
-import { useLivePrices } from "../hooks/useLivePrices.js";
 
 // ─── Confluence config ───────────────────────────────────────────────────────
 const CONFLUENCE_CFG = {
@@ -74,9 +73,8 @@ function buildPairConfluence(biasScore, tacSignal, tacStrength) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET DECISION LAYER — Premium interpretation card
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, tacStateMap, selectedPair }) {
+function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, tacStateMap, selectedPair, livePrices = {} }) {
   if (!fxPairs || fxPairs.length===0) return null;
-  const livePrices = useLivePrices();
 
   const allowExecution  = finalDecision?.allowExecution ?? true;
   const isMacroBlocked  = finalDecision?.isMacroBlocked  ?? false;

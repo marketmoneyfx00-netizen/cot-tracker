@@ -4028,27 +4028,6 @@ function AppInner() {
   // ── Legacy 1-min candles for TradeReadinessChecklist backward compat ─────
   const liveCandles = usePriceStore(20);
 
-  // ── Tactical momentum per pair (using 4H candles, fallback to 1-min) ─────
-  const tacStateMap = useMemo(() => {
-    const map = {};
-    for (const pair of Object.keys({ ...candleMap, 'EUR/USD': true })) {
-      const candles = candleMap[pair];
-      if (candles?.length >= 5) {
-        map[pair] = computeTacticalMomentum(candles);
-      }
-    }
-    // Fallback for selected pair: use live 1-min candles if no 4H yet
-    if (!map[selectedPair] || map[selectedPair]?.pressure === 'insufficient') {
-      if (liveCandles?.length >= 5) {
-        map[selectedPair] = computeTacticalMomentum(liveCandles);
-      }
-    }
-    return map;
-  }, [candleMap, liveCandles, selectedPair]);
-
-  // Backward-compat alias for components that still use single tacState
-  const tacState = tacStateMap[selectedPair] ?? null;
-
   // ── Shared calendar events for TradeReadinessChecklist ──────────────────
   const [sharedEvents, setSharedEvents] = useState([]);
   const [tradeReadinessScore, setTradeReadinessScore] = useState(100);
@@ -4072,6 +4051,27 @@ function AppInner() {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
   const [selectedPair, setSelectedPair] = useState('EUR/USD');
+
+  // ── Tactical momentum per pair (using 4H candles, fallback to 1-min) ─────
+  const tacStateMap = useMemo(() => {
+    const map = {};
+    for (const pair of Object.keys({ ...candleMap, 'EUR/USD': true })) {
+      const candles = candleMap[pair];
+      if (candles?.length >= 5) {
+        map[pair] = computeTacticalMomentum(candles);
+      }
+    }
+    // Fallback for selected pair: use live 1-min candles if no 4H yet
+    if (!map[selectedPair] || map[selectedPair]?.pressure === 'insufficient') {
+      if (liveCandles?.length >= 5) {
+        map[selectedPair] = computeTacticalMomentum(liveCandles);
+      }
+    }
+    return map;
+  }, [candleMap, liveCandles, selectedPair]);
+
+  // Backward-compat alias for components that still use single tacState
+  const tacState = tacStateMap[selectedPair] ?? null;
 
   // ── Fetch COT data from Supabase (auto-sync) ──────────────────────────────
   useEffect(() => {
@@ -4813,7 +4813,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices}/>
             </div>
           )}
 
