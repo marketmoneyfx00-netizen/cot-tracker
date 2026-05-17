@@ -33,7 +33,7 @@ export function buildFinalDecision({ tradeReadinessScore, intradayScore }) {
       allowExecution: false,
       isMacroBlocked: true,
       isIntradayBlocked: false,
-      message:        'Riesgo macro elevado — no ejecutar',
+      message:        'Macro risk elevated — execution restricted',
       sub:            `Trade Readiness: ${trs}/100`,
     };
   }
@@ -45,7 +45,7 @@ export function buildFinalDecision({ tradeReadinessScore, intradayScore }) {
       allowExecution: false,
       isMacroBlocked: false,
       isIntradayBlocked: true,
-      message:        'Permiso operativo bajo — no ejecutar',
+      message:        'Execution conditions below threshold — await improvement',
       sub:            `Intraday Score: ${its}/100`,
     };
   }
@@ -57,7 +57,7 @@ export function buildFinalDecision({ tradeReadinessScore, intradayScore }) {
       allowExecution: false,
       isMacroBlocked: false,
       isIntradayBlocked: false,
-      message:        'Contexto de preparación — condiciones mejorando',
+      message:        'Preparation phase — execution conditions improving',
       sub:            `Intraday Score: ${its}/100`,
     };
   }
@@ -68,7 +68,7 @@ export function buildFinalDecision({ tradeReadinessScore, intradayScore }) {
     allowExecution: true,
     isMacroBlocked: false,
     isIntradayBlocked: false,
-    message:        'Condiciones operativas válidas',
+    message:        'Execution conditions favorable',
     sub:            `Intraday Score: ${its}/100`,
   };
 }
@@ -189,9 +189,9 @@ export function buildPairContext({
   if (alertData?.type === 'opportunity') {
     if (intradayScore < 60) {
       intradayBlock      = true;
-      intradayConstraint = { level: 'block',   message: 'Evitar ejecución — condiciones intradía no favorables' };
+      intradayConstraint = { level: 'block',   message: 'Execution restricted — intraday conditions unfavorable' };
     } else if (intradayScore < 70) {
-      intradayConstraint = { level: 'warning', message: 'Permiso operativo limitado — el contexto intradía no es óptimo' };
+      intradayConstraint = { level: 'warning', message: 'Execution conditions suboptimal — monitor for improvement' };
     }
   }
 

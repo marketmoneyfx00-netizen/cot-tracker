@@ -8,9 +8,9 @@ import { useMemo } from 'react';
 import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
 
 const CONF_CFG = {
-  HIGH:   { label: 'Favorable Context', color: '#22c55e' },
-  MEDIUM: { label: 'Moderate Context',  color: '#f59e0b' },
-  LOW:    { label: 'Low Confluence',    color: '#6b7280' },
+  HIGH:   { label: 'Favorable Context',  color: '#22c55e' },
+  MEDIUM: { label: 'Moderate Context',   color: '#f59e0b' },
+  LOW:    { label: 'Awaiting Alignment', color: '#6b7280' },
 };
 
 function buildIdea(pair, biasScore, signal, strength, marketState) {
@@ -27,8 +27,8 @@ function buildIdea(pair, biasScore, signal, strength, marketState) {
   const abs      = Math.abs(biasScore);
   const aligned  = biasDir && tacDir && biasDir === tacDir;
 
-  const strLabel = abs >= 3 ? 'fuerte' : abs >= 2 ? 'moderado' : 'leve';
-  const dirText  = isLong ? 'alcista' : 'bajista';
+  const strLabel = abs >= 3 ? 'strong' : abs >= 2 ? 'moderate' : 'mild';
+  const dirText  = isLong ? 'bullish' : 'bearish';
 
   const idea = aligned
     ? (isLong ? `Structural bullish bias · Monitoring pullbacks in ${pair}` : `Structural bearish bias · Monitoring bounces in ${pair}`)
@@ -97,10 +97,10 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
           <span style={{ fontSize: 14, flexShrink: 0 }}>🚫</span>
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 700, color: '#ef4444', fontSize: 11 }}>
-              No hay condiciones para operar
+              Macro risk elevated — context only
             </span>
             <span style={{ fontSize: 11, color: T.sub }}>
-              {' '}— riesgo macro elevado. Estas ideas son contexto, no deben ejecutarse.
+              {' '}Institutional context remains valid for planning. Do not execute under current macro conditions.
             </span>
           </div>
           <span style={{
@@ -122,10 +122,10 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 700, color: '#f59e0b', fontSize: 11 }}>
-              Permiso intradía insuficiente
+              Execution conditions below threshold
             </span>
             <span style={{ fontSize: 11, color: T.sub }}>
-              {' '}— contexto COT válido pero condiciones de ejecución no están listas.
+              {' '}COT institutional context is valid, but execution conditions are not yet favorable.
             </span>
           </div>
           <span style={{
@@ -146,8 +146,8 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
         }}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>🔍</span>
           <span style={{ fontSize: 11, color: T.sub }}>
-            <span style={{ fontWeight: 700, color: '#06b6d4' }}>Modo preparación</span>
-            {' '}— condiciones mejorando. Confirmar antes de ejecutar.
+            <span style={{ fontWeight: 700, color: '#06b6d4' }}>Preparation Phase</span>
+            {' '}— conditions improving. Monitor for tactical confirmation before acting.
           </span>
         </div>
       )}
@@ -225,7 +225,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
                         border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
                         padding: '1px 5px', borderRadius: 99,
                       }}>
-                        {isMacroBlocked ? 'NO EXEC' : 'ESPERAR'}
+                        {isMacroBlocked ? 'MACRO BLOCK' : 'AWAIT'}
                       </span>
                     )}
                     <span style={{

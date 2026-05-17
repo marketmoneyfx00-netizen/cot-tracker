@@ -1,171 +1,155 @@
-import { useMemo } from "react";
-import TooltipInfo from "./TooltipInfo.jsx";
+import { useMemo }                           from "react";
+import TooltipInfo                           from "./TooltipInfo.jsx";
 import { calculateBiasScore, deriveInputsFromPair } from "../cotBiasEngine.js";
-
-// ─── Confluence config ───────────────────────────────────────────────────────
-const CONFLUENCE_CFG = {
-  CONFIRMED_BULL: { label:"STRUCTURAL ALIGNMENT ▲", color:"#22c55e", bg:"rgba(34,197,94,0.10)",    border:"rgba(34,197,94,0.25)"    },
-  CONFIRMED_BEAR: { label:"STRUCTURAL ALIGNMENT ▼", color:"#ef4444", bg:"rgba(239,68,68,0.10)",    border:"rgba(239,68,68,0.25)"    },
-  CONFLICT:       { label:"HTF/TACTICAL CONFLICT",  color:"#f97316", bg:"rgba(249,115,22,0.10)",   border:"rgba(249,115,22,0.25)"   },
-  PULLBACK_BULL:  { label:"PULLBACK MONITORING ▲",  color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
-  PULLBACK_BEAR:  { label:"PULLBACK MONITORING ▼",  color:"#f59e0b", bg:"rgba(245,158,11,0.10)",   border:"rgba(245,158,11,0.25)"   },
-  EARLY_BULL:     { label:"EARLY ROTATION ▲",       color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
-  EARLY_BEAR:     { label:"EARLY ROTATION ▼",       color:"#06b6d4", bg:"rgba(6,182,212,0.10)",    border:"rgba(6,182,212,0.25)"    },
-  NEUTRAL:        { label:"NEUTRAL / AWAIT",        color:"#6b7280", bg:"rgba(107,114,128,0.08)",  border:"rgba(107,114,128,0.20)"  },
-};
-
-function buildPairConfluence(biasScore, tacSignal, tacStrength) {
-  const biasDir = biasScore > 1.5 ? 1 : biasScore < -1.5 ? -1 : 0;
-  const tacDir  = tacSignal==="buy" ? 1 : tacSignal==="sell" ? -1 : 0;
-  const biasAbs = Math.abs(biasScore);
-  const str     = Math.min(tacStrength||0, 3);
-
-  let alignment = 50;
-  if (biasDir!==0 && tacDir!==0) {
-    alignment = biasDir===tacDir
-      ? Math.min(99, Math.round(55 + biasAbs*7 + str*4))
-      : Math.max(5,  Math.round(45 - biasAbs*7 - str*4));
-  } else if (biasDir!==0) {
-    alignment = Math.min(72, Math.round(45 + biasAbs*4));
-  } else if (tacDir!==0) {
-    alignment = Math.min(62, Math.round(42 + str*5));
-  }
-
-  let confluenceKey;
-  if      (biasDir>0 && tacDir>0) confluenceKey="CONFIRMED_BULL";
-  else if (biasDir<0 && tacDir<0) confluenceKey="CONFIRMED_BEAR";
-  else if (biasDir>0 && tacDir<0) confluenceKey="CONFLICT";
-  else if (biasDir<0 && tacDir>0) confluenceKey="CONFLICT";
-  else if (biasDir>0)             confluenceKey="PULLBACK_BULL";
-  else if (biasDir<0)             confluenceKey="PULLBACK_BEAR";
-  else if (tacDir>0)              confluenceKey="EARLY_BULL";
-  else if (tacDir<0)              confluenceKey="EARLY_BEAR";
-  else                            confluenceKey="NEUTRAL";
-
-  const USE_CASES = {
-    CONFIRMED_BULL:"Structural momentum aligned · Monitoring pullback levels",
-    CONFIRMED_BEAR:"Structural momentum aligned · Monitoring bounce levels",
-    CONFLICT:      "HTF/Tactical conflict · Await structural resolution",
-    PULLBACK_BULL: "HTF bullish bias · Pullback phase active",
-    PULLBACK_BEAR: "HTF bearish bias · Bounce phase active",
-    EARLY_BULL:    "Early bullish rotation · Pending COT confirmation",
-    EARLY_BEAR:    "Early bearish rotation · Pending COT confirmation",
-    NEUTRAL:       "No directional edge · Await COT confirmation",
-  };
-
-  const conviction = alignment>=75 ? "HIGH" : alignment>=50 ? "MEDIUM" : "LOW";
-  const CONVICTION_CFG = {
-    HIGH:   {label:"High Alignment",     color:"#22c55e", dots:3},
-    MEDIUM: {label:"Moderate Alignment", color:"#f59e0b", dots:2},
-    LOW:    {label:"Low Alignment",      color:"#ef4444", dots:1},
-  };
-
-  return {
-    alignment,
-    confluenceKey,
-    cfg:          CONFLUENCE_CFG[confluenceKey]||CONFLUENCE_CFG.NEUTRAL,
-    useCase:      USE_CASES[confluenceKey]||USE_CASES.NEUTRAL,
-    conviction,
-    convictionCfg:CONVICTION_CFG[conviction],
-  };
-}
+import { computeConfidenceDecay, computeExecutionReadiness, EXECUTION_READINESS_CFG } from "../confidenceDecayEngine.js";
+import { buildNarrative }                    from "../narrativeEngine.js";
+import { computeMarketRegime }               from "../marketRegimeEngine.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MARKET DECISION LAYER — Premium interpretation card
+// MARKET DECISION LAYER — Institutional Contextual Interpretation
 // ─────────────────────────────────────────────────────────────────────────────
-function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, tacState, tacStateMap, selectedPair, livePrices = {} }) {
-  if (!fxPairs || fxPairs.length===0) return null;
+function MarketDecisionLayer({
+  fxPairs,
+  darkMode,
+  T,
+  isMobile,
+  isPremium = true,
+  onUpgrade,
+  finalDecision,
+  tacState,
+  tacStateMap,
+  selectedPair,
+  livePrices = {},
+  biasArr = [],
+  macroSignal = null,
+}) {
+  if (!fxPairs || fxPairs.length === 0) return null;
 
-  const allowExecution  = finalDecision?.allowExecution ?? true;
+  const allowExecution  = finalDecision?.allowExecution  ?? true;
   const isMacroBlocked  = finalDecision?.isMacroBlocked  ?? false;
-  const isIntradayBlock = finalDecision?.isIntradayBlocked ?? false;
-  const verdict         = finalDecision?.verdict ?? 'EXECUTE';
+  const verdict         = finalDecision?.verdict         ?? 'EXECUTE';
 
-  const SIGNAL_LABELS = {
-    buy:        {label:"Alcista",    color:"#22c55e", icon:"▲"},
-    sell:       {label:"Bajista",    color:"#ef4444", icon:"▼"},
-    wait:       {label:"Neutro",     color:"#6b7280", icon:"–"},
-    indecision: {label:"Divergente", color:"#f59e0b", icon:"↔"},
-  };
+  // ── Market Regime (cross-pair context) ──────────────────────────────────
+  const regime = useMemo(
+    () => computeMarketRegime(tacStateMap ?? {}, biasArr, macroSignal),
+    [tacStateMap, biasArr, macroSignal],
+  );
 
-  const pairData = fxPairs.map(p => {
-    if (!p) return null;
-    const inputs = deriveInputsFromPair(p);
-    if (!inputs) return null;
-    const bias = calculateBiasScore(inputs);
-    if (!bias) return null;
-    const conf = buildPairConfluence(bias.score, p.signal?.signal, p.signal?.strength);
-    return { pair:p.pair, bias, signal:p.signal, conf };
-  }).filter(Boolean);
+  // ── Per-pair data ────────────────────────────────────────────────────────
+  const pairData = useMemo(() => {
+    return (fxPairs ?? []).map(p => {
+      if (!p) return null;
+      const inputs = deriveInputsFromPair(p);
+      if (!inputs) return null;
+      const bias = calculateBiasScore(inputs);
+      if (!bias) return null;
 
-  if (pairData.length===0) return null;
+      const biasDir    = bias.score > 1.5 ? 'bullish' : bias.score < -1.5 ? 'bearish' : 'neutral';
+      const pairTac    = (tacStateMap && tacStateMap[p.pair]) ?? (p.pair === selectedPair ? tacState : null);
+      const hasRealTac = pairTac && pairTac.pressure !== 'insufficient';
 
-  // Sort: confirmed trends first, then highest alignment
-  const sorted = [...pairData].sort((a,b)=>{
-    const aP = a.conf.confluenceKey.startsWith("CONFIRMED")?1:0;
-    const bP = b.conf.confluenceKey.startsWith("CONFIRMED")?1:0;
-    if (aP!==bP) return bP-aP;
-    return b.conf.alignment - a.conf.alignment;
-  }).slice(0,3);
+      // Confidence decay
+      const decay = computeConfidenceDecay({
+        biasScore: bias.score,
+        biasDir,
+        tacState: hasRealTac ? pairTac : null,
+      });
 
-  const detailBg = darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.03)";
+      // Execution readiness
+      const execReadiness = computeExecutionReadiness({
+        biasDir,
+        tacState: hasRealTac ? pairTac : null,
+        decayLevel: decay.level,
+        biasScore: bias.score,
+      });
+
+      // Narrative
+      const narrative = buildNarrative({
+        biasScore:        bias.score,
+        biasDirection:    biasDir,
+        tacState:         hasRealTac ? pairTac : null,
+        conflictLevel:    decay.conflictLevel,
+        executionReadiness: execReadiness,
+      });
+
+      return { pair: p.pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative };
+    }).filter(Boolean);
+  }, [fxPairs, tacStateMap, tacState, selectedPair]);
+
+  if (pairData.length === 0) return null;
+
+  // Sort: high alignment first, then by bias magnitude
+  const sorted = [...pairData]
+    .sort((a, b) => b.decay.score - a.decay.score || Math.abs(b.bias.score) - Math.abs(a.bias.score))
+    .slice(0, 3);
+
+  const detailBg = darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
 
   return (
-    <div style={{marginBottom:16,background:T.card,border:`1px solid ${T.border}`,borderRadius:14}}>
-      {/* Header */}
+    <div style={{ marginBottom: 16, background: T.card, border: `1px solid ${T.border}`, borderRadius: 14 }}>
+
+      {/* ── Header ── */}
       <div style={{
-        padding: isMobile?"12px 14px 10px":"14px 20px 12px",
-        borderBottom:`1px solid ${T.border}`,
-        background: darkMode?"rgba(0,85,204,0.06)":"rgba(0,85,204,0.03)",
-        borderRadius:"14px 14px 0 0",
-        display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+        padding: isMobile ? '12px 14px 10px' : '14px 20px 12px',
+        borderBottom: `1px solid ${T.border}`,
+        background: darkMode ? 'rgba(0,85,204,0.06)' : 'rgba(0,85,204,0.03)',
+        borderRadius: '14px 14px 0 0',
       }}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:7,height:7,borderRadius:"50%",background:T.accent,boxShadow:`0 0 8px ${T.accent}`,flexShrink:0}}/>
-          <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:"0.08em"}}>
-            MARKET DECISION LAYER
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: T.accent, boxShadow: `0 0 8px ${T.accent}`, flexShrink: 0 }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.sub, letterSpacing: '0.08em' }}>
+              MARKET DECISION LAYER
+            </span>
+            <TooltipInfo text="Institutional contextual interpretation. Fuses HTF structural bias (COT) with tactical momentum to generate a coherent narrative per pair. Not a signal — context and timing intelligence." align="left" />
+          </div>
+          <span style={{
+            fontSize: 9, color: T.sub2, letterSpacing: '0.06em',
+            background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            border: `1px solid ${T.border}`, padding: '2px 8px', borderRadius: 99,
+          }}>
+            COT · HTF BIAS + TACTICAL CONTEXT
           </span>
-          <TooltipInfo text="Capa de interpretación automática que combina el sesgo macro institucional (HTF) con el flujo táctico semanal (LTF). Genera una lectura operativa clara por par. No es señal de entrada directa." align="left"/>
         </div>
-        <span style={{fontSize:9,color:T.sub2,letterSpacing:"0.06em",
-          background:darkMode?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.04)",
-          border:`1px solid ${T.border}`,padding:"2px 8px",borderRadius:99}}>
-          COT · SEMANAL · HTF+LTF
-        </span>
+
+        {/* Market Regime strip */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 10px', borderRadius: 8,
+          background: regime.bg, border: `1px solid ${regime.border}`,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: regime.color, flexShrink: 0, display: 'block' }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: regime.color, letterSpacing: '0.04em' }}>
+            {regime.label.toUpperCase()}
+          </span>
+          <span style={{ fontSize: 10, color: T.sub, flex: 1 }}>— {regime.description}</span>
+        </div>
       </div>
 
-      {/* ── VERDICT BANNER — shown whenever execution is not permitted ── */}
+      {/* ── Execution block banner ── */}
       {!allowExecution && (
         <div style={{
-          margin: '0 14px 0',
-          padding: '9px 14px',
+          margin: '0 14px 0', padding: '9px 14px',
           display: 'flex', alignItems: 'center', gap: 10,
-          background: isMacroBlocked
-            ? 'rgba(239,68,68,0.08)'
-            : 'rgba(245,158,11,0.08)',
+          background: isMacroBlocked ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
           border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
-          borderRadius: 8,
-          marginTop: 10,
+          borderRadius: 8, marginTop: 10,
         }}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>{isMacroBlocked ? '🚫' : '⚠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              color: isMacroBlocked ? '#ef4444' : '#f59e0b',
-            }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: isMacroBlocked ? '#ef4444' : '#f59e0b' }}>
               {isMacroBlocked
-                ? 'Análisis disponible · ejecución bloqueada por macro risk'
-                : 'Análisis disponible · permiso operativo bajo'}
+                ? 'Macro risk elevated — analysis available for planning only'
+                : 'Execution conditions below threshold — await improvement'}
             </span>
             <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>
               {isMacroBlocked
-                ? 'Trade Readiness bloqueado — usa esta lectura para planificación, no para ejecución inmediata'
-                : 'Intraday Execution por debajo del umbral — esperar mejora del contexto'}
+                ? 'Trade Readiness score blocked. Use this context for forward planning, not immediate execution.'
+                : 'Intraday Execution score below threshold. Institutional context remains valid for directional awareness.'}
             </div>
           </div>
           <span style={{
-            fontSize: 9, fontWeight: 700, flexShrink: 0,
-            padding: '3px 8px', borderRadius: 99,
+            fontSize: 9, fontWeight: 700, flexShrink: 0, padding: '3px 8px', borderRadius: 99,
             background: isMacroBlocked ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
             color: isMacroBlocked ? '#ef4444' : '#f59e0b',
             border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'}`,
@@ -176,37 +160,42 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
         </div>
       )}
 
-      {/* Cards */}
+      {/* ── Pair cards ── */}
       <div style={{
-        padding: isMobile?"12px":"14px 20px",
-        display:"grid",
-        gridTemplateColumns: isMobile?"1fr":`repeat(${sorted.length},1fr)`,
-        gap: isMobile?8:12,
+        padding: isMobile ? '12px' : '14px 20px',
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : `repeat(${sorted.length}, 1fr)`,
+        gap: isMobile ? 8 : 12,
       }}>
-        {sorted.map(({pair,bias,signal,conf})=>{
-          const sigCfg = SIGNAL_LABELS[signal?.signal]||SIGNAL_LABELS.wait;
-          const alignColor = conf.alignment>=75?"#22c55e":conf.alignment>=50?"#f59e0b":"#ef4444";
-          const biasColor  = (bias.score||0)>0?"#22c55e":(bias.score||0)<0?"#ef4444":"#6b7280";
+        {sorted.map(({ pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative }) => {
+          const biasColor  = bias.score > 0 ? '#22c55e' : bias.score < 0 ? '#ef4444' : '#6b7280';
+          // Key visual rule: when conflict present, card border uses decay color (amber/orange)
+          const cardBorder = decay.color;
+          const execCfg    = EXECUTION_READINESS_CFG[execReadiness] ?? EXECUTION_READINESS_CFG.await_confirmation;
+
+          // Conflict warning: show when levels are weak or structural_conflict
+          const showConflictBanner = decay.conflictLevel === 'moderate' || decay.conflictLevel === 'severe';
 
           return (
             <div key={pair} style={{
-              background: darkMode?"rgba(255,255,255,0.025)":"rgba(0,0,0,0.02)",
-              border:`1px solid ${conf.cfg.border}`,
-              borderRadius:12,
-              padding: isMobile?"12px":"14px 16px",
-              boxShadow:`0 0 0 1px ${conf.cfg.color}10`,
-              display:"flex",flexDirection:"column",gap:0,
+              background: darkMode ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.02)',
+              border: `1px solid ${cardBorder}22`,
+              borderRadius: 12,
+              padding: isMobile ? '12px' : '14px 16px',
+              boxShadow: `0 0 0 1px ${cardBorder}10`,
+              display: 'flex', flexDirection: 'column', gap: 0,
             }}>
-              {/* Pair + confluence badge */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                  <span style={{fontSize:16,fontWeight:800,color:T.txt,fontFamily:"monospace",letterSpacing:"0.03em"}}>
+
+              {/* Pair header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: T.txt, fontFamily: 'monospace', letterSpacing: '0.03em' }}>
                     {pair}
                   </span>
                   {livePrices[pair]?.price && (
-                    <span style={{fontSize:10,fontWeight:600,color:T.sub,fontFamily:"monospace",letterSpacing:"0.02em"}}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: T.sub, fontFamily: 'monospace' }}>
                       {livePrices[pair].price.toFixed(pair.includes('JPY') ? 3 : 5)}
-                      <span style={{fontSize:8,color:T.sub2,marginLeft:4,letterSpacing:"0.04em"}}>LIVE</span>
+                      <span style={{ fontSize: 8, color: T.sub2, marginLeft: 4, letterSpacing: '0.04em' }}>LIVE</span>
                     </span>
                   )}
                 </div>
@@ -219,190 +208,195 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
                       border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
                       padding: '2px 6px', borderRadius: 99, letterSpacing: '0.05em',
                     }}>
-                      {isMacroBlocked ? '🚫 NO EXEC' : '⚠️ ESPERAR'}
+                      {isMacroBlocked ? '🚫 MACRO BLOCK' : '⚠️ AWAIT'}
                     </span>
                   )}
+                  {/* Alignment badge — color reflects UNCERTAINTY, not opportunity */}
                   <span style={{
-                    fontSize:9,fontWeight:700,color:conf.cfg.color,
-                    background:conf.cfg.bg,border:`1px solid ${conf.cfg.border}`,
-                    padding:"2px 8px",borderRadius:99,letterSpacing:"0.04em",
-                    whiteSpace:"nowrap",
-                  }}>{conf.cfg.label}</span>
+                    fontSize: 9, fontWeight: 700,
+                    color: decay.color,
+                    background: `${decay.color}14`,
+                    border: `1px solid ${decay.color}30`,
+                    padding: '2px 8px', borderRadius: 99, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                  }}>
+                    {decay.label.toUpperCase()}
+                  </span>
                 </div>
               </div>
 
-              {/* Macro + Tactical row */}
-              {(() => {
-                // Use per-pair tacState from tacStateMap if available, else fall back to selectedPair tacState
-                const pairTac = (tacStateMap && tacStateMap[pair]) || (pair === selectedPair ? tacState : null);
-                const hasRealTac = pairTac && pairTac.pressure !== 'insufficient';
-                const biasDir = (bias.score||0) > 1.5 ? 'bullish' : (bias.score||0) < -1.5 ? 'bearish' : null;
-                const tacConflict = hasRealTac && biasDir && biasDir !== pairTac.pressure && pairTac.pressure !== 'neutral';
-                return (
-                  <>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom: tacConflict ? 6 : 10}}>
-                      <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
-                        <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>HTF Macro Bias</div>
-                        <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                          <span style={{fontSize:20,fontWeight:900,color:biasColor,fontFamily:"monospace",lineHeight:1}}>
-                            {(bias.score||0)>0?"+":""}{bias.score||0}
-                          </span>
-                          <span style={{fontSize:9,color:T.sub,lineHeight:1.3,maxWidth:60}}>
-                            {(bias.label||"Neutral").split(" ").slice(0,3).join(" ")}
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{background:detailBg,borderRadius:8,padding:"8px 10px"}}>
-                        <div style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.08em",marginBottom:4,textTransform:"uppercase"}}>
-                          {hasRealTac ? "Tactical Pressure" : "Institutional Flow"}
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}>
-                          {hasRealTac ? (
-                            <>
-                              <span style={{fontSize:11,lineHeight:1}}>{pairTac.pressure==='bearish'?'↓':pairTac.pressure==='bullish'?'↑':'–'}</span>
-                              <span style={{fontSize:10,fontWeight:700,color:pairTac.color}}>{pairTac.label}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span style={{fontSize:16,fontWeight:800,color:sigCfg.color,lineHeight:1}}>{sigCfg.icon}</span>
-                              <span style={{fontSize:10,fontWeight:700,color:sigCfg.color}}>{sigCfg.label}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Tactical conflict warning */}
-                    {tacConflict && (
-                      <div style={{
-                        marginBottom:10,padding:"6px 10px",borderRadius:7,
-                        background:"rgba(249,115,22,0.08)",border:"1px solid rgba(249,115,22,0.22)",
-                        display:"flex",alignItems:"center",gap:6,
-                      }}>
-                        <span style={{fontSize:10}}>↔</span>
-                        <div style={{flex:1}}>
-                          <span style={{fontSize:9,fontWeight:700,color:"#f97316"}}>
-                            {biasDir==='bullish' ? 'Bullish' : 'Bearish'} HTF bias · Tactical pressure {pairTac.pressure}
-                          </span>
-                          <div style={{fontSize:9,color:T.sub,marginTop:1}}>
-                            {pairTac.description || 'Short-term price action diverges from structural bias. Monitor for stabilization before acting.'}
-                          </div>
-                        </div>
-                      </div>
+              {/* HTF Bias + Tactical Pressure row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                <div style={{ background: detailBg, borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>
+                    Institutional Bias
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <span style={{ fontSize: 20, fontWeight: 900, color: biasColor, fontFamily: 'monospace', lineHeight: 1 }}>
+                      {bias.score > 0 ? '+' : ''}{bias.score}
+                    </span>
+                    <span style={{ fontSize: 9, color: T.sub, lineHeight: 1.3, maxWidth: 60 }}>
+                      {(bias.label ?? 'Neutral').split(' ').slice(0, 3).join(' ')}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ background: detailBg, borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>
+                    {hasRealTac ? 'Tactical Pressure' : 'Flow Signal'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {hasRealTac ? (
+                      <>
+                        <span style={{ fontSize: 11, lineHeight: 1, color: pairTac.color }}>
+                          {pairTac.pressure === 'bearish' ? '↓' : pairTac.pressure === 'bullish' ? '↑' : '–'}
+                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: pairTac.color }}>{pairTac.label}</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 10, color: T.sub }}>Awaiting data</span>
                     )}
-                  </>
-                );
-              })()}
+                  </div>
+                </div>
+              </div>
 
-              {/* Alignment score */}
-              <div style={{marginBottom:10, position:'relative'}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,
+              {/* Conflict warning — shown when decay is weak/structural */}
+              {showConflictBanner && hasRealTac && (
+                <div style={{
+                  marginBottom: 8, padding: '6px 10px', borderRadius: 7,
+                  background: decay.conflictLevel === 'severe'
+                    ? 'rgba(239,68,68,0.07)'
+                    : 'rgba(249,115,22,0.07)',
+                  border: `1px solid ${decay.conflictLevel === 'severe'
+                    ? 'rgba(239,68,68,0.20)'
+                    : 'rgba(249,115,22,0.20)'}`,
+                  display: 'flex', alignItems: 'flex-start', gap: 6,
+                }}>
+                  <span style={{ fontSize: 10, flexShrink: 0, marginTop: 1 }}>↔</span>
+                  <div>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: decay.conflictLevel === 'severe' ? '#ef4444' : '#f97316' }}>
+                      {biasDir === 'bullish' ? 'Bullish' : 'Bearish'} HTF Bias · Tactical Pressure {pairTac.pressure}
+                    </span>
+                    <div style={{ fontSize: 9, color: T.sub, marginTop: 1, lineHeight: 1.4 }}>
+                      {pairTac.description ?? 'Short-term price action diverges from structural bias.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Confidence decay bar — color reflects uncertainty level */}
+              <div style={{ marginBottom: 8, position: 'relative' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4,
                   filter: isPremium ? 'none' : 'blur(4px)',
                   userSelect: isPremium ? 'auto' : 'none',
                 }}>
-                  <span style={{fontSize:8,fontWeight:700,color:T.sub2,letterSpacing:"0.07em",textTransform:"uppercase"}}>Alignment Score</span>
-                  <span style={{fontSize:24,fontWeight:900,color:alignColor,fontFamily:"monospace",
-                    letterSpacing:"-1px",lineHeight:1}}>{conf.alignment}</span>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                    Alignment Score
+                  </span>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: decay.color, fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: 1 }}>
+                    {decay.score}
+                  </span>
                 </div>
-                <div style={{height:4,background:T.border,borderRadius:99,overflow:"hidden",
-                  filter: isPremium ? 'none' : 'blur(3px)',
-                }}>
+                <div style={{ height: 4, background: T.border, borderRadius: 99, overflow: 'hidden', filter: isPremium ? 'none' : 'blur(3px)' }}>
                   <div style={{
-                    width:`${conf.alignment}%`,height:"100%",borderRadius:99,
-                    background:"linear-gradient(90deg,#ef4444 0%,#f59e0b 40%,#22c55e 75%)",
-                    transition:"width 0.8s ease",
-                  }}/>
+                    width: `${decay.score}%`, height: '100%', borderRadius: 99,
+                    background: `linear-gradient(90deg, #ef4444 0%, #f59e0b 40%, ${decay.score >= 75 ? '#22c55e' : '#f59e0b'} 100%)`,
+                    transition: 'width 0.8s ease',
+                  }} />
                 </div>
               </div>
 
-              {/* Use case + conviction */}
-              <div style={{paddingTop:8,borderTop:`1px solid ${T.border}`,position:'relative'}}>
-                <div style={{
-                  filter: isPremium ? 'none' : 'blur(3px)',
-                  opacity: isPremium ? 1 : 0.5,
-                  userSelect: isPremium ? 'auto' : 'none',
-                }}>
-                  <div style={{fontSize:10,color:T.sub,lineHeight:1.5,marginBottom:5}}>
-                    🎯 {conf.useCase}
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    {[1,2,3].map(i=>(
-                      <div key={i} style={{
-                        width:6,height:6,borderRadius:"50%",
-                        background:i<=conf.convictionCfg.dots?conf.convictionCfg.color:T.border,
-                        transition:"background 0.2s",
-                      }}/>
-                    ))}
-                    <span style={{fontSize:9,color:conf.convictionCfg.color,fontWeight:600,marginLeft:2}}>
-                      {conf.convictionCfg.label}
-                    </span>
-                  </div>
+              {/* Narrative — primary interpretation */}
+              <div style={{
+                marginBottom: 8, padding: '8px 10px', borderRadius: 8,
+                background: detailBg,
+                filter: isPremium ? 'none' : 'blur(3px)',
+                userSelect: isPremium ? 'auto' : 'none',
+              }}>
+                <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>
+                  Contextual Interpretation
                 </div>
-                {/* Paywall inline lock — only for first card, not all 3 */}
+                <p style={{ fontSize: 10, color: T.sub, lineHeight: 1.5, margin: 0 }}>
+                  {narrative.primary}
+                </p>
+              </div>
+
+              {/* Execution Readiness — explicitly separate from direction */}
+              <div style={{
+                paddingTop: 8, borderTop: `1px solid ${T.border}`,
+                filter: isPremium ? 'none' : 'blur(3px)',
+                userSelect: isPremium ? 'auto' : 'none',
+              }}>
+                <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', marginBottom: 5, textTransform: 'uppercase' }}>
+                  Execution Readiness
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{
+                    fontSize: 8, padding: '2px 8px', borderRadius: 99,
+                    fontWeight: 700, letterSpacing: '0.05em',
+                    color: execCfg.color,
+                    background: `${execCfg.color}12`,
+                    border: `1px solid ${execCfg.color}28`,
+                  }}>
+                    {execCfg.label.toUpperCase()}
+                  </span>
+                </div>
+                <p style={{ fontSize: 9, color: T.sub, lineHeight: 1.45, margin: 0 }}>
+                  {narrative.execution}
+                </p>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Footer legend */}
+      {/* ── Footer legend ── */}
       <div style={{
-        padding: isMobile?"8px 12px 12px":"8px 20px 12px",
-        display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",
-        borderTop:`1px solid ${T.border}`,
+        padding: isMobile ? '8px 12px 12px' : '8px 20px 12px',
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        borderTop: `1px solid ${T.border}`,
       }}>
         {[
-          {label:"STRUCTURAL ALIGNMENT", color:"#22c55e"},
-          {label:"PULLBACK MONITORING",  color:"#f59e0b"},
-          {label:"HTF/TACTICAL CONFLICT",color:"#f97316"},
-          {label:"EARLY ROTATION",       color:"#06b6d4"},
-        ].map(({label,color})=>(
-          <div key={label} style={{display:"flex",alignItems:"center",gap:4}}>
-            <div style={{width:6,height:6,borderRadius:1,background:color,flexShrink:0}}/>
-            <span style={{fontSize:8,color:T.sub2,letterSpacing:"0.04em"}}>{label}</span>
+          { label: 'HIGH ALIGNMENT',      color: '#22c55e' },
+          { label: 'MODERATE ALIGNMENT',  color: '#f59e0b' },
+          { label: 'WEAK ALIGNMENT',      color: '#f97316' },
+          { label: 'STRUCTURAL CONFLICT', color: '#ef4444' },
+        ].map(({ label, color }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 6, height: 6, borderRadius: 1, background: color, flexShrink: 0 }} />
+            <span style={{ fontSize: 8, color: T.sub2, letterSpacing: '0.04em' }}>{label}</span>
           </div>
         ))}
-        <span style={{fontSize:8,color:T.sub2,marginLeft:"auto",opacity:0.7}}>
-          No es señal de entrada · Macro HTF + Táctico LTF
+        <span style={{ fontSize: 8, color: T.sub2, marginLeft: 'auto', opacity: 0.7 }}>
+          Institutional context only · Not a trading signal
         </span>
       </div>
 
-      {/* ── PAYWALL CTA (free users only) ── */}
+      {/* ── Paywall CTA (free users only) ── */}
       {!isPremium && (
         <div style={{
-          margin:'0 16px 14px',
-          padding:'12px 14px',
-          borderRadius:10,
+          margin: '0 16px 14px', padding: '12px 14px', borderRadius: 10,
           background: darkMode ? 'rgba(0,85,204,0.07)' : 'rgba(0,85,204,0.04)',
-          border:'1px solid rgba(0,85,204,0.18)',
-          display:'flex',
-          alignItems:'center',
-          gap:12,
+          border: '1px solid rgba(0,85,204,0.18)',
+          display: 'flex', alignItems: 'center', gap: 12,
         }}>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:11, fontWeight:700, color: darkMode ? '#c8d0e0' : '#1e293b', marginBottom:3 }}>
-              Sin estos datos estás operando sin contexto completo
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: darkMode ? '#c8d0e0' : '#1e293b', marginBottom: 3 }}>
+              Full institutional context requires premium access
             </div>
-            <div style={{ fontSize:10, color:T.sub, lineHeight:1.4 }}>
-              Los datos completos están reservados para usuarios premium.
+            <div style={{ fontSize: 10, color: T.sub, lineHeight: 1.4 }}>
+              Narrative intelligence, alignment decay, and execution readiness are reserved for premium users.
             </div>
           </div>
           <button
             onClick={onUpgrade}
             style={{
-              flexShrink:0,
-              padding:'8px 14px',
-              borderRadius:8,
-              border:'none',
-              background:'#0055cc',
-              color:'white',
-              fontSize:11,
-              fontWeight:700,
-              cursor:'pointer',
-              whiteSpace:'nowrap',
-              boxShadow:'0 2px 8px rgba(0,85,204,0.3)',
+              flexShrink: 0, padding: '8px 14px', borderRadius: 8,
+              border: 'none', background: '#0055cc', color: 'white',
+              fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(0,85,204,0.3)',
             }}
           >
-            Ver el análisis completo ahora
+            Unlock full context
           </button>
         </div>
       )}
@@ -410,7 +404,5 @@ function MarketDecisionLayer({ fxPairs, darkMode, T, isMobile, isPremium = true,
   );
 }
 
-
-
-export { CONFLUENCE_CFG, buildPairConfluence, MarketDecisionLayer };
+export { MarketDecisionLayer };
 export default MarketDecisionLayer;

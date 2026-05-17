@@ -143,7 +143,7 @@ function CAFAssetCard({ asset, darkMode, T, isMobile, isExp, onToggle }) {
 }
 
 function CrossAssetFlow({ combinedData, darkMode, T, isMobile, isPremium = true, onUpgrade }) {
-  const [expanded, setExpanded] = useState(null);
+  const [expanded, setExpanded] = useState(new Set());
 
   if (!combinedData || combinedData.assetCount === 0) return null;
 
@@ -261,8 +261,8 @@ function CrossAssetFlow({ combinedData, darkMode, T, isMobile, isPremium = true,
                   <div key={asset.asset} style={{animation:"cafFadeIn 0.2s ease both",animationDelay:`${idx*0.04}s`}}>
                     <CAFAssetCard
                       asset={asset} darkMode={darkMode} T={T} isMobile={isMobile}
-                      isExp={expanded===asset.asset}
-                      onToggle={()=>setExpanded(p=>p===asset.asset?null:asset.asset)}
+                      isExp={expanded.has(asset.asset)}
+                      onToggle={()=>setExpanded(prev=>{const s=new Set(prev);s.has(asset.asset)?s.delete(asset.asset):s.add(asset.asset);return s;})}
                     />
                   </div>
                 ))}
