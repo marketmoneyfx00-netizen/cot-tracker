@@ -5,7 +5,7 @@
  * Also re-exports detectCftcFileType and parseTiffCombined from the shared module.
  */
 
-export { detectCftcFileType, parseTiffCombined } from '../../src/parseTiffCombined.js';
+export { detectCftcFileType, parseTiffCombined, parseDisaggregated, mergeCombinedData } from '../../src/parseTiffCombined.js';
 
 const CONTRACT_MAP = [
   { keys: ["EURO FX - CHICAGO MERCANTILE", "EURO FX - CHICAGO"],                     pair: "EUR/USD",   cat: "fx", invert: false },

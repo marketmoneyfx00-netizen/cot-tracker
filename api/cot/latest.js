@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const [futRes, comRes, runRes] = await Promise.all([
+    const [futRes, comRes, disaggRes, runRes] = await Promise.all([
       supabaseAdmin
         .from('cot_reports')
         .select('parsed_data, report_date, downloaded_at, asset_count')
@@ -41,6 +41,14 @@ export default async function handler(req, res) {
         .maybeSingle(),
 
       supabaseAdmin
+        .from('cot_reports')
+        .select('parsed_data, report_date, downloaded_at, asset_count')
+        .eq('report_type', 'disaggregated')
+        .order('report_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+
+      supabaseAdmin
         .from('cot_sync_runs')
         .select('started_at, completed_at, status, report_date, error_message')
         .order('started_at', { ascending: false })
@@ -48,15 +56,18 @@ export default async function handler(req, res) {
         .maybeSingle(),
     ]);
 
-    const fut = futRes.data;
-    const com = comRes.data;
-    const run = runRes.data;
+    const fut   = futRes.data;
+    const com   = comRes.data;
+    const disagg= disaggRes.data;
+    const run   = runRes.data;
 
     const payload = {
-      pairsData:      fut?.parsed_data ?? null,
-      source:         fut ? `Auto-sync ${fut.report_date}` : null,
-      combinedData:   com?.parsed_data ?? null,
-      sourceCombined: com ? `Auto-sync ${com.report_date}` : null,
+      pairsData:          fut?.parsed_data    ?? null,
+      source:             fut ? `Auto-sync ${fut.report_date}` : null,
+      combinedData:       com?.parsed_data    ?? null,
+      sourceCombined:     com ? `Auto-sync ${com.report_date}` : null,
+      disaggregatedData:  disagg?.parsed_data ?? null,
+      sourceDisaggregated:disagg ? `Auto-sync ${disagg.report_date}` : null,
       lastSync: {
         at:           run?.completed_at ?? run?.started_at ?? null,
         status:       run?.status       ?? 'never',

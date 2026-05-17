@@ -7,12 +7,13 @@
 
 import { unzipSync } from 'fflate';
 import { supabaseAdmin } from '../_lib/supabase/admin.js';
-import { buildPairsData, parseTiffCombined, detectCftcFileType } from '../_lib/cotParser.js';
+import { buildPairsData, parseTiffCombined, parseDisaggregated, detectCftcFileType } from '../_lib/cotParser.js';
 
 const CFTC_YEAR = new Date().getUTCFullYear();
 const CFTC_URLS = {
-  futures_only: `https://www.cftc.gov/files/dea/history/fut_fin_txt_${CFTC_YEAR}.zip`,
-  combined:     `https://www.cftc.gov/files/dea/history/com_fin_txt_${CFTC_YEAR}.zip`,
+  futures_only:  `https://www.cftc.gov/files/dea/history/fut_fin_txt_${CFTC_YEAR}.zip`,
+  combined:      `https://www.cftc.gov/files/dea/history/com_fin_txt_${CFTC_YEAR}.zip`,
+  disaggregated: `https://www.cftc.gov/files/dea/history/com_disagg_txt_${CFTC_YEAR}.zip`,
 };
 
 async function fetchAndExtract(url) {
@@ -134,6 +135,38 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('[cot/sync] Combined failed:', e.message);
       results.combined = { ok: false, error: e.message };
+    }
+
+    // Disaggregated (gold + commodities)
+    try {
+      console.log('[cot/sync] Downloading Disaggregated...');
+      const csvText = await fetchAndExtract(CFTC_URLS.disaggregated);
+
+      const fileType = detectCftcFileType(csvText);
+      if (fileType !== 'disaggregated') throw new Error(`Unexpected file type: ${fileType}`);
+
+      const disaggData = parseDisaggregated(csvText);
+      const disaggDate = disaggData.reportDate || reportDate;
+
+      if (disaggDate) {
+        const { error: upsertErr } = await supabaseAdmin
+          .from('cot_reports')
+          .upsert({
+            report_type:   'disaggregated',
+            report_date:   disaggDate,
+            downloaded_at: new Date().toISOString(),
+            parsed_data:   disaggData,
+            asset_count:   disaggData.assetCount,
+          }, { onConflict: 'report_type,report_date', ignoreDuplicates: true });
+
+        if (upsertErr) throw upsertErr;
+        filesDownloaded++;
+        results.disaggregated = { ok: true, assets: disaggData.assetCount, date: disaggDate };
+        console.log(`[cot/sync] Disaggregated OK — ${disaggData.assetCount} assets, date ${disaggDate}`);
+      }
+    } catch (e) {
+      console.error('[cot/sync] Disaggregated failed:', e.message);
+      results.disaggregated = { ok: false, error: e.message };
     }
 
     await updateRun({

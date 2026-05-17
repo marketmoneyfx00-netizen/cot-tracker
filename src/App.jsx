@@ -4086,8 +4086,19 @@ function AppInner() {
         if (!r.ok) return;
         const data = await r.json();
         if (data.pairsData?.length)        { setPairsData(data.pairsData);       setSource(data.source || 'Sync automatico'); }
-        if (data.combinedData?.assetCount) { setCombinedData(data.combinedData); setSourceCombined(data.sourceCombined || 'Sync automatico'); }
         if (data.lastSync)                 { setLastSync(data.lastSync); }
+        // Merge TFF Combined + Disaggregated (gold/commodities) when both are available
+        if (data.combinedData?.assetCount || data.disaggregatedData?.assetCount) {
+          const merged = mergeCombinedData(
+            data.combinedData    ?? null,
+            data.disaggregatedData ?? null,
+          );
+          if (merged?.assetCount) {
+            setCombinedData(merged);
+            const src = [data.sourceCombined, data.sourceDisaggregated].filter(Boolean).join(' + ') || 'Sync automatico';
+            setSourceCombined(src);
+          }
+        }
       } catch { /* non-critical */ }
     }
     loadCotData();
