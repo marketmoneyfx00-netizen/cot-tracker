@@ -7,13 +7,7 @@
  */
 
 import { verifyAuth } from '../_lib/auth-middleware.js';
-
-const VALID_PRICE_IDS = new Set([
-  'price_1TQdW7B7QeisGCzWnuzk8SLI', // Mensual    24 EUR
-  'price_1TQdc6B7QeisGCzWYXRSjNGc', // Trimestral 59 EUR
-  'price_1TQdfUB7QeisGCzWkhQSRQAE', // Semestral  99 EUR
-  'price_1TQdhfB7QeisGCzWEoFsJFhm', // Anual     169 EUR
-]);
+import { VALID_PRICE_IDS } from '../_lib/stripePlans.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

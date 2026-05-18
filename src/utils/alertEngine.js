@@ -109,9 +109,9 @@ function resolveVerdict({ alert, marketState, intradayScore, tradeReadinessScore
     return {
       verdict: 'AVOID',
       color: '#ef4444',
-      title: 'No operar',
-      message: 'Evento macro activo — el mercado no está en condiciones seguras',
-      action: 'Esperar absorción completa antes de considerar cualquier entrada',
+      title: 'Sin contexto operativo',
+      message: 'Evento macro activo — condiciones no favorables para nuevas posiciones',
+      action: 'Esperar absorción del evento antes de evaluar cualquier sesgo',
     };
   }
 
@@ -120,9 +120,9 @@ function resolveVerdict({ alert, marketState, intradayScore, tradeReadinessScore
     return {
       verdict: 'AVOID',
       color: '#ef4444',
-      title: 'No operar',
-      message: 'Condiciones intradía débiles — permiso operativo no alcanzado',
-      action: 'Esperar mejor contexto intradía antes de ejecutar',
+      title: 'Sin contexto operativo',
+      message: 'Condiciones intradía no alineadas con el sesgo institucional',
+      action: 'Monitorear hasta que el contexto intradía mejore',
     };
   }
 
@@ -131,9 +131,9 @@ function resolveVerdict({ alert, marketState, intradayScore, tradeReadinessScore
     return {
       verdict: 'AVOID',
       color: '#ef4444',
-      title: 'No operar',
-      message: 'El contexto institucional no presenta oportunidad válida',
-      action: 'Mantente fuera del mercado hasta nueva alineación',
+      title: 'Sin contexto operativo',
+      message: 'El posicionamiento institucional no muestra alineación válida',
+      action: 'Mantenerse observando — esperar nueva alineación institucional',
     };
   }
 
@@ -142,9 +142,9 @@ function resolveVerdict({ alert, marketState, intradayScore, tradeReadinessScore
     return {
       verdict: 'PREPARE',
       color: '#f59e0b',
-      title: 'Preparar operación',
-      message: 'Confluencia institucional moderada — aún sin dominancia clara',
-      action: 'Esperar mayor alineación antes de ejecutar',
+      title: 'Sesgo en formación',
+      message: 'Confluencia institucional parcial — dominancia aún no confirmada',
+      action: 'Monitorear evolución del sesgo antes de considerar cualquier acción',
     };
   }
 
@@ -157,19 +157,19 @@ function resolveVerdict({ alert, marketState, intradayScore, tradeReadinessScore
     return {
       verdict: 'PREPARE',
       color: '#f59e0b',
-      title: 'Preparar operación',
-      message: 'Setup institucional válido pero sin confirmación completa',
-      action: 'Esperar retroceso + confirmación antes de ejecutar',
+      title: 'Sesgo en formación',
+      message: 'Contexto institucional válido — pendiente de confirmación de precio',
+      action: 'Aguardar retroceso y confirmación de estructura antes de actuar',
     };
   }
 
-  // 6. 🟢 EJECUCIÓN — todas las condiciones cumplidas
+  // 6. 🟢 Contexto favorable — todas las condiciones institucionales alineadas
   return {
     verdict: 'EXECUTE',
     color: '#22c55e',
-    title: 'Ejecutar oportunidad',
-    message: 'Confluencia institucional completa en entorno favorable',
-    action: 'Buscar entrada en retroceso en timeframe operativo',
+    title: 'Contexto institucional favorable',
+    message: 'Confluencia institucional completa en entorno de precio estructurado',
+    action: 'Monitorear retroceso en timeframe operativo — confirmar estructura antes de actuar',
   };
 }
 

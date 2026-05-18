@@ -10,23 +10,23 @@ const VERDICT_CFG = {
     color:  '#22c55e',
     bg:     'rgba(34,197,94,0.08)',
     border: 'rgba(34,197,94,0.28)',
-    badge:  'EJECUTAR',
+    badge:  'CONTEXTO FAVORABLE',
   },
   PREPARE: {
     color:  '#f59e0b',
     bg:     'rgba(245,158,11,0.08)',
     border: 'rgba(245,158,11,0.28)',
-    badge:  'PREPARAR',
+    badge:  'SESGO EN FORMACIÓN',
   },
   AVOID: {
     color:  '#ef4444',
     bg:     'rgba(239,68,68,0.08)',
     border: 'rgba(239,68,68,0.28)',
-    badge:  'NO OPERAR',
+    badge:  'SIN CONTEXTO',
   },
 };
 
-export default function AlertBanner({ alert, alertKey, intradayConstraint, intradayBlock, darkMode, T, pair }) {
+export default function AlertBanner({ alert, alertKey, intradayConstraint, intradayBlock, darkMode, T, pair, cotDataDate }) {
   const [lastKey,    setLastKey]    = useState(null);
   const [dismissed,  setDismissed]  = useState(false);
   const [notifState, setNotifState] = useState('idle');
@@ -114,9 +114,11 @@ export default function AlertBanner({ alert, alertKey, intradayConstraint, intra
         {displayTitle}
       </div>
 
-      {/* ── Row 3: real-time label ─────────────────────────────────────────── */}
+      {/* ── Row 3: COT data age label ──────────────────────────────────────── */}
       <div style={{ fontSize: 10, color: T.sub2, marginBottom: 10 }}>
-        Condición evaluada en tiempo real
+        {cotDataDate
+          ? `Basado en posiciones institucionales del ${cotDataDate} · Horizonte 1–4 semanas`
+          : 'Basado en posicionamiento institucional COT · Horizonte 1–4 semanas'}
       </div>
 
       {/* ── Row 4: message ─────────────────────────────────────────────────── */}
@@ -153,13 +155,13 @@ export default function AlertBanner({ alert, alertKey, intradayConstraint, intra
         </div>
       )}
 
-      {/* ── Row 7: high-conviction bonus (EXECUTE only) ────────────────────── */}
+      {/* ── Row 7: horizon note (EXECUTE only) ────────────────────────────── */}
       {isExecute && alert.strength === 'high' && (
         <div style={{
-          fontSize: 11, color: displayColor, fontStyle: 'italic',
+          fontSize: 11, color: T.sub2, fontStyle: 'italic',
           marginBottom: 12, paddingLeft: 2,
         }}>
-          Este tipo de oportunidad no aparece todos los días.
+          Sesgo institucional de alta alineación — no implica dirección ni momento de entrada.
         </div>
       )}
 
@@ -195,7 +197,7 @@ export default function AlertBanner({ alert, alertKey, intradayConstraint, intra
           border: `1px solid ${displayColor}40`,
           borderRadius: 7, padding: '5px 12px', cursor: 'pointer',
         }}>
-          🔔 Avisarme cuando haya oportunidades reales
+          🔔 Avisarme cuando el contexto institucional sea favorable
         </button>
       )}
       {notifState === 'granted' && (

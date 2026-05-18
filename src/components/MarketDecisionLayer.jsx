@@ -21,6 +21,7 @@ function MarketDecisionLayer({
   livePrices = {},
   biasArr = [],
   macroSignal = null,
+  cotDataDate = null,
 }) {
   if (!fxPairs || fxPairs.length === 0) return null;
 
@@ -106,7 +107,7 @@ function MarketDecisionLayer({
             background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
             border: `1px solid ${T.border}`, padding: '2px 8px', borderRadius: 99,
           }}>
-            COT · HTF BIAS + TACTICAL CONTEXT
+            {cotDataDate ? `COT del ${cotDataDate}` : 'COT · HTF BIAS'} · HORIZONTE 1–4 SEM
           </span>
         </div>
 
@@ -364,6 +365,22 @@ function MarketDecisionLayer({
                   {narrative.execution}
                 </p>
               </div>
+
+              {/* Invalidation scenarios */}
+              {narrative.invalidation && isPremium && (
+                <div style={{
+                  marginTop: 8, padding: '7px 10px', borderRadius: 8,
+                  background: darkMode ? 'rgba(239,68,68,0.05)' : 'rgba(239,68,68,0.03)',
+                  border: `1px solid rgba(239,68,68,0.14)`,
+                }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: '#ef4444', letterSpacing: '0.07em', marginBottom: 3, textTransform: 'uppercase', opacity: 0.7 }}>
+                    Tesis se invalida si…
+                  </div>
+                  <p style={{ fontSize: 9, color: T.sub, lineHeight: 1.45, margin: 0, fontStyle: 'italic' }}>
+                    {narrative.invalidation}
+                  </p>
+                </div>
+              )}
             </div>
           );
         })}

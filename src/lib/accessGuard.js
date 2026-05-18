@@ -19,12 +19,21 @@ const PROFILE_SELECT =
 const RETRY_DELAYS = [0, 500, 800, 1200, 1800];
 
 // Lock global: evita dos loadUserProfile simultáneos
+// Expiry garantiza liberación tras 30s aunque el fetch cuelgue (iOS Safari)
 let isLoadingProfile = false;
+let _lockExpiry      = 0;
+const LOCK_TIMEOUT_MS = 30_000;
 
 export async function loadUserProfile(authUid, authUser = null) {
   if (!authUid) {
     console.error('[accessGuard] No authUid');
     return { profile: null, error: new Error('authUid required') };
+  }
+
+  const lockStale = isLoadingProfile && Date.now() > _lockExpiry;
+  if (lockStale) {
+    console.warn('[accessGuard] Stale lock detected — forcing release');
+    isLoadingProfile = false;
   }
 
   if (isLoadingProfile) {
@@ -33,6 +42,7 @@ export async function loadUserProfile(authUid, authUser = null) {
   }
 
   isLoadingProfile = true;
+  _lockExpiry      = Date.now() + LOCK_TIMEOUT_MS;
 
   try {
     let lastError = null;
@@ -112,6 +122,7 @@ export async function loadUserProfile(authUid, authUser = null) {
 
   } finally {
     isLoadingProfile = false;
+    _lockExpiry      = 0;
   }
 }
 

@@ -9,15 +9,15 @@ export function checkAlerts({ decision, scoreT }) {
   const alerts = [];
 
   if (decision.type === 'bullish' && scoreT > 50) {
-    alerts.push({ type: 'BUY_STRONG',  message: '🚀 Compra fuerte detectada' });
+    alerts.push({ type: 'BIAS_ALCISTA', message: 'Sesgo institucional alcista destacado' });
   }
 
   if (decision.type === 'bearish' && scoreT < -50) {
-    alerts.push({ type: 'SELL_STRONG', message: '💥 Venta fuerte detectada' });
+    alerts.push({ type: 'BIAS_BAJISTA', message: 'Sesgo institucional bajista destacado' });
   }
 
   if (decision.type === 'divergence') {
-    alerts.push({ type: 'WARNING',     message: '⚠️ Divergencia — posible trampa' });
+    alerts.push({ type: 'DIVERGENCIA',  message: 'Divergencia institucional — contexto mixto' });
   }
 
   return alerts;

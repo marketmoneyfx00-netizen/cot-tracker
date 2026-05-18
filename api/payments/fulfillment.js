@@ -24,23 +24,7 @@
 import { supabaseAdmin } from '../_lib/supabase/admin.js';
 import { generateReceiptPDF, getStoragePath } from '../_lib/pdf/receipt.js';
 import { sendWelcomeEmail } from '../_lib/email/resend.js';
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-const PRICE_ID_TO_PLAN = {
-  'price_1TQdW7B7QeisGCzWnuzk8SLI': 'mensual',
-  'price_1TQdc6B7QeisGCzWYXRSJNGc': 'trimestral',
-  'price_1TQdfUB7QeisGCzWkhQSRQAE': 'semestral',
-  'price_1TQdhfB7QeisGCzWEoFsJFhm': 'anual',
-};
-
-const PLAN_NAMES = {
-  mensual:    'COT Tracker — Plan Mensual',
-  trimestral: 'COT Tracker — Plan Trimestral',
-  semestral:  'COT Tracker — Plan Semestral',
-  anual:      'COT Tracker — Plan Anual',
-};
-
-const PLAN_FALLBACK_DAYS = { mensual: 30, trimestral: 90, semestral: 180, anual: 365 };
+import { PRICE_ID_TO_PLAN, PLAN_NAMES, PLAN_FALLBACK_DAYS } from '../_lib/stripePlans.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -488,77 +472,12 @@ async function _pipeline({
     }
   }
 
-  // ── [3/8] Invoice number ──────────────────────────────────────────────────
-  console.log(`[fulfillment] [3/8] invoice number`);
-  const { data: invNum, error: invNumErr } = await supabaseAdmin.rpc('next_invoice_number');
-  if (invNumErr || !invNum) {
-    console.error('[fulfillment] [3/8] FAILED:', invNumErr?.message);
-    return { ok: false, paymentId, error: `invoice_number_failed: ${invNumErr?.message}` };
-  }
-  const invoiceNumber = typeof invNum === 'string' ? invNum : String(invNum);
-  console.log(`[fulfillment] [3/8] ✅ ${invoiceNumber}`);
-
-  // ── [4/8] PDF ─────────────────────────────────────────────────────────────
-  console.log(`[fulfillment] [4/8] PDF`);
-  const paidAt = new Date();
-  let pdfBytes = null;
-  try {
-    pdfBytes = await generateReceiptPDF({
-      invoiceNumber, transactionId: idempotencyKey,
-      orderId: sessionId ?? subscriptionId,
-      payerEmail, payerName, productName, planId,
-      amount, currency, paidAt, issuedAt: paidAt,
-    });
-    console.log(`[fulfillment] [4/8] ✅ ${pdfBytes.byteLength} bytes`);
-  } catch (e) {
-    console.error('[fulfillment] [4/8] PDF failed (non-critical):', e.message);
-  }
-
-  // ── [5/8] Upload PDF ──────────────────────────────────────────────────────
-  let receiptUrl = null;
-  if (pdfBytes) {
-    console.log(`[fulfillment] [5/8] uploading PDF`);
-    const sp = getStoragePath(idempotencyKey, paidAt);
-    const { error: upErr } = await supabaseAdmin.storage
-      .from('receipts')
-      .upload(sp, pdfBytes, { contentType: 'application/pdf', cacheControl: '3600', upsert: true });
-    if (upErr) {
-      console.error('[fulfillment] [5/8] upload failed (non-critical):', upErr.message);
-    } else {
-      const { data: su } = await supabaseAdmin.storage.from('receipts').createSignedUrl(sp, 60 * 60 * 24 * 365);
-      receiptUrl = su?.signedUrl ?? null;
-      console.log(`[fulfillment] [5/8] ✅ signed URL: ${!!receiptUrl}`);
-    }
-  } else {
-    console.log(`[fulfillment] [5/8] skip (no PDF)`);
-  }
-
-  // ── [6/8] Insert invoice ──────────────────────────────────────────────────
-  console.log(`[fulfillment] [6/8] insert invoice`);
-  const { data: invRow, error: invErr } = await supabaseAdmin
-    .from('invoices')
-    .insert({
-      payment_id: paymentId, invoice_number: invoiceNumber,
-      pdf_url: receiptUrl,
-      storage_path: pdfBytes ? getStoragePath(idempotencyKey, paidAt) : null,
-    })
-    .select('id').single();
-
-  if (invErr) {
-    console.error('[fulfillment] [6/8] invoices insert FAILED (non-critical):', invErr.message, invErr.code);
-  } else {
-    console.log(`[fulfillment] [6/8] ✅ invoice: ${invRow.id}`);
-    await supabaseAdmin.from('payments')
-      .update({ receipt_url: receiptUrl, invoice_id: invRow.id })
-      .eq('id', paymentId);
-  }
-
-  // ── [7/8] Activate access — CRITICAL ─────────────────────────────────────
-  console.log(`[fulfillment] [7/8] activate_user_access | auth:${authUserId} | cus:${customerId} | plan:${planId} | valid_until:${validUntil.toISOString()}`);
+  // ── [3/8] Activate access — CRITICAL (moved early: user gets access before PDF/email) ──
+  console.log(`[fulfillment] [3/8] activate_user_access | auth:${authUserId} | cus:${customerId} | plan:${planId} | valid_until:${validUntil.toISOString()}`);
 
   const { error: accErr } = await supabaseAdmin.rpc('activate_user_access', {
-    p_auth_user_id:           authUserId,    // OBLIGATORIO
-    p_stripe_customer_id:     customerId,    // OBLIGATORIO
+    p_auth_user_id:           authUserId,
+    p_stripe_customer_id:     customerId,
     p_stripe_subscription_id: subscriptionId,
     p_payer_email:            payerEmail,
     p_plan_id:                planId,
@@ -567,11 +486,85 @@ async function _pipeline({
   });
 
   if (accErr) {
-    console.error('[fulfillment] [7/8] CRITICAL activate_user_access FAILED:', accErr.message, accErr.code, accErr.details, accErr.hint);
+    console.error('[fulfillment] [3/8] CRITICAL activate_user_access FAILED:', accErr.message, accErr.code, accErr.details, accErr.hint);
     await supabaseAdmin.from('payments').update({ status: 'access_error' }).eq('id', paymentId);
     return { ok: false, paymentId, error: `access_activation_failed: ${accErr.message}` };
   }
-  console.log(`[fulfillment] [7/8] ✅ users_access updated`);
+  console.log(`[fulfillment] [3/8] ✅ users_access updated`);
+
+  // ── [4/8] Invoice number ──────────────────────────────────────────────────
+  console.log(`[fulfillment] [4/8] invoice number`);
+  const { data: invNum, error: invNumErr } = await supabaseAdmin.rpc('next_invoice_number');
+  if (invNumErr || !invNum) {
+    console.error('[fulfillment] [4/8] FAILED (non-critical — access already granted):', invNumErr?.message);
+  }
+  const invoiceNumber = (invNum && !invNumErr)
+    ? (typeof invNum === 'string' ? invNum : String(invNum))
+    : null;
+  if (invoiceNumber) console.log(`[fulfillment] [4/8] ✅ ${invoiceNumber}`);
+
+  // ── [5/8] PDF ─────────────────────────────────────────────────────────────
+  console.log(`[fulfillment] [5/8] PDF`);
+  const paidAt = new Date();
+  let pdfBytes = null;
+  if (invoiceNumber) {
+    try {
+      pdfBytes = await generateReceiptPDF({
+        invoiceNumber, transactionId: idempotencyKey,
+        orderId: sessionId ?? subscriptionId,
+        payerEmail, payerName, productName, planId,
+        amount, currency, paidAt, issuedAt: paidAt,
+      });
+      console.log(`[fulfillment] [5/8] ✅ ${pdfBytes.byteLength} bytes`);
+    } catch (e) {
+      console.error('[fulfillment] [5/8] PDF failed (non-critical):', e.message);
+    }
+  } else {
+    console.log(`[fulfillment] [5/8] skip (no invoice number)`);
+  }
+
+  // ── [6/8] Upload PDF ──────────────────────────────────────────────────────
+  let receiptUrl = null;
+  if (pdfBytes) {
+    console.log(`[fulfillment] [6/8] uploading PDF`);
+    const sp = getStoragePath(idempotencyKey, paidAt);
+    const { error: upErr } = await supabaseAdmin.storage
+      .from('receipts')
+      .upload(sp, pdfBytes, { contentType: 'application/pdf', cacheControl: '3600', upsert: true });
+    if (upErr) {
+      console.error('[fulfillment] [6/8] upload failed (non-critical):', upErr.message);
+    } else {
+      const { data: su } = await supabaseAdmin.storage.from('receipts').createSignedUrl(sp, 60 * 60 * 24 * 365);
+      receiptUrl = su?.signedUrl ?? null;
+      console.log(`[fulfillment] [6/8] ✅ signed URL: ${!!receiptUrl}`);
+    }
+  } else {
+    console.log(`[fulfillment] [6/8] skip (no PDF)`);
+  }
+
+  // ── [7/8] Insert invoice ──────────────────────────────────────────────────
+  if (invoiceNumber) {
+    console.log(`[fulfillment] [7/8] insert invoice`);
+    const { data: invRow, error: invErr } = await supabaseAdmin
+      .from('invoices')
+      .insert({
+        payment_id: paymentId, invoice_number: invoiceNumber,
+        pdf_url: receiptUrl,
+        storage_path: pdfBytes ? getStoragePath(idempotencyKey, paidAt) : null,
+      })
+      .select('id').single();
+
+    if (invErr) {
+      console.error('[fulfillment] [7/8] invoices insert FAILED (non-critical):', invErr.message, invErr.code);
+    } else {
+      console.log(`[fulfillment] [7/8] ✅ invoice: ${invRow.id}`);
+      await supabaseAdmin.from('payments')
+        .update({ receipt_url: receiptUrl, invoice_id: invRow.id })
+        .eq('id', paymentId);
+    }
+  } else {
+    console.log(`[fulfillment] [7/8] skip (no invoice number)`);
+  }
 
   // ── [8/8] Email ───────────────────────────────────────────────────────────
   console.log(`[fulfillment] [8/8] email → ${payerEmail}`);

@@ -179,7 +179,7 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
     }}>
 
       {/* ── HEADER ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: permission.color, boxShadow: `0 0 6px ${permission.color}`, flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 700, color: sub2, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
@@ -189,6 +189,9 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
         {availablePairs?.length > 0 && (
           <PairSelector pairs={availablePairs} selected={activePair} onChange={setSelectedPair} darkMode={darkMode} T={T} />
         )}
+      </div>
+      <div style={{ fontSize: 9, color: sub2, letterSpacing: '0.04em', marginBottom: 16, paddingLeft: 12 }}>
+        Horizonte: minutos–horas · No refleja sesgo COT
       </div>
 
       {/* ── MACRO BLOCK NOTICE — only when TradeReadiness blocks despite intraday being OK ── */}

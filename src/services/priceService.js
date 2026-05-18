@@ -12,6 +12,7 @@ let _currentMinute    = null;
 let _isFetching       = false;
 let _isRunning        = false;
 let _consecutiveFails = 0;
+let _lastFailTime     = 0;
 const MAX_BACKOFF_MS  = 60_000; // 1 min máximo entre reintentos tras fallos
 
 // ── Constructor de vela OHLC 1 minuto ─────────────────────────
@@ -73,10 +74,12 @@ async function fetchPrice(symbol) {
     if (typeof data?.price !== 'number' || data.price === 0) {
       console.warn('[priceService] Invalid price:', data);
       _consecutiveFails++;
+      _lastFailTime = Date.now();
       return;
     }
 
     _consecutiveFails = 0;
+    _lastFailTime     = 0;
     buildCandle(data.price);
 
   } catch (err) {
@@ -84,6 +87,7 @@ async function fetchPrice(symbol) {
       console.error('[priceService] Fetch error:', err?.message ?? err);
     }
     _consecutiveFails++;
+    _lastFailTime = Date.now();
   } finally {
     _isFetching = false;
   }
@@ -107,11 +111,9 @@ export function startPricePolling(symbol = 'EUR/USD', intervalMs = 10_000) {
   fetchPrice(symbol);
 
   _interval = setInterval(() => {
-    // Back-off exponencial tras fallos consecutivos (max MAX_BACKOFF_MS)
     if (_consecutiveFails > 0) {
       const backoff = Math.min(intervalMs * Math.pow(2, _consecutiveFails - 1), MAX_BACKOFF_MS);
-      const sinceLastFail = Date.now() % backoff;
-      if (sinceLastFail < intervalMs) return; // skip este tick
+      if (Date.now() - _lastFailTime < backoff) return;
     }
     fetchPrice(symbol);
   }, intervalMs);
@@ -126,6 +128,7 @@ export function stopPricePolling() {
   _isRunning        = false;
   _isFetching       = false;
   _consecutiveFails = 0;
+  _lastFailTime     = 0;
 
   _currentCandle = null;
   _currentMinute = null;

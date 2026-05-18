@@ -72,7 +72,7 @@ const EXEC_TEXT = {
  * @param {string} params.conflictLevel     — 'none' | 'mild' | 'moderate' | 'severe'
  * @param {string} params.executionReadiness — from computeExecutionReadiness
  * @param {string} [params.marketRegime]    — optional regime label
- * @returns {{ primary: string, context: string, execution: string }}
+ * @returns {{ primary: string, context: string, execution: string, invalidation: string }}
  */
 export function buildNarrative({
   biasScore,
@@ -143,7 +143,32 @@ export function buildNarrative({
   // ── EXECUTION narrative ────────────────────────────────────────────────────
   const execution = EXEC_TEXT[executionReadiness] ?? 'Monitor for context development.';
 
-  return { primary, context, execution };
+  // ── INVALIDATION narrative ─────────────────────────────────────────────────
+  let invalidation;
+
+  if (!hasBias) {
+    invalidation = 'No active thesis — no invalidation scenario applies. Await directional positioning shift in the next COT report.';
+  } else if (biasDir === 'bullish') {
+    if (biasKey === 'strong_bull') {
+      invalidation = 'Thesis invalidated by: two consecutive COT reports showing institutional net selling, or price breaking and holding below the prior structural low with increasing net short positioning.';
+    } else if (biasKey === 'moderate_bull') {
+      invalidation = 'Thesis invalidated by: net positioning turning negative in the next COT report, or price failing to reclaim the structural range after a corrective phase.';
+    } else {
+      invalidation = 'Weak bullish context resolves without action if net positioning fails to increase in the next report.';
+    }
+  } else if (biasDir === 'bearish') {
+    if (biasKey === 'strong_bear') {
+      invalidation = 'Thesis invalidated by: two consecutive COT reports showing institutional net buying, or price breaking and holding above the prior structural high with increasing net long positioning.';
+    } else if (biasKey === 'moderate_bear') {
+      invalidation = 'Thesis invalidated by: net positioning turning positive in the next COT report, or price sustaining a recovery above the structural resistance zone.';
+    } else {
+      invalidation = 'Weak bearish context resolves without action if net positioning fails to decrease in the next report.';
+    }
+  } else {
+    invalidation = 'Neutral context — no invalidation applies until a directional thesis is established.';
+  }
+
+  return { primary, context, execution, invalidation };
 }
 
 function cap(str) {

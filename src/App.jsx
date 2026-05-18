@@ -4323,6 +4323,20 @@ function AppInner() {
     () => (pairsData || []).filter(p => p.cat === "fx"),
     [pairsData]
   );
+
+  // Derive COT report date from the most recent entry in pairsData
+  const cotDataDate = useMemo(() => {
+    const dates = (pairsData || [])
+      .map(p => p.latest?.isoDate ?? p.isoDate)
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    if (!dates[0]) return null;
+    const d = new Date(dates[0]);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  }, [pairsData]);
+
   const displayPairs = useMemo(() =>
     [...fxPairs].sort((a, b) => {
       if (sort.col === "signal") return sort.dir * (SIGNAL_ORDER[a.signal.signal] - SIGNAL_ORDER[b.signal.signal]);
@@ -4817,6 +4831,7 @@ if (!authUser || forceResetMode) {
                 darkMode={darkMode}
                 T={_thm}
                 pair={selectedPair}
+                cotDataDate={cotDataDate}
               />
             );
           })()}
@@ -4926,7 +4941,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal} cotDataDate={cotDataDate}/>
             </div>
           )}
 
