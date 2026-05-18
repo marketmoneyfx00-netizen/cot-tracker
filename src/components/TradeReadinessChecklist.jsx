@@ -739,15 +739,15 @@ function computeDecision(ctx, exp, dir, tim) {
     { step:'Puntuación',     status:adjScore >= 75 ? 'VÁLIDO' : adjScore >= 60 ? 'CONDICIONAL' : 'VIGILAR', detail:`${adjScore}/100${adjScore !== rawScore ? ` (raw ${rawScore})` : ''}` },
   ];
 
-  if (adjScore >= 75) return { verdict:'VALID TRADE',  color:'#22c55e', reason:`Todos los factores alineados${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
-  if (adjScore >= 60) return { verdict:'CONDITIONAL',  color:'#f59e0b', reason:`Alineación parcial${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
-  return              { verdict:'WATCH',               color:'#8b90a0', reason:`Condiciones mejorando pero no listas${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
+  if (adjScore >= 75) return { verdict:'Contexto favorable',    color:'#22c55e', reason:`Todos los factores alineados${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
+  if (adjScore >= 60) return { verdict:'Preparación en curso',  color:'#f59e0b', reason:`Alineación parcial${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
+  return              { verdict:'Sin ventaja clara',            color:'#8b90a0', reason:`Condiciones mejorando pero no listas${conflictNote}`, stopped:null, score:adjScore, rawScore, clarity, trace, evaluated:['context','expectation','direction','timing'] };
 }
 
 // ── Numeric confianza score ───────────────────────────────────────────────
 function computeConfidence(hasCOT, hasDXY, hasCalendar, timAvail) {
   const score = (hasCOT ? 40 : 0) + (hasDXY ? 20 : 0) + (hasCalendar ? 20 : 0) + (timAvail ? 20 : 0);
-  return { score, label: score >= 80 ? 'HIGH' : score >= 50 ? 'MEDIO' : 'LOW' };
+  return { score, label: score >= 80 ? 'Datos completos' : score >= 50 ? 'Datos parciales' : 'Datos insuficientes' };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1021,7 +1021,7 @@ function maybeAlert(pair, score, verdict, quality, moveState, ctxScore) {
 // ═══════════════════════════════════════════════════════════════════════════
 const SI = { ok:'✅', partial:'⚠️', warn:'🔴', unavailable:'⬜' };
 const SC = { ok:'#22c55e', partial:'#f59e0b', warn:'#ef4444', unavailable:'#5a6070' };
-const CC = { High:'#22c55e', Medium:'#f59e0b', Low:'#8b90a0' };
+const CC = { 'Datos completos':'#22c55e', 'Datos parciales':'#f59e0b', 'Datos insuficientes':'#8b90a0' };
 
 const BLOCKS = [
   { key:'context',     label:'1 · Contexto',     icon:'📅', tip:'Paso 1: ¿Qué está pasando fuera del gráfico? Bancos centrales, eventos macro, recencia.' },
@@ -1139,23 +1139,24 @@ export default function TradeReadinessChecklist({ events=[], pairsData=null, can
               <div style={{ fontSize:12, fontWeight:700, color:T.txt, letterSpacing:'-0.2px' }}>Trade Readiness</div>
               <div style={{ fontSize:10, color:T.sub2 }}>Motor de decisión · No es una señal</div>
             </div>
-            {/* Confidence badge + score */}
+            {/* Confidence badge + readiness score */}
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <div style={{ textAlign:'right' }}>
                 <span style={{
-                  fontSize:9, fontWeight:700, letterSpacing:'.05em',
-                  color:CC[engine.conf.label], background:CC[engine.conf.label]+'15',
-                  padding:'2px 6px', borderRadius:4, display:'block', marginBottom:2,
+                  fontSize:9, fontWeight:700, letterSpacing:'.03em',
+                  color: CC[engine.conf.label] ?? '#8b90a0',
+                  background: (CC[engine.conf.label] ?? '#8b90a0') + '15',
+                  padding:'2px 8px', borderRadius:4, display:'block', marginBottom:2,
                 }}>
-                  {engine.conf.label} {engine.conf.score}/100
+                  {engine.conf.label}
                 </span>
-                <span style={{ fontSize:9, color:T.sub2 }}>confianza</span>
+                <span style={{ fontSize:8, color:T.sub2 }}>cobertura de datos</span>
               </div>
               <div style={{ textAlign:'center' }}>
                 <div style={{ fontSize:24, fontWeight:900, color:dec.color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
                   {dec.score ?? '—'}
                 </div>
-                <div style={{ fontSize:9, color:T.sub2 }}>/100</div>
+                <div style={{ fontSize:8, color:T.sub2, letterSpacing:'0.03em' }}>preparación</div>
               </div>
             </div>
           </div>

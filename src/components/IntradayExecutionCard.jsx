@@ -138,11 +138,15 @@ function PermissionBadge({ permission, score, isMobile }) {
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision }) {
+export default function IntradayExecutionCard({ biasResult, sentimentData, riskData, availablePairs, darkMode, T, isMobile, isPremium = true, onUpgrade, finalDecision, controlledPair, onPairChange }) {
   const [expanded, setExpanded] = useState(false);
 
   const defaultPair = availablePairs?.[0]?.pair ?? '—';
-  const [selectedPair, setSelectedPair] = useState(defaultPair);
+  const [internalPair, setInternalPair] = useState(defaultPair);
+
+  // Controlled mode: App drives the pair (keeps sync with Trade Readiness)
+  const selectedPair = controlledPair ?? internalPair;
+  const setSelectedPair = (p) => { setInternalPair(p); onPairChange?.(p); };
 
   useEffect(() => {
     if (!availablePairs?.length) return;

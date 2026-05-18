@@ -7,7 +7,7 @@ import { computeMarketState }                from "../marketStateEngine.js";
 
 // ── Market State Panel ────────────────────────────────────────────────────────
 // Renders the synthesis result for the selected pair above the per-pair cards.
-function MarketStatePanel({ result, darkMode, T, isMobile }) {
+function MarketStatePanel({ result, darkMode, T, isMobile, pair }) {
   if (!result || result.isEmpty) return null;
 
   const pad = isMobile ? '11px 14px' : '12px 18px';
@@ -27,16 +27,26 @@ function MarketStatePanel({ result, darkMode, T, isMobile }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{ fontSize: 13, lineHeight: 1 }}>{result.icon}</span>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: result.color, letterSpacing: '0.02em' }}>
                 {result.label}
               </span>
+              {pair && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800, color: T.txt,
+                  fontFamily: 'monospace', letterSpacing: '0.04em',
+                  background: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+                  border: `1px solid ${T.border}`, padding: '1px 7px', borderRadius: 6,
+                }}>
+                  {pair}
+                </span>
+              )}
               <span style={{
                 fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em',
                 background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                 border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 99,
               }}>
-                MARKET STATE
+                ESTADO ESTRUCTURAL
               </span>
             </div>
             <p style={{ margin: '2px 0 0', fontSize: 9, color: T.sub, lineHeight: 1.4 }}>
@@ -245,7 +255,8 @@ function MarketDecisionLayer({
         background: darkMode ? 'rgba(0,85,204,0.06)' : 'rgba(0,85,204,0.03)',
         borderRadius: '14px 14px 0 0',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        {/* Row 1: title + COT date */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: T.accent, boxShadow: `0 0 8px ${T.accent}`, flexShrink: 0 }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: T.sub, letterSpacing: '0.08em' }}>
@@ -258,27 +269,50 @@ function MarketDecisionLayer({
             background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
             border: `1px solid ${T.border}`, padding: '2px 8px', borderRadius: 99,
           }}>
-            {cotDataDate ? `COT del ${cotDataDate}` : 'COT · HTF BIAS'} · HORIZONTE 1–4 SEM
+            {cotDataDate ? `COT del ${cotDataDate}` : 'COT · HTF BIAS'} · 1–4 SEM
           </span>
         </div>
 
-        {/* Market Regime strip */}
+        {/* Row 2: active pair badge (pair-centric anchor) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+              Par activo
+            </span>
+            <span style={{
+              fontSize: 13, fontWeight: 900, color: T.txt,
+              fontFamily: 'monospace', letterSpacing: '0.04em',
+              background: darkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+              border: `1px solid ${T.border}`, padding: '2px 10px', borderRadius: 7,
+            }}>
+              {selectedPair}
+            </span>
+            <span style={{ fontSize: 8, color: T.sub2, letterSpacing: '0.04em' }}>
+              · análisis institucional HTF
+            </span>
+          </div>
+        </div>
+
+        {/* Market Regime strip — cross-pair context */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 10px', borderRadius: 8,
+          padding: '5px 10px', borderRadius: 8,
           background: regime.bg, border: `1px solid ${regime.border}`,
         }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: regime.color, flexShrink: 0, display: 'block' }} />
+          <span style={{ fontSize: 7, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase', flexShrink: 0 }}>
+            Régimen global
+          </span>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: regime.color, flexShrink: 0, display: 'block' }} />
           <span style={{ fontSize: 10, fontWeight: 700, color: regime.color, letterSpacing: '0.04em' }}>
             {regime.label.toUpperCase()}
           </span>
-          <span style={{ fontSize: 10, color: T.sub, flex: 1 }}>— {regime.description}</span>
+          <span style={{ fontSize: 9, color: T.sub, flex: 1 }}>— {regime.description}</span>
           <span style={{
-            fontSize: 8, color: T.sub2, letterSpacing: '0.04em', flexShrink: 0,
+            fontSize: 7, color: T.sub2, letterSpacing: '0.04em', flexShrink: 0,
             background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
             border: `1px solid ${T.border}`, padding: '1px 6px', borderRadius: 99,
           }}>
-            días–semanas
+            todos los pares
           </span>
         </div>
       </div>
@@ -318,7 +352,7 @@ function MarketDecisionLayer({
       )}
 
       {/* ── Market State Panel (selected pair synthesis) ── */}
-      <MarketStatePanel result={marketStateResult} darkMode={darkMode} T={T} isMobile={isMobile} />
+      <MarketStatePanel result={marketStateResult} darkMode={darkMode} T={T} isMobile={isMobile} pair={selectedPair} />
 
       {/* ── Pair cards ── */}
       <div style={{
@@ -472,7 +506,7 @@ function MarketDecisionLayer({
                   userSelect: isPremium ? 'auto' : 'none',
                 }}>
                   <span style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-                    Alignment Score
+                    HTF · LTF Alignment
                   </span>
                   <span style={{ fontSize: 22, fontWeight: 900, color: decay.color, fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: 1 }}>
                     {decay.score}
@@ -554,10 +588,10 @@ function MarketDecisionLayer({
         borderTop: `1px solid ${T.border}`,
       }}>
         {[
-          { label: 'HIGH ALIGNMENT',      color: '#22c55e' },
-          { label: 'MODERATE ALIGNMENT',  color: '#f59e0b' },
-          { label: 'WEAK ALIGNMENT',      color: '#f97316' },
-          { label: 'STRUCTURAL CONFLICT', color: '#ef4444' },
+          { label: 'HTF·LTF ALTO',    color: '#22c55e' },
+          { label: 'HTF·LTF MODERADO', color: '#f59e0b' },
+          { label: 'HTF·LTF DÉBIL',   color: '#f97316' },
+          { label: 'CONFLICTO ESTRUCTURAL', color: '#ef4444' },
         ].map(({ label, color }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 6, height: 6, borderRadius: 1, background: color, flexShrink: 0 }} />
