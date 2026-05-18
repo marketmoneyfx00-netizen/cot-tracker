@@ -217,6 +217,56 @@ function generateSignal(rows) {
 // ─────────────────────────────────────────────────────────────────────────────
 const fK=(n)=>{if(n==null||isNaN(n))return"—";const a=Math.abs(n);if(a>=1000)return(n<0?"-":"+")+( a/1000).toFixed(1)+"K";return(n>0?"+":"")+n;};
 const fFull=(n)=>n==null?"—":n.toLocaleString("en-US");
+
+// ── INSTITUTIONAL HELPERS (used by Tabla Histórica) ──────────────────────────
+function calcConviction(weeks,biasEntry){
+  if(!weeks||weeks.length<2)return{label:"Baja Convicción",level:1};
+  const latest=weeks[0];let score=0;
+  const sameDir=weeks.slice(0,6).filter(w=>Math.sign(w.smartNet)===Math.sign(latest.smartNet)).length;
+  if(sameDir>=4)score+=2;else if(sameDir>=3)score+=1.5;else if(sameDir>=2)score+=0.5;
+  if(weeks.length>=3){
+    const d1=latest.smartNet-weeks[1].smartNet;const d2=weeks[1].smartNet-weeks[2].smartNet;
+    if(d1!==0&&d2!==0&&Math.sign(d1)===Math.sign(d2))score+=1;
+  }
+  const z=biasEntry?.zscore?.zscore??biasEntry?.zScore??0;
+  if(Math.abs(z)>2)score+=2;else if(Math.abs(z)>1)score+=1;
+  if(latest.assetNet!=null&&latest.smartNet!==0&&Math.sign(latest.assetNet)===Math.sign(latest.smartNet))score+=0.5;
+  if(score>=5.5)return{label:"Convicción Extrema",level:4};
+  if(score>=3.5)return{label:"Alta Convicción",level:3};
+  if(score>=2)return{label:"Convicción Moderada",level:2};
+  return{label:"Baja Convicción",level:1};
+}
+function buildInstWhy(p,biasEntry){
+  const{latest,weeks,signal}=p;
+  if(!latest)return signal?.reason||"";
+  const lines=[];
+  const dir=latest.smartNet>0?"alcista":latest.smartNet<0?"bajista":"neutral";
+  const trend=weeks.length>1?latest.smartNet-weeks[1].smartNet:0;
+  const sameDir=weeks.slice(0,6).filter(w=>Math.sign(w.smartNet)===Math.sign(latest.smartNet)).length;
+  if(latest.levLong!=null&&latest.levShort!=null){
+    lines.push(`Leveraged Money ${dir}: ${fK(latest.levLong)} longs y ${fK(latest.levShort)} shorts → neto ${fK(latest.smartNet)} contratos.`);
+  }else{
+    lines.push(`Posición neta Leveraged Money: ${fK(latest.smartNet)} contratos.`);
+  }
+  if(sameDir>=3)lines.push(`Dirección ${dir} sostenida durante ${sameDir} semanas consecutivas.`);
+  if(trend!==0&&weeks[1]?.smartNet){
+    const pctChg=weeks[1].smartNet!==0?` (${((trend/Math.abs(weeks[1].smartNet))*100).toFixed(1)}% WoW)`:"";
+    lines.push(`Variación semanal: ${trend>0?"▲ +":"▼ "}${fK(Math.abs(trend))}${pctChg}.`);
+  }
+  if(latest.assetNet!=null&&latest.smartNet!==0){
+    if(Math.sign(latest.assetNet)===Math.sign(latest.smartNet))
+      lines.push(`Asset Managers confirman dirección institucional (${fK(latest.assetNet)} neto).`);
+    else
+      lines.push(`Asset Managers divergen del Leveraged Money (${fK(latest.assetNet)} neto) — precaución.`);
+  }
+  const z=biasEntry?.zscore?.zscore??biasEntry?.zScore;
+  if(z!=null){
+    if(Math.abs(z)>2)lines.push(`Z-score ${z.toFixed(2)}: posición en zona EXTREMA. Riesgo de reversión elevado.`);
+    else if(Math.abs(z)>1)lines.push(`Z-score ${z.toFixed(2)}: posición elevada, fuera del rango normal.`);
+    else lines.push(`Z-score ${z.toFixed(2)}: posición en rango histórico normal.`);
+  }
+  return lines.join(" ");
+}
 const today=()=>new Date().toISOString().slice(0,10);
 const weeksAgo=(n)=>{const d=new Date();d.setDate(d.getDate()-n*7);return d.toISOString().slice(0,10);};
 
@@ -4066,6 +4116,7 @@ function AppInner() {
   const [tooltipX,  setTooltipX]  = useState(0);
   const [tooltipY,  setTooltipY]  = useState(0);
   const [histRows,  setHistRows]  = useState(5);
+  const [histExpandedPair, setHistExpandedPair] = useState(null);
   const [isMobile,  setIsMobile]  = useState(()=>window.innerWidth < 700);
   useEffect(()=>{
     const h=()=>setIsMobile(window.innerWidth<700);
@@ -4368,6 +4419,9 @@ function AppInner() {
     () => buildBiasArray(fxPairs, { candleMap, ratesData, macroSignal }),
     [fxPairs, candleMap, ratesData, macroSignal],
   );
+  const biasMap = useMemo(()=>{
+    const m={};biasArr.forEach(b=>{if(b?.pair)m[b.pair]=b;});return m;
+  },[biasArr]);
 
   // ── PAIR-SPECIFIC CURRENCY MAP ─────────────────────────────────────────────
   // Maps each tradeable pair to the currencies whose macro events are relevant.
@@ -5063,360 +5117,323 @@ if (!authUser || forceResetMode) {
       )}
       {mainTab==="historico"&&pairsData&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
-          <div style={{marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          {/* === HEADER === */}
+          <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
             <div>
-              <h2 style={{margin:0,fontSize:14,fontWeight:700,color:_thm.txt,letterSpacing:"0.01em"}}>Tabla Histórica de Datos</h2>
-              <p style={{margin:"3px 0 0",fontSize:11,color:_thm.sub}}>
-                Posicionamiento Dinero Inteligente (CFTC) · Leveraged Money · Un par por fila · Columnas por semana
+              <h2 style={{margin:0,fontSize:16,fontWeight:700,color:_thm.txt,letterSpacing:"0.01em"}}>
+                Posicionamiento Institucional COT
+              </h2>
+              <p style={{margin:"4px 0 0",fontSize:11,color:_thm.sub}}>
+                Leveraged Money (CFTC TFF) · {fxPairs.length} pares · {fxPairs[0]?.weeks[0]?.displayDate||""}
               </p>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:10,color:_thm.sub,border:`1px solid ${_thm.border}`,borderRadius:3,padding:"3px 8px"}}>
-                Últimas {histRows} semanas
-              </span>
-              {histRows<8&&(
-                <button onClick={()=>setHistRows(h=>Math.min(h+2,8))} style={{
-                  fontSize:10,color:_thm.accent,border:`1px solid ${_thm.border}`,borderRadius:3,
-                  padding:"3px 8px",background:"none",cursor:"pointer"
-                }}>+ Semanas</button>
-              )}
-              {histRows>2&&(
-                <button onClick={()=>setHistRows(h=>Math.max(h-2,2))} style={{
-                  fontSize:10,color:_thm.sub,border:`1px solid ${_thm.border}`,borderRadius:3,
-                  padding:"3px 8px",background:"none",cursor:"pointer"
-                }}>– Semanas</button>
-              )}
-            </div>
-          </div>
-
-          <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4,overflow:"auto"}}>
-            {/* Dynamic header: Par | Sesgo | Net W0 | Net W-1 | Net W-2 ... | Tendencia */}
-            <div style={{
-              display:"grid",
-              gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-              background:_thm.header,borderBottom:`1px solid ${_thm.border}`,
-              minWidth: 140+120+(histRows*110)+90,
-            }}>
-              {["Par","Sesgo de Mercado",
-                ...Array.from({length:histRows},(_,i)=>i===0?"Contratos Netos (Actual)":`Contratos Netos (-${i})`),
-                "Tendencia"
-              ].map((col,i)=>(
-                <div key={i} style={{
-                  fontSize:9,fontWeight:700,color:_thm.sub,
-                  letterSpacing:"0.07em",textTransform:"uppercase",
-                  textAlign:i<=1?"left":"right",
-                  padding:i===0?"8px 8px 8px 16px":"8px",
-                  borderRight:i===0||i===1?`1px solid ${_thm.border}`:"none",
-                  display:i<=1?"flex":"flex",
-                  alignItems:"center",
-                  justifyContent:i<=1?"flex-start":"flex-end",
-                  gap:3,
-                }}>
-                  {col}
-                  {i===2&&<InfoTooltip text={COT_TOOLTIPS.levNet}/>}
-                </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              {[
+                {label:`${buys} Alcista`,color:"#2e7d4f",bg:"rgba(136,201,153,0.1)",border:"rgba(136,201,153,0.3)"},
+                {label:`${sells} Bajista`,color:"#b71c1c",bg:"rgba(239,154,154,0.1)",border:"rgba(239,154,154,0.3)"},
+                {label:`${displayPairs.length-buys-sells} Neutro`,color:_thm.sub,bg:"rgba(180,180,180,0.06)",border:_thm.border},
+              ].map(g=>(
+                <span key={g.label} style={{fontSize:11,fontWeight:700,color:g.color,background:g.bg,
+                  border:`1px solid ${g.border}`,padding:"4px 10px",borderRadius:3,letterSpacing:"0.04em"}}>
+                  {g.label}
+                </span>
               ))}
             </div>
+          </div>
 
-            {/* One row per pair */}
-            {fxPairs.map((p,rowIdx)=>{
-              const isBull=p.signal.signal==="buy";
-              const isBear=p.signal.signal==="sell";
-              const cfg=SIGNAL_CFG[p.signal.signal]||SIGNAL_CFG.wait;
-              // Get net values for each week slot
-              const netValues=Array.from({length:histRows},(_,i)=>
-                p.weeks[i]?.smartNet ?? null
-              );
-              // Trend: sum of week-over-week changes across visible window
-              const changes = netValues.slice(0,-1).map((v,i)=>
-                v!=null&&netValues[i+1]!=null ? v-netValues[i+1] : 0
-              );
-              const trendSum = changes.reduce((a,b)=>a+b,0);
+          {/* === INSTITUTIONAL CARD GROUPS === */}
+          {[
+            {group:"bull",label:"Sesgo Alcista Institucional",dotColor:"#2e7d4f",borderColor:"rgba(136,201,153,0.3)",
+              pairs:displayPairs.filter(p=>p.signal.signal==="buy")},
+            {group:"bear",label:"Sesgo Bajista Institucional",dotColor:"#b71c1c",borderColor:"rgba(239,154,154,0.3)",
+              pairs:displayPairs.filter(p=>p.signal.signal==="sell")},
+            {group:"neutral",label:"Neutro / Transicional",dotColor:"#9E9E9E",borderColor:_thm.border,
+              pairs:displayPairs.filter(p=>p.signal.signal!=="buy"&&p.signal.signal!=="sell")},
+          ].filter(g=>g.pairs.length>0).map(grp=>(
+            <div key={grp.group} style={{marginBottom:28}}>
+              {/* Group label */}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingBottom:6,
+                borderBottom:`1px solid ${grp.borderColor}`}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:grp.dotColor,flexShrink:0,display:"inline-block"}}/>
+                <span style={{fontSize:10,fontWeight:700,color:grp.dotColor,letterSpacing:"0.1em",textTransform:"uppercase"}}>
+                  {grp.label}
+                </span>
+                <span style={{fontSize:10,color:_thm.sub}}>· {grp.pairs.length} {grp.pairs.length===1?"par":"pares"}</span>
+              </div>
 
-              return (
-                <div key={p.pair}
-                  onClick={()=>setDetail(p)}
-                  style={{
-                    display:"grid",
-                    gridTemplateColumns:`140px 120px repeat(${histRows},110px) 90px`,
-                    borderBottom:rowIdx<fxPairs.length-1?`1px solid ${_thm.border}`:"none",
-                    background:rowIdx%2===0?_thm.card:_thm.header,
-                    cursor:"pointer",
-                    transition:"background 0.1s",
-                    minWidth:140+120+(histRows*110)+90,
-                  }}
-                  onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#eef1f6"}
-                  onMouseLeave={e=>e.currentTarget.style.background=rowIdx%2===0?_thm.card:_thm.header}
-                >
-                  {/* Par name */}
-                  <div style={{
-                    padding:"10px 8px 10px 16px",
-                    borderRight:`1px solid ${_thm.border}`,
-                    display:"flex",alignItems:"center",
-                    borderLeft:`3px solid ${isBull?"#88C999":isBear?"#EF9A9A":_thm.border}`,
-                  }}>
-                    <span style={{fontSize:13,fontWeight:700,color:_thm.txt,fontFamily:"monospace"}}>{p.pair}</span>
-                  </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {grp.pairs.map((p,cardIdx)=>{
+                  const{latest,weeks,signal}=p;
+                  if(!latest||!weeks||!signal)return null;
+                  const be=biasMap[p.pair];
+                  const isBull=signal.signal==="buy";
+                  const isBear=signal.signal==="sell";
+                  const accentClr=isBull?"#88C999":isBear?"#EF9A9A":"#9E9E9E";
+                  const txtClr=isBull?"#2e7d4f":isBear?"#b71c1c":_thm.sub;
+                  const trend=weeks.length>1?latest.smartNet-weeks[1].smartNet:0;
+                  const trendPct=weeks[1]?.smartNet&&weeks[1].smartNet!==0
+                    ?((trend/Math.abs(weeks[1].smartNet))*100).toFixed(1):null;
+                  const conviction=calcConviction(weeks,be);
+                  const convColor=["","#9E9E9E","#F9A825","#1565C0","#7B1FA2"][conviction.level];
+                  const isExpanded=histExpandedPair===p.pair;
+                  const zsc=be?.zscore?.zscore??be?.zScore??null;
+                  const flowPct=latest.smartPctL!=null?Math.max(0,Math.min(100,latest.smartPctL)):50;
 
-                  {/* Sesgo badge */}
-                  <div style={{
-                    padding:"0 8px",display:"flex",alignItems:"center",
-                    borderRight:`1px solid ${_thm.border}`,
-                  }}>
-                    <span style={{
-                      fontSize:10,fontWeight:700,
-                      color:isBull?"#2e7d4f":isBear?"#b71c1c":_thm.sub,
-                      background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"transparent",
-                      padding:"2px 6px",borderRadius:2,
-                    }}>{cfg.icon} {cfg.label}</span>
-                  </div>
-
-                  {/* Net values per week — with heatmap */}
-                  {netValues.map((val,wIdx)=>{
-                    const prev = netValues[wIdx+1];
-                    const chg = val!=null&&prev!=null ? val-prev : null;
-                    const heat = heatCell(val, "net");
-                    return (
-                      <div key={wIdx} style={{
-                        padding:"8px",textAlign:"right",
-                        background:heat.background,
-                        borderLeft:wIdx===0?`1px solid ${_thm.border}`:"none",
-                        borderRight:`1px solid rgba(0,0,0,0.03)`,
-                        transition:"background 0.15s",
-                      }}>
+                  return (
+                    <div key={p.pair} style={{
+                      background:_thm.card,
+                      border:`1px solid ${_thm.border}`,
+                      borderLeft:`3px solid ${accentClr}`,
+                      borderRadius:isMobile?10:6,
+                      overflow:"hidden",
+                      animation:`fadeUp 0.2s ease both`,
+                      animationDelay:`${cardIdx*0.04}s`,
+                    }}>
+                      {/* ── MAIN ROW ── */}
+                      <div
+                        style={{
+                          display:isMobile?"flex":"grid",
+                          gridTemplateColumns:isMobile?undefined:"190px 1fr 200px 110px 44px",
+                          flexDirection:isMobile?"column":undefined,
+                          cursor:"pointer",
+                        }}
+                        onClick={()=>setHistExpandedPair(isExpanded?null:p.pair)}
+                      >
+                        {/* CELL 1: Pair identity */}
                         <div style={{
-                          fontSize:12,fontWeight:700,fontFamily:"monospace",
-                          fontVariantNumeric:"tabular-nums",
-                          color:heat.color,
+                          padding:isMobile?"12px 14px 6px":"14px 16px",
+                          borderRight:isMobile?"none":`1px solid ${_thm.border}`,
+                          display:"flex",flexDirection:isMobile?"row":"column",
+                          alignItems:isMobile?"center":"flex-start",
+                          gap:isMobile?10:4,
                         }}>
-                          {val==null?"—":val.toLocaleString("en-US",{signDisplay:"exceptZero"})}
+                          <div style={{display:"flex",alignItems:"center",gap:8,flex:isMobile?1:undefined}}>
+                            <span style={{fontSize:14,fontWeight:700,color:_thm.txt,fontFamily:"monospace",letterSpacing:"0.03em"}}>
+                              {p.pair}
+                            </span>
+                            <span style={{fontSize:9,fontWeight:700,color:txtClr,
+                              background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"rgba(180,180,180,0.08)",
+                              border:`1px solid ${accentClr}`,padding:"1px 5px",borderRadius:2,
+                              letterSpacing:"0.06em",textTransform:"uppercase"}}>
+                              {isBull?"ALCISTA":isBear?"BAJISTA":"NEUTRO"}
+                            </span>
+                          </div>
+                          <div style={{fontSize:10,fontWeight:600,color:convColor,flexShrink:0}}>
+                            {conviction.label}
+                          </div>
+                          {isMobile&&(
+                            <MiniSparkline values={[...weeks].reverse().map(w=>w.smartNet)} positive={latest.smartNet>=0}/>
+                          )}
                         </div>
-                        {chg!=null&&(
-                          <div style={{
-                            fontSize:9,fontFamily:"monospace",marginTop:1,
-                            color:chg>0?"#2e7d4f":chg<0?"#b71c1c":"#9E9E9E",
-                          }}>
-                            {chg>0?"▲":"▼"} {Math.abs(chg).toLocaleString("en-US")}
+
+                        {/* CELL 2: Flow bar + L/S/Net/WoW */}
+                        <div style={{
+                          padding:isMobile?"0 14px 10px":"12px 16px",
+                          borderRight:isMobile?"none":`1px solid ${_thm.border}`,
+                        }}>
+                          <div style={{display:"flex",alignItems:"flex-end",gap:isMobile?14:20,marginBottom:8,flexWrap:"wrap"}}>
+                            {latest.levLong!=null&&(
+                              <div>
+                                <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:1}}>LM Longs</div>
+                                <div style={{fontSize:12,fontWeight:700,fontFamily:"monospace",color:"#2e7d4f"}}>{fK(latest.levLong)}</div>
+                              </div>
+                            )}
+                            {latest.levShort!=null&&(
+                              <div>
+                                <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:1}}>LM Shorts</div>
+                                <div style={{fontSize:12,fontWeight:700,fontFamily:"monospace",color:"#b71c1c"}}>{fK(latest.levShort)}</div>
+                              </div>
+                            )}
+                            <div>
+                              <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:1}}>Net Position</div>
+                              <div style={{fontSize:14,fontWeight:700,fontFamily:"monospace",color:isBull?"#2e7d4f":isBear?"#b71c1c":_thm.sub}}>
+                                {fK(latest.smartNet)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:1}}>WoW Δ</div>
+                              <div style={{fontSize:12,fontWeight:700,fontFamily:"monospace",
+                                color:trend>0?"#2e7d4f":trend<0?"#b71c1c":"#9E9E9E"}}>
+                                {trend===0?"—":(trend>0?"+":"")+fK(trend)}
+                                {trendPct&&<span style={{fontSize:9,fontWeight:400,marginLeft:3,
+                                  color:trend>0?"#2e7d4f":trend<0?"#b71c1c":"#9E9E9E"}}>
+                                  ({trendPct}%)
+                                </span>}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Flow visualization bar */}
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:8,color:"#b71c1c",fontWeight:700,letterSpacing:"0.04em",
+                              flexShrink:0,minWidth:34,textAlign:"right"}}>SHORTS</span>
+                            <div style={{flex:1,height:6,background:_thm.border,borderRadius:99,position:"relative",overflow:"visible"}}>
+                              <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,
+                                background:darkMode?"rgba(255,255,255,0.12)":"rgba(0,0,0,0.12)",zIndex:0}}/>
+                              <div style={{
+                                position:"absolute",top:0,bottom:0,borderRadius:99,
+                                left:`${Math.min(flowPct,50)}%`,
+                                width:`${Math.abs(flowPct-50)}%`,
+                                background:flowPct>=50?"rgba(136,201,153,0.45)":"rgba(239,154,154,0.45)",
+                              }}/>
+                              <div style={{
+                                position:"absolute",top:"50%",transform:"translate(-50%,-50%)",
+                                left:`${flowPct}%`,
+                                width:10,height:10,borderRadius:"50%",
+                                background:isBull?"#2e7d4f":isBear?"#b71c1c":"#9E9E9E",
+                                border:`2px solid ${_thm.card}`,zIndex:2,
+                                boxShadow:"0 1px 4px rgba(0,0,0,0.3)",
+                              }}/>
+                            </div>
+                            <span style={{fontSize:8,color:"#2e7d4f",fontWeight:700,letterSpacing:"0.04em",
+                              flexShrink:0,minWidth:34}}>LONGS</span>
+                          </div>
+                        </div>
+
+                        {/* CELL 3: Sparkline + Z-score (desktop) */}
+                        {!isMobile&&(
+                          <div style={{padding:"12px 16px",textAlign:"center",borderRight:`1px solid ${_thm.border}`,
+                            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
+                            <MiniSparkline values={[...weeks].reverse().map(w=>w.smartNet)} positive={latest.smartNet>=0}/>
+                            {zsc!=null&&(
+                              <div style={{fontSize:9,fontFamily:"monospace",fontWeight:Math.abs(zsc)>2?700:400,
+                                color:Math.abs(zsc)>2?"#F9A825":Math.abs(zsc)>1?"#1565C0":_thm.sub}}>
+                                Z: {zsc>0?"+":""}{zsc.toFixed(2)}{Math.abs(zsc)>2&&" ⚠"}
+                              </div>
+                            )}
+                            {latest.smartPctL!=null&&(
+                              <div style={{fontSize:8,color:_thm.sub}}>{latest.smartPctL.toFixed(0)}% Long</div>
+                            )}
                           </div>
                         )}
-                      </div>
-                    );
-                  })}
 
-                  {/* Tendencia */}
-                  <div style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${_thm.border}`}}>
-                    <div style={{
-                      fontSize:11,fontWeight:700,fontFamily:"monospace",
-                      color:trendSum>0?"#2e7d4f":trendSum<0?"#b71c1c":"#9E9E9E",
-                    }}>
-                      {trendSum>0?"▲":trendSum<0?"▼":"–"} {Math.abs(trendSum).toLocaleString("en-US")}
-                    </div>
-                    <div style={{fontSize:9,color:_thm.sub,marginTop:1}}>
-                      {changes.length} sem.
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                        {/* CELL 4: Signal strength (desktop) */}
+                        {!isMobile&&(
+                          <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",
+                            alignItems:"center",justifyContent:"center",gap:4,
+                            borderRight:`1px solid ${_thm.border}`}}>
+                            <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.05em",textTransform:"uppercase"}}>Fuerza</div>
+                            <div style={{display:"flex",gap:3}}>
+                              {[0,1,2].map(i=>(
+                                <div key={i} style={{width:14,height:4,borderRadius:2,
+                                  background:i<(signal.strength||0)?accentClr:_thm.border}}/>
+                              ))}
+                            </div>
+                            <div style={{fontSize:8,color:_thm.sub}}>{weeks.length} sem.</div>
+                          </div>
+                        )}
 
-          <p style={{textAlign:"center",fontSize:10,color:_thm.sub,marginTop:10,letterSpacing:"0.03em"}}>
-            Haz clic en cualquier par para ver el desglose semanal completo ·
-            Fuente: CFTC.gov · Leveraged Money · Datos procesados localmente
-          </p>
-
-          {/* ── SESGO DE MERCADO (tabla de pares COT) ── */}
-          {/* Summary bar */}
-          {pairsData&&<div style={{display:"flex",gap:6,marginBottom:12,marginTop:24,padding:"10px 12px",flexWrap:"wrap",
-            background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:10}}>
-            <span style={{fontSize:11,color:_thm.sub,alignSelf:"center",fontWeight:600,
-              letterSpacing:"0.05em",display:isMobile?"none":"inline"}}>SESGO DEL MERCADO:</span>
-            {[
-              {label:`${buys} Sesgo Alcista`,   color:_thm.bullTxt, bg:"rgba(136,201,153,0.12)"},
-              {label:`${sells} Sesgo Bajista`,  color:_thm.bearTxt, bg:"rgba(239,154,154,0.12)"},
-              {label:`${displayPairs.length-buys-sells} Neutro/Div.`, color:_thm.sub, bg:"rgba(180,180,180,0.08)"},
-            ].map(p=>(
-              <span key={p.label} style={{fontSize:12,fontWeight:600,color:p.color,background:p.bg,
-                padding:"4px 10px",borderRadius:3}}>{p.label}</span>
-            ))}
-            {!isMobile&&<span style={{marginLeft:"auto",fontSize:10,color:_thm.sub,alignSelf:"center"}}>
-              Datos Importados según CFTC · Posicionamiento Dinero Inteligente
-            </span>}
-          </div>}
-
-          {/* Column headers — solo desktop */}
-          {pairsData&&!isMobile&&(
-          <div style={{display:"grid",gridTemplateColumns:"200px 1fr 130px 130px 100px 32px",
-            gap:0,padding:"6px 16px",marginBottom:4}}>
-            {[["pair","Par Divisa"],["net","Contratos Netos LM"],["signal","Sesgo de Mercado"],[null,"Evolución WoW"],[null,""]].map(([c,l],i)=>(
-              <div key={i} onClick={()=>c&&handleSort(c)}
-                style={{fontSize:10,fontWeight:700,color:sort.col===c?_thm.accent:_thm.sub,
-                  letterSpacing:"0.07em",textTransform:"uppercase",cursor:c?"pointer":"default",
-                  userSelect:"none",textAlign:i===0?"left":"right",paddingRight:i===0?0:8}}>
-                {l}{c&&sortArrow(c)}
-              </div>
-            ))}
-          </div>
-          )}
-
-          {/* Pair rows */}
-          {pairsData&&<div style={{display:"flex",flexDirection:"column",gap:isMobile?8:2}}>
-            {displayPairs.map((p,i)=>{
-              const {latest,weeks,signal}=p;
-              if (!latest||!weeks||!signal) return null;
-              const cfg=SIGNAL_CFG[signal.signal]||SIGNAL_CFG.wait;
-              const trend=weeks.length>1?latest.smartNet-weeks[1].smartNet:0;
-              const isBull=signal.signal==="buy";
-              const isBear=signal.signal==="sell";
-              return (
-                <div key={p.pair}
-                  style={{
-                    background:_thm.card,
-                    border:`1px solid ${_thm.border}`,
-                    borderLeft:`3px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
-                    borderRadius: isMobile ? 10 : 4,
-                    padding: isMobile ? "12px 14px" : "10px 16px",
-                    display: isMobile ? "flex" : "grid",
-                    flexDirection: isMobile ? "column" : undefined,
-                    gridTemplateColumns: isMobile ? undefined : "200px 1fr 130px 130px 100px 32px",
-                    gap: isMobile ? 6 : 0,
-                    alignItems: isMobile ? undefined : "center",
-                    cursor:"pointer",
-                    transition:"background 0.1s",
-                    animation:`fadeUp 0.25s ease both`,
-                    animationDelay:`${i*0.03}s`,
-                  }}
-                  onMouseEnter={e=>e.currentTarget.style.background=darkMode?"#1e2028":"#f8f9fc"}
-                  onMouseLeave={e=>e.currentTarget.style.background=_thm.card}
-                  onClick={()=>setDetail(p)}
-                >
-                  {isMobile ? (
-                    /* ── MÓVIL: layout compacto horizontal ── */
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      {/* Par + WHY */}
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                          <span style={{fontSize:15,fontWeight:700,color:_thm.txt}}>{p.pair}</span>
-                          <span style={{fontSize:9,color:_thm.accent,border:`1px solid ${_thm.accent}`,
-                            borderRadius:2,padding:"1px 4px",fontWeight:600}}>WHY</span>
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:13,fontWeight:700,color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub}}>
-                            {fK(latest.smartNet)}
-                          </span>
-                          <span style={{fontSize:11,color:trend>0?_thm.bullTxt:trend<0?_thm.bearTxt:_thm.sub}}>
-                            {trend!==0?(trend>0?"▲ ":"▼ ")+fK(Math.abs(trend))+" sem.":""}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Sesgo badge */}
-                      <span style={{fontSize:11,fontWeight:700,flexShrink:0,
-                        color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
-                        background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"rgba(180,180,180,0.08)",
-                        border:`1px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
-                        padding:"5px 10px",borderRadius:6}}>
-                        {cfg.icon} {cfg.label}
-                      </span>
-                      {/* Mini sparkline */}
-                      <MiniSparkline values={[...weeks].reverse().map(w=>w.smartNet)} positive={latest.smartNet>=0}/>
-                    </div>
-                  ) : (
-                    <>
-                  {/* Pair name + tooltip trigger */}
-                  <div style={{position:"relative"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:700,color:_thm.txt,letterSpacing:"0.02em",fontVariantNumeric:"tabular-nums"}}>{p.pair}</span>
-                      <span
-                        onMouseEnter={(e)=>{
-                          e.stopPropagation();
-                          const r=e.currentTarget.getBoundingClientRect();
-                          setTooltipX(r.left);
-                          setTooltipY(r.bottom+4);
-                          setTooltip(p.pair);
-                        }}
-                        onMouseLeave={()=>setTooltip(null)}
-                        style={{fontSize:9,color:_thm.accent,border:`1px solid ${_thm.accent}`,borderRadius:2,
-                          padding:"1px 4px",cursor:"help",fontWeight:600,letterSpacing:"0.05em",flexShrink:0}}>
-                        WHY
-                      </span>
-                    </div>
-                    {tooltip===p.pair&&(
-                      <div onClick={e=>e.stopPropagation()} style={{
-                        position:"fixed",
-                        top: tooltipY || 100,
-                        left: Math.min((tooltipX || 200), window.innerWidth - 300),
-                        zIndex:99999,marginTop:6,
-                        background:"#1a1d23",color:"#e8eaf0",
-                        borderRadius:6,padding:"12px 14px",width:280,
-                        boxShadow:"0 8px 32px rgba(0,0,0,0.3)",
-                        fontSize:12,lineHeight:1.6,
-                        pointerEvents:"none",
-                      }}>
-                        <div style={{fontSize:10,fontWeight:700,color:isBull?"#88C999":isBear?"#EF9A9A":"#9E9E9E",letterSpacing:"0.07em",marginBottom:6}}>
-                          {cfg.label.toUpperCase()} — {p.pair}
-                        </div>
-                        <div>{signal.reason}</div>
-                        <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.1)",fontSize:10,color:"#9E9E9E"}}>
-                          Fuente: CFTC TFF · Leveraged Money · Posicionamiento Dinero Inteligente (CFTC)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Net position bar */}
-                  <div style={{paddingRight:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,height:4,background:_thm.border,borderRadius:99,overflow:"hidden",minWidth:60}}>
+                        {/* CELL 5: Expand toggle */}
                         <div style={{
-                          width:`${Math.min(100,Math.abs(latest.smartPctL-50)*2)}%`,
-                          height:"100%",
-                          background:isBull?_thm.bull:isBear?_thm.bear:"#BDBDBD",
-                          marginLeft:latest.smartNet<0?0:`${Math.max(0,50-(latest.smartPctL-50))}%`,
-                          borderRadius:99,
-                        }}/>
+                          padding:isMobile?"6px 14px 10px":"12px",
+                          display:"flex",alignItems:"center",justifyContent:"center",
+                          color:_thm.sub,fontSize:16,
+                        }}>
+                          {isExpanded?"↑":"↓"}
+                        </div>
                       </div>
-                      <span style={{fontSize:12,fontWeight:700,color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
-                        fontVariantNumeric:"tabular-nums",minWidth:52,textAlign:"right"}}>
-                        {fK(latest.smartNet)}
-                      </span>
-                    </div>
-                    <div style={{fontSize:10,color:trend>0?_thm.bullTxt:trend<0?_thm.bearTxt:_thm.sub,marginTop:3,textAlign:"right"}}>
-                      {trend!==0?(trend>0?"▲ ":"▼ ")+fK(Math.abs(trend))+" sem.":"sin cambio"}
-                    </div>
-                  </div>
 
-                  {/* Sesgo badge */}
-                  <div style={{textAlign:"right",paddingRight:8}}>
-                    <span style={{display:"inline-block",fontSize:10,fontWeight:700,
-                      color:isBull?_thm.bullTxt:isBear?_thm.bearTxt:_thm.sub,
-                      background:isBull?"rgba(136,201,153,0.12)":isBear?"rgba(239,154,154,0.12)":"rgba(180,180,180,0.08)",
-                      border:`1px solid ${isBull?_thm.bull:isBear?_thm.bear:_thm.border}`,
-                      padding:"3px 8px",borderRadius:3,letterSpacing:"0.04em"}}>
-                      {cfg.icon} {cfg.label}
-                    </span>
-                    <div style={{fontSize:9,color:_thm.sub,marginTop:3,letterSpacing:"0.04em"}}>
-                      Fuerza: {["·","·","·"].map((d,i)=>(
-                        <span key={i} style={{color:i<signal.strength?_thm.accent:_thm.border}}>{d} </span>
-                      ))}
+                      {/* ── EXPANDED PANEL ── */}
+                      {isExpanded&&(
+                        <div style={{
+                          borderTop:`1px solid ${_thm.border}`,
+                          padding:"16px",
+                          background:darkMode?"rgba(255,255,255,0.015)":"rgba(0,0,0,0.015)",
+                        }}
+                        onClick={e=>e.stopPropagation()}>
+                          {/* Institutional narrative */}
+                          <div style={{marginBottom:14}}>
+                            <div style={{fontSize:9,fontWeight:700,color:_thm.sub,letterSpacing:"0.08em",
+                              textTransform:"uppercase",marginBottom:6}}>Análisis Institucional</div>
+                            <p style={{margin:0,fontSize:12,color:_thm.txt,lineHeight:1.75,maxWidth:800}}>
+                              {buildInstWhy(p,be)}
+                            </p>
+                          </div>
+
+                          {/* Raw CFTC data chips */}
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+                            {[
+                              {label:"LM Long",val:latest.levLong,color:"#2e7d4f"},
+                              {label:"LM Short",val:latest.levShort,color:"#b71c1c"},
+                              {label:"Asset Mgr Net",val:latest.assetNet,
+                                color:latest.assetNet!=null&&latest.smartNet!==0&&Math.sign(latest.assetNet)===Math.sign(latest.smartNet)?"#2e7d4f":"#b71c1c"},
+                              {label:"Dealer Net",val:latest.dealerNet},
+                              {label:"% Long",val:latest.smartPctL!=null?`${latest.smartPctL.toFixed(1)}%`:null,isStr:true},
+                              {label:"Open Interest",val:latest.openInterest},
+                              {label:"Z-Score",val:zsc!=null?`${zsc>0?"+":""}${zsc.toFixed(2)}`:null,isStr:true,
+                                color:Math.abs(zsc||0)>2?"#F9A825":Math.abs(zsc||0)>1?"#1565C0":null},
+                              {label:"Percentil",val:be?.zscore?.percentile!=null?`${be.zscore.percentile.toFixed(0)}%`:null,isStr:true},
+                            ].filter(d=>d.val!=null).map(d=>(
+                              <div key={d.label} style={{
+                                padding:"7px 10px",minWidth:84,
+                                background:_thm.header,border:`1px solid ${_thm.border}`,borderRadius:4,
+                              }}>
+                                <div style={{fontSize:8,color:_thm.sub,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>
+                                  {d.label}
+                                </div>
+                                <div style={{fontSize:12,fontWeight:700,fontFamily:"monospace",
+                                  color:d.color||(d.isStr?_thm.txt:(typeof d.val==="number"?(d.val>0?"#2e7d4f":d.val<0?"#b71c1c":_thm.txt):_thm.txt))}}>
+                                  {d.isStr?d.val:fK(d.val)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Weekly evolution mini-table */}
+                          {weeks.length>=2&&(
+                            <div>
+                              <div style={{fontSize:9,fontWeight:700,color:_thm.sub,letterSpacing:"0.07em",
+                                textTransform:"uppercase",marginBottom:6}}>Evolución Semanal — Net Position</div>
+                              <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:4}}>
+                                {weeks.slice(0,Math.min(weeks.length,8)).map((w,wi)=>{
+                                  const prevW=weeks[wi+1];
+                                  const wChg=prevW?w.smartNet-prevW.smartNet:null;
+                                  return(
+                                    <div key={w.isoDate||wi} style={{
+                                      padding:"7px 9px",flexShrink:0,minWidth:76,textAlign:"center",
+                                      background:wi===0?_thm.accent+"18":_thm.header,
+                                      border:`1px solid ${wi===0?_thm.accent:_thm.border}`,borderRadius:4,
+                                    }}>
+                                      <div style={{fontSize:8,color:_thm.sub,marginBottom:3,whiteSpace:"nowrap"}}>
+                                        {wi===0?"Actual":(w.displayDate||`-${wi}w`)}
+                                      </div>
+                                      <div style={{fontSize:11,fontWeight:700,fontFamily:"monospace",
+                                        color:w.smartNet>0?"#2e7d4f":w.smartNet<0?"#b71c1c":_thm.sub}}>
+                                        {fK(w.smartNet)}
+                                      </div>
+                                      {wChg!=null&&(
+                                        <div style={{fontSize:8,color:wChg>0?"#2e7d4f":wChg<0?"#b71c1c":"#9E9E9E",marginTop:2}}>
+                                          {wChg>0?"▲":"▼"} {fK(Math.abs(wChg))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{marginTop:12,display:"flex",justifyContent:"space-between",
+                            alignItems:"center",flexWrap:"wrap",gap:8}}>
+                            <span style={{fontSize:9,color:_thm.sub}}>
+                              Fuente: CFTC.gov · Leveraged Money · Datos procesados localmente
+                            </span>
+                            <button onClick={()=>setDetail(p)} style={{
+                              fontSize:10,color:_thm.accent,background:"none",
+                              border:`1px solid ${_thm.accent}`,borderRadius:3,
+                              padding:"4px 10px",cursor:"pointer",fontWeight:600,
+                            }}>Ver desglose completo →</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Sparkline */}
-                  <div style={{display:"flex",justifyContent:"flex-end",paddingRight:8}}>
-                    <MiniSparkline values={[...weeks].reverse().map(w=>w.smartNet)} positive={latest.smartNet>=0}/>
-                  </div>
-
-                  {/* Arrow */}
-                  <div style={{textAlign:"right",color:_thm.sub,fontSize:12}}>›</div>
-                  </>
-                  )}
-                </div>
-              );
-            })}
-          </div>}
+                  );
+                })}
+              </div>
+            </div>
+          ))}
 
           {/* Methodology footer */}
-          {pairsData&&<div style={{marginTop:16,padding:"12px 16px",
+          <div style={{marginTop:8,padding:"12px 16px",
             background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
               <div>
@@ -5437,7 +5454,7 @@ if (!authUser || forceResetMode) {
                 </div>
               </div>
             </div>
-          </div>}
+          </div>
         </div>
       )}
 
