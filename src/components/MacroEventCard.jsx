@@ -397,7 +397,7 @@ export default function MacroEventCard({ event, finalDecision, darkMode, T, isMo
             background: 'rgba(239,68,68,0.15)', color: '#ef4444',
             border: '1px solid rgba(239,68,68,0.30)', letterSpacing: '0.06em',
           }}>
-            {verdict}
+            SIN CONTEXTO
           </span>
         </div>
       )}
@@ -430,6 +430,13 @@ export default function MacroEventCard({ event, finalDecision, darkMode, T, isMo
               {evDate} · {evTime}
             </span>
           )}
+          <span style={{
+            fontSize: 8, color: T.sub2, letterSpacing: '0.04em',
+            background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            border: `1px solid ${T.border}`, padding: '1px 6px', borderRadius: 99,
+          }}>
+            horas–días
+          </span>
         </div>
       </div>
 

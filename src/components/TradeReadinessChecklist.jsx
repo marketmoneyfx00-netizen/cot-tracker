@@ -855,7 +855,7 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
   if (decision.verdict === 'UNFAVORABLE CONDITIONS') {
     const topEv = ctx.topEvents?.[0];
     return N(
-      `${biasUp} setup on ${pair} valid — macro risk too high to execute`,
+      `${biasUp} setup on ${pair} valid — macro risk too elevated for new positions`,
       `Espera ${topEv ? `${topEv.name} (${topEv.impact}) ` : 'macro event '}absorción antes de considerar la entrada`
     );
   }
@@ -972,7 +972,7 @@ function computeQuality(decision, tim, dir, exp) {
   if (isOptimalEntry) return { tag:'A+', color:'#22c55e', detail:'Alineación total · Expansión temprana · Ventana de entrada ideal' };
 
   // A: full alignment
-  if (score >= 75) return { tag:'A', color:'#22c55e', detail:'Todos los factores alineados — execute with discipline' };
+  if (score >= 75) return { tag:'A', color:'#22c55e', detail:'Todos los factores alineados — contexto institucional completo' };
 
   // B: conditional / parcial
   const bPlus = score >= 65 && biasStr >= 2;

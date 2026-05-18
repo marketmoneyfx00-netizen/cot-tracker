@@ -490,7 +490,25 @@ function ExplainStep({ onNext, isMobile }) {
           COT Tracker es un filtro de contexto macro. Confirma siempre con análisis técnico antes de operar.
         </div>
       </div>
-      <button className="ob-btn-pri" onClick={onNext} style={{ marginTop:20 }}>Entendido →</button>
+
+      <div style={{ marginTop:10, padding:'12px 14px', borderRadius:10,
+        background:'rgba(239,68,68,0.05)', border:'1px solid rgba(239,68,68,0.15)' }}>
+        <div style={{ fontSize:11, fontWeight:700, color:'#ef4444', marginBottom:6 }}>✕ Qué NO hacer con estos datos</div>
+        {[
+          'Abrir posiciones basándote solo en el sesgo COT sin confirmación técnica',
+          'Interpretar "sesgo alcista" como una señal de compra inmediata',
+          'Asumir que los datos son en tiempo real — reflejan posiciones del martes anterior',
+          'Ignorar el horizonte temporal: el COT es relevante en 1–4 semanas, no en intradía',
+        ].map((text, i) => (
+          <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start',
+            marginBottom: i < 3 ? 5 : 0 }}>
+            <span style={{ color:'#ef4444', fontSize:10, flexShrink:0, marginTop:1 }}>✕</span>
+            <span style={{ fontSize:11, color:'#8b90a0', lineHeight:1.5 }}>{text}</span>
+          </div>
+        ))}
+      </div>
+
+      <button className="ob-btn-pri" onClick={onNext} style={{ marginTop:16 }}>Entendido →</button>
     </div>
   );
 }
@@ -527,26 +545,48 @@ function ReadyStep({ market, onFinish, isMobile }) {
         </div>
       )}
 
-      <div style={{ padding:'15px 18px', borderRadius:12, marginBottom:24, textAlign:'left',
+      <div style={{ padding:'15px 18px', borderRadius:12, marginBottom:16, textAlign:'left',
         background:'rgba(255,255,255,0.025)', border:'1px solid #263041' }}>
         <div style={{ fontSize:10, fontWeight:700, color:'#5a6070',
           letterSpacing:'0.1em', marginBottom:12 }}>PRIMERA MISIÓN HOY</div>
         {[
-          'Importa el CSV de Futures Only del CFTC',
-          'Localiza el activo con mayor Alignment Score',
-          'Lee el sesgo institucional y confirma técnicamente',
-        ].map((text, i) => (
+          {
+            title: 'Descarga el archivo CFTC',
+            desc: 'Ve a cftc.gov → Market Reports → Commitments of Traders → Traders in Financial Futures. Descarga el CSV de "Futures Only" (no el Combined ni el Legacy).',
+          },
+          {
+            title: 'Importa en la pestaña "Importar datos"',
+            desc: 'Arrastra el CSV o usa el botón de carga. El sistema detecta el formato automáticamente.',
+          },
+          {
+            title: 'Lee el sesgo institucional',
+            desc: '"Leveraged Money neto: +42K" significa que los fondos institucionales tienen 42.000 contratos más largos que cortos. Es un sesgo de contexto para las próximas 1–4 semanas, no una señal de entrada.',
+          },
+        ].map(({ title, desc }, i) => (
           <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start',
-            marginBottom: i < 2 ? 9 : 0 }}>
+            marginBottom: i < 2 ? 12 : 0 }}>
             <div style={{ width:19, height:19, borderRadius:'50%', flexShrink:0,
               background:'rgba(0,85,204,0.15)', border:'1px solid rgba(0,85,204,0.28)',
               display:'flex', alignItems:'center', justifyContent:'center',
               fontSize:10, fontWeight:800, color:'#0055cc', marginTop:1 }}>
               {i + 1}
             </div>
-            <span style={{ fontSize:13, color:'#8b90a0', lineHeight:1.5 }}>{text}</span>
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color:'#c8ccd6', marginBottom:2 }}>{title}</div>
+              <div style={{ fontSize:11, color:'#8b90a0', lineHeight:1.55 }}>{desc}</div>
+            </div>
           </div>
         ))}
+      </div>
+
+      <div style={{ padding:'11px 14px', borderRadius:10, marginBottom:20, textAlign:'left',
+        background:'rgba(239,68,68,0.06)', border:'1px solid rgba(239,68,68,0.18)' }}>
+        <div style={{ fontSize:11, fontWeight:700, color:'#ef4444', marginBottom:4 }}>
+          ✕ Esto NO es una señal de trading
+        </div>
+        <div style={{ fontSize:11, color:'#8b90a0', lineHeight:1.55 }}>
+          Los datos COT reflejan posiciones del martes, publicadas el viernes. No predicen movimientos de precio ni indican cuándo entrar o salir de una operación. Úsalos para filtrar el contexto institucional antes de aplicar tu análisis técnico.
+        </div>
       </div>
 
       <button className="ob-btn-pri" onClick={onFinish}

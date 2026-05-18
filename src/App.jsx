@@ -4034,6 +4034,7 @@ function AppInner() {
 
   const [pairsData,      setPairsData]      = useState(null);
   const [source,         setSource]         = useState('');
+  const [uploadDelta,    setUploadDelta]    = useState(null);
   // ── TIFF Combined dataset (parallel, never overwrites Futures Only) ────────
   const [combinedData,   setCombinedData]   = useState(null);
   const [sourceCombined, setSourceCombined] = useState('');
@@ -4261,6 +4262,20 @@ function AppInner() {
         return {pair:contract.pair,cat:contract.cat,weeks,signal,latest:weeks[0]};
       }).filter(Boolean);
       if (pairs.length===0) throw new Error("No se reconocieron contratos forex.");
+
+      // Compute week-over-week delta summary from the uploaded file
+      const delta = pairs
+        .filter(p => p.cat === 'fx' && p.weeks?.length >= 2)
+        .map(p => {
+          const cur  = p.weeks[0].smartNet;
+          const prev = p.weeks[1].smartNet;
+          const chg  = cur - prev;
+          return { pair: p.pair, cur, prev, chg, isoDate: p.weeks[0].isoDate };
+        })
+        .filter(d => Math.abs(d.chg) > 0)
+        .sort((a, b) => Math.abs(b.chg) - Math.abs(a.chg));
+
+      setUploadDelta(delta.length > 0 ? { items: delta, reportDate: pairs[0]?.weeks[0]?.isoDate ?? null } : null);
       setPairsData(pairs); setSource(name);
     } catch(e) { setError(e.message); }
   },[]);
@@ -4942,6 +4957,33 @@ if (!authUser || forceResetMode) {
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
               <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal} cotDataDate={cotDataDate}/>
+
+              {/* ── Uso correcto del contexto institucional ──────────────── */}
+              <div style={{
+                marginTop: 12, padding: '12px 16px', borderRadius: 10,
+                background: darkMode ? 'rgba(239,68,68,0.05)' : 'rgba(239,68,68,0.04)',
+                border: '1px solid rgba(239,68,68,0.15)',
+              }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color:'#ef4444', letterSpacing:'0.04em' }}>
+                    ✕ Cómo NO usar esta capa
+                  </span>
+                  <span style={{ fontSize:10, color:_thm.sub2, marginLeft:'auto' }}>Contexto institucional · 1–4 semanas</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:'4px 16px' }}>
+                  {[
+                    'No abras posiciones basándote solo en el sesgo COT',
+                    'No interpretes "Contexto Favorable" como señal de compra inmediata',
+                    'Los datos reflejan posiciones del martes — no son en tiempo real',
+                    'El horizonte es 1–4 semanas, no intradía ni scalping',
+                  ].map((text, i) => (
+                    <div key={i} style={{ display:'flex', gap:7, alignItems:'flex-start', padding:'3px 0' }}>
+                      <span style={{ color:'#ef4444', fontSize:9, flexShrink:0, marginTop:2 }}>✕</span>
+                      <span style={{ fontSize:11, color:_thm.sub, lineHeight:1.5 }}>{text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -5408,6 +5450,7 @@ if (!authUser || forceResetMode) {
           sourceCombined={sourceCombined}
           darkMode={darkMode}
           T={_thm}
+          uploadDelta={uploadDelta}
         />
       )}
 

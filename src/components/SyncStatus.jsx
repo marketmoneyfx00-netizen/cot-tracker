@@ -1,4 +1,4 @@
-export default function SyncStatus({ lastSync, pairsData, combinedData, sourceCombined, darkMode, T }) {
+export default function SyncStatus({ lastSync, pairsData, combinedData, sourceCombined, darkMode, T, uploadDelta }) {
   const { at, status, reportDate, errorMessage } = lastSync || {};
 
   const relativeTime = (isoStr) => {
@@ -99,6 +99,61 @@ export default function SyncStatus({ lastSync, pairsData, combinedData, sourceCo
           {cfg.label}
         </div>
       </div>
+
+      {/* ── Post-upload delta summary ────────────────────────────────────────── */}
+      {uploadDelta?.items?.length > 0 && (
+        <div style={{
+          marginBottom: 20, padding: '14px 18px', borderRadius: 12,
+          background: darkMode ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.04)',
+          border: '1px solid rgba(34,197,94,0.22)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 14 }}>📊</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: textColor }}>
+              Cambios detectados vs semana anterior
+            </span>
+            {uploadDelta.reportDate && (
+              <span style={{ fontSize: 10, color: subColor, marginLeft: 'auto' }}>
+                Informe del {new Date(uploadDelta.reportDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6 }}>
+            {uploadDelta.items.slice(0, 8).map(({ pair, cur, prev, chg }) => {
+              const isUp  = chg > 0;
+              const color = isUp ? '#22c55e' : '#ef4444';
+              const sign  = isUp ? '+' : '';
+              const fmtK  = (n) => Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+              return (
+                <div key={pair} style={{
+                  background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                  border: `1px solid ${color}22`,
+                  borderRadius: 8, padding: '8px 10px',
+                  display: 'flex', flexDirection: 'column', gap: 3,
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: textColor, fontFamily: 'monospace' }}>
+                    {pair}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color, fontFamily: 'monospace' }}>
+                      {sign}{fmtK(chg)}
+                    </span>
+                    <span style={{ fontSize: 9, color: subColor }}>
+                      contratos netos
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 9, color: subColor }}>
+                    {(prev >= 0 ? '+' : '')}{fmtK(prev)} → {(cur >= 0 ? '+' : '')}{fmtK(cur)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p style={{ margin: '10px 0 0', fontSize: 10, color: subColor, lineHeight: 1.5 }}>
+            Variación en posiciones netas de Leveraged Money (TFF) entre los dos últimos informes CFTC del archivo subido. No implica dirección de precio.
+          </p>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <Chip

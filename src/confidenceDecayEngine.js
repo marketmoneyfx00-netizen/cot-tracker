@@ -140,9 +140,9 @@ export function computeExecutionReadiness({ biasDir, tacState, decayLevel, biasS
  * Human-readable execution readiness label for display.
  */
 export const EXECUTION_READINESS_CFG = {
-  continuation_context: { label: 'Execution Conditions Improving', color: '#22c55e', icon: '●' },
-  pullback_monitoring:  { label: 'Pullback Monitoring Active',      color: '#f59e0b', icon: '◐' },
-  await_stabilization:  { label: 'Await Stabilization',            color: '#f97316', icon: '◌' },
-  await_confirmation:   { label: 'Await Confirmation',             color: '#6b7280', icon: '○' },
-  no_edge:              { label: 'No Directional Edge',            color: '#6b7280', icon: '○' },
+  continuation_context: { label: 'Contexto de continuación',  color: '#22c55e', icon: '●' },
+  pullback_monitoring:  { label: 'Monitoreando pullback',      color: '#f59e0b', icon: '◐' },
+  await_stabilization:  { label: 'Esperando estabilización',  color: '#f97316', icon: '◌' },
+  await_confirmation:   { label: 'Esperando confirmación',    color: '#6b7280', icon: '○' },
+  no_edge:              { label: 'Sin ventaja direccional',   color: '#6b7280', icon: '○' },
 };

@@ -122,6 +122,13 @@ function MarketDecisionLayer({
             {regime.label.toUpperCase()}
           </span>
           <span style={{ fontSize: 10, color: T.sub, flex: 1 }}>— {regime.description}</span>
+          <span style={{
+            fontSize: 8, color: T.sub2, letterSpacing: '0.04em', flexShrink: 0,
+            background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            border: `1px solid ${T.border}`, padding: '1px 6px', borderRadius: 99,
+          }}>
+            días–semanas
+          </span>
         </div>
       </div>
 
@@ -154,7 +161,7 @@ function MarketDecisionLayer({
             border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'}`,
             letterSpacing: '0.06em',
           }}>
-            {verdict}
+            {isMacroBlocked ? 'SIN CONTEXTO' : 'SESGO EN FORMACIÓN'}
           </span>
         </div>
       )}
