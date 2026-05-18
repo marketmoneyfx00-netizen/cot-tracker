@@ -362,7 +362,7 @@ function MarketDecisionLayer({
         gap: isMobile ? 8 : 12,
       }}>
         {sorted.map(({ pair, bias, biasDir, pairTac, hasRealTac, decay, execReadiness, narrative }) => {
-          const biasColor     = bias.score > 0 ? '#22c55e' : bias.score < 0 ? '#ef4444' : '#6b7280';
+          const biasColor     = bias.color;
           // Key visual rule: when conflict present, card border uses decay color (amber/orange)
           const cardBorder    = decay.color;
           const execCfg       = EXECUTION_READINESS_CFG[execReadiness] ?? EXECUTION_READINESS_CFG.await_confirmation;

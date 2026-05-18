@@ -318,6 +318,14 @@ function StrengthDots({strength}) {
 }
 
 // ─── INSTITUTIONAL BIAS CARD ──────────────────────────────────────────────────
+const BIAS_STATE_BADGE = {
+  strong_bull: { label: 'ALCISTA FUERTE', color: '#22c55e' },
+  bull:        { label: 'ALCISTA',        color: '#4ade80' },
+  neutral:     { label: 'NEUTRO · DIV',  color: '#94a3b8' },
+  bear:        { label: 'BAJISTA',        color: '#f87171' },
+  strong_bear: { label: 'BAJISTA FUERTE', color: '#ef4444' },
+};
+
 function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
   const [expanded, setExpanded] = useState(false);
   if (!biasResult) return null;
@@ -326,10 +334,13 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
     score = 0,
     label = 'Neutral / Range',
     direction = 'neutral',
+    state = 'neutral',
     color = '#94a3b8',
     recommendation = 'Waiting for new COT data',
     breakdown = {},
   } = biasResult || {};
+
+  const badge = BIAS_STATE_BADGE[state] ?? BIAS_STATE_BADGE.neutral;
 
   // Gauge: map -5..+5 to 0..100%
   const pct = ((score + 5) / 10) * 100;
@@ -394,10 +405,22 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
         </div>
         {/* Label + meta */}
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+          <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:5}}>
             <span style={{fontSize: isMobile ? 15 : 17, fontWeight:700, color, lineHeight:1.2}}>{label}</span>
             <TooltipInfo text="Sesgo institucional semanal (3–10d). Marca contexto macro, NO dirección inmediata del precio. No usar como señal de entrada." align="center"/>
           </div>
+          {/* State badge — instant readability */}
+          <span style={{
+            display: 'inline-block',
+            fontSize: 9, fontWeight: 800,
+            color: badge.color,
+            background: `${badge.color}18`,
+            border: `1px solid ${badge.color}40`,
+            padding: '2px 8px', borderRadius: 99,
+            letterSpacing: '0.09em',
+          }}>
+            {badge.label}
+          </span>
         </div>
       </div>
 

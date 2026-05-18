@@ -115,9 +115,18 @@ function getLabel(score) {
 }
 
 function getDirection(score) {
-  if (score > 0)  return 'bullish';
-  if (score < 0)  return 'bearish';
-  return 'neutral';
+  if (score >= 1.5)  return 'bullish';
+  if (score > -1.5)  return 'neutral';
+  return 'bearish';
+}
+
+// Semantic state aligned with V2 label thresholds
+function getSemanticState(score) {
+  if (score >= 4)    return 'strong_bull';
+  if (score >= 1.5)  return 'bull';
+  if (score > -1.5)  return 'neutral';
+  if (score > -4)    return 'bear';
+  return                   'strong_bear';
 }
 
 // ─── RECOMMENDATION ENGINE ───────────────────────────────────────────────────
@@ -132,14 +141,15 @@ function getRecommendation(score) {
 }
 
 // ─── COLOR HELPER (for UI use) ────────────────────────────────────────────────
+// Thresholds intentionally aligned with V2 semantic label ranges.
+// Neutral zone (-1.5 to +1.5) renders slate — not pink — so "Neutral / Divergence"
+// states are never visually mistaken for a bearish signal.
 function getBiasColor(score) {
-  if (score >= 4)  return '#22c55e'; // strong bull
-  if (score >= 2)  return '#4ade80'; // bull
-  if (score === 1) return '#86efac'; // slight bull
-  if (score === 0) return '#94a3b8'; // neutral
-  if (score >= -2) return '#fca5a5'; // slight bear
-  if (score >= -4) return '#f87171'; // bear
-  return                  '#ef4444'; // strong bear
+  if (score >= 4)    return '#22c55e'; // strong bull
+  if (score >= 1.5)  return '#4ade80'; // bull
+  if (score > -1.5)  return '#94a3b8'; // neutral / divergence
+  if (score > -4)    return '#f87171'; // bear
+  return                   '#ef4444'; // strong bear
 }
 
 
@@ -251,8 +261,9 @@ export function calculateInstitutionalBiasV2(data = {}) {
     return {
       score,
       label:          getLabelV2(score),
-      direction:      getDirection(score),          // reuse shared helper
-      color:          getBiasColor(score),           // reuse shared helper
+      direction:      getDirection(score),
+      color:          getBiasColor(score),
+      state:          getSemanticState(score),
       recommendation: getRecommendationV2(score),
       breakdown: {
         leveragedFlow,
@@ -307,6 +318,7 @@ export function calculateBiasScore(data = {}) {
       label: 'Neutral / Divergence',
       direction: 'neutral',
       color: '#94a3b8',
+      state: 'neutral',
       recommendation: 'Waiting for new COT data',
       breakdown: { leveragedFlow:0, divergence:0, percentile:0, assetManagers:0, dealers:0 },
     };
@@ -326,6 +338,7 @@ export function calculateBiasScore(data = {}) {
       label:          getLabel(score),
       direction:      getDirection(score),
       color:          getBiasColor(score),
+      state:          getSemanticState(score),
       recommendation: getRecommendation(score),
       breakdown: { leveragedFlow, divergence, percentile, assetManagers, dealers },
     };
