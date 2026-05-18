@@ -4962,6 +4962,8 @@ if (!authUser || forceResetMode) {
                   isPremium={isPremium}
                   onUpgrade={openBilling}
                   finalDecision={finalDecision}
+                  controlledPair={selectedPair}
+                  onPairChange={setSelectedPair}
                 />
               </div>
             );
