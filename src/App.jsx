@@ -5010,7 +5010,7 @@ if (!authUser || forceResetMode) {
                 <span style={{flex:1,height:1,background:_thm.border}}/>
                 <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>MARKET DECISION LAYER · HTF+LTF · AUTO</span>
               </div>
-              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal} cotDataDate={cotDataDate}/>
+              <MarketDecisionLayer fxPairs={fxPairs} darkMode={darkMode} T={_thm} isMobile={isMobile} isPremium={isPremium} onUpgrade={openBilling} finalDecision={finalDecision} tacState={tacState} tacStateMap={tacStateMap} selectedPair={selectedPair} livePrices={livePrices} biasArr={biasArr} macroSignal={macroSignal} cotDataDate={cotDataDate} sentimentData={sentimentData}/>
 
               {/* ── Uso correcto del contexto institucional ──────────────── */}
               <div style={{

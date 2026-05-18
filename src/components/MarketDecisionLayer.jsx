@@ -3,6 +3,149 @@ import TooltipInfo                           from "./TooltipInfo.jsx";
 import { computeConfidenceDecay, computeExecutionReadiness, EXECUTION_READINESS_CFG } from "../confidenceDecayEngine.js";
 import { buildNarrative }                    from "../narrativeEngine.js";
 import { computeMarketRegime }               from "../marketRegimeEngine.js";
+import { computeMarketState }                from "../marketStateEngine.js";
+
+// ── Market State Panel ────────────────────────────────────────────────────────
+// Renders the synthesis result for the selected pair above the per-pair cards.
+function MarketStatePanel({ result, darkMode, T, isMobile }) {
+  if (!result || result.isEmpty) return null;
+
+  const pad = isMobile ? '11px 14px' : '12px 18px';
+
+  return (
+    <div style={{
+      margin: isMobile ? '10px 10px 0' : '10px 14px 0',
+      padding: pad,
+      borderRadius: 10,
+      background: result.bg,
+      border: `1px solid ${result.border}`,
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+
+      {/* Header row — state badge + alignment score */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 13, lineHeight: 1 }}>{result.icon}</span>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: result.color, letterSpacing: '0.02em' }}>
+                {result.label}
+              </span>
+              <span style={{
+                fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em',
+                background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 99,
+              }}>
+                MARKET STATE
+              </span>
+            </div>
+            <p style={{ margin: '2px 0 0', fontSize: 9, color: T.sub, lineHeight: 1.4 }}>
+              {result.description}
+            </p>
+          </div>
+        </div>
+
+        {/* Alignment score pill */}
+        <div style={{
+          flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 2, minWidth: 44,
+        }}>
+          <span style={{ fontSize: 18, fontWeight: 900, color: result.color, fontFamily: 'monospace', lineHeight: 1 }}>
+            {result.alignmentScore}
+          </span>
+          <span style={{ fontSize: 7, color: T.sub2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Alignment
+          </span>
+        </div>
+      </div>
+
+      {/* Signal row — 3 key layers at a glance */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
+        {[
+          {
+            label: 'Institutional',
+            value: result.institutionalBias === 'BULLISH' ? 'Bullish'
+                 : result.institutionalBias === 'BEARISH' ? 'Bearish' : 'Neutral',
+            color: result.institutionalBias === 'BULLISH' ? '#22c55e'
+                 : result.institutionalBias === 'BEARISH' ? '#ef4444' : '#6b7280',
+          },
+          {
+            label: 'Structure',
+            value: result.structureBias === 'BULLISH'     ? 'Bullish'
+                 : result.structureBias === 'BEARISH'     ? 'Bearish'
+                 : result.structureBias === 'COMPRESSION' ? 'Compressed'
+                 : result.structureBias === 'EXPANSION'   ? 'Expanding'
+                 : result.structureBias === 'RANGING'     ? 'Ranging'
+                 : 'No data',
+            color: result.structureBias === 'BULLISH'     ? '#22c55e'
+                 : result.structureBias === 'BEARISH'     ? '#ef4444'
+                 : result.structureBias === 'EXPANSION'   ? '#f97316' : '#6b7280',
+          },
+          {
+            label: 'Timing Phase',
+            value: result.timingLabel,
+            color: result.timingState === 'EXPANSION'          ? '#22c55e'
+                 : result.timingState === 'CONFIRMATION'       ? '#4ade80'
+                 : result.timingState === 'EARLY_ACCUMULATION' ? '#f59e0b'
+                 : result.timingState === 'LATE_TREND'         ? '#f97316'
+                 : result.timingState === 'EXHAUSTION'         ? '#ef4444' : '#6b7280',
+          },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{
+            background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+            borderRadius: 7, padding: '5px 8px',
+          }}>
+            <div style={{ fontSize: 7, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 2 }}>
+              {label}
+            </div>
+            <div style={{ fontSize: 9, fontWeight: 700, color }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Execution context — observational text */}
+      <div style={{
+        padding: '6px 10px', borderRadius: 7,
+        background: darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        borderLeft: `2px solid ${result.color}50`,
+      }}>
+        <span style={{ fontSize: 9, color: T.sub, lineHeight: 1.45 }}>
+          {result.executionContext}
+        </span>
+      </div>
+
+      {/* Volatility + Crowding mini-badges */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 8, color: T.sub2, letterSpacing: '0.04em' }}>Context:</span>
+        {[
+          {
+            key: 'volatility',
+            label: `Volatility: ${result.volatilityLabel}`,
+            color: result.volatilityState === 'EXPANSION' ? '#f97316'
+                 : result.volatilityState === 'ELEVATED'  ? '#f59e0b'
+                 : result.volatilityState === 'NORMAL'    ? '#22c55e' : '#6b7280',
+          },
+          {
+            key: 'crowding',
+            label: `Crowding: ${result.crowdingMeta.label}`,
+            color: result.crowdingMeta.color,
+          },
+        ].map(({ key, label, color }) => (
+          <span key={key} style={{
+            fontSize: 8, fontWeight: 600, color,
+            background: `${color}10`,
+            border: `1px solid ${color}28`,
+            padding: '1px 7px', borderRadius: 99, letterSpacing: '0.03em',
+          }}>
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARKET DECISION LAYER — Institutional Contextual Interpretation
@@ -22,6 +165,7 @@ function MarketDecisionLayer({
   biasArr = [],
   macroSignal = null,
   cotDataDate = null,
+  sentimentData = null,
 }) {
   if (!fxPairs || fxPairs.length === 0) return null;
 
@@ -34,6 +178,13 @@ function MarketDecisionLayer({
     () => computeMarketRegime(tacStateMap ?? {}, biasArr, macroSignal),
     [tacStateMap, biasArr, macroSignal],
   );
+
+  // ── Market State (per selected-pair synthesis) ───────────────────────────
+  const marketStateResult = useMemo(() => {
+    const biasEntry = biasArr.find(r => r.pair === selectedPair) ?? biasArr[0] ?? null;
+    const pairTac   = (tacStateMap && tacStateMap[selectedPair]) ?? (tacState ?? null);
+    return computeMarketState(biasEntry, pairTac, macroSignal, sentimentData);
+  }, [biasArr, selectedPair, tacStateMap, tacState, macroSignal, sentimentData]);
 
   // ── Per-pair data ────────────────────────────────────────────────────────
   // Single source of truth: use biasArr (already computed with macroConfidence,
@@ -165,6 +316,9 @@ function MarketDecisionLayer({
           </span>
         </div>
       )}
+
+      {/* ── Market State Panel (selected pair synthesis) ── */}
+      <MarketStatePanel result={marketStateResult} darkMode={darkMode} T={T} isMobile={isMobile} />
 
       {/* ── Pair cards ── */}
       <div style={{
