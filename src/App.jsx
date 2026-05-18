@@ -2685,7 +2685,7 @@ function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
               <div style={{fontSize:13,fontWeight:700,color:D.txt}}>Sentimiento & Volatilidad</div>
               <div style={{fontSize:11,color:D.sub,marginTop:2}}>Score: {sentiment.scoreOf5}/5 · {sentiment.highCount} eventos alto impacto hoy</div>
             </div>
-            <InfoTooltip text="VIX obtenido de TwelveData en tiempo real (actualizado cada 5 min). Si no está disponible, se usa una estimación basada en la carga de eventos del día. El fear/greed refleja el nivel de volatilidad del mercado." />
+            <InfoTooltip text="VIX obtenido de Yahoo Finance en tiempo real (actualizado cada 5 min). Si no está disponible, se muestra 'VIX est.' basado en la carga de eventos del día — no usar ese valor para decisiones operativas. El fear/greed refleja el nivel de volatilidad del mercado." />
           </div>
 
           {/* Mood */}

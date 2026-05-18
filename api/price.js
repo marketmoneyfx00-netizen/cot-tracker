@@ -59,7 +59,36 @@ function toTwelveSymbol(sym) {
   return sym;
 }
 
+// ── Yahoo Finance symbol map for US indices ───────────────────────────────────
+const YAHOO_SYMBOL_MAP = {
+  VIX:  '%5EVIX',
+  '^VIX': '%5EVIX',
+  SPX:  '%5EGSPC',
+  NDX:  '%5ENDX',
+  DJI:  '%5EDJI',
+  RUT:  '%5ERUT',
+};
+
 // ── Proveedores ───────────────────────────────────────────────────────────────
+async function fetchYahoo(symbol) {
+  const ySym = YAHOO_SYMBOL_MAP[symbol];
+  if (!ySym) throw new Error(`Yahoo: no mapping for ${symbol}`);
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ySym}?interval=1m&range=1d`;
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(7_000),
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+  });
+  if (!res.ok) throw new Error(`Yahoo Finance HTTP ${res.status}`);
+
+  const data = await res.json();
+  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof price !== 'number' || price <= 0) {
+    throw new Error(`Yahoo Finance invalid price: ${JSON.stringify(data?.chart?.result?.[0]?.meta)}`);
+  }
+  return { price, provider: 'yahoo' };
+}
+
 async function fetchFinnhub(symbol) {
   const key = process.env.FINNHUB_API_KEY;
   if (!key) throw new Error('FINNHUB_API_KEY not configured');
@@ -156,11 +185,12 @@ export default async function handler(req, res) {
   const US_INDICES = new Set(['VIX', '^VIX', 'SPX', 'NDX', 'DJI', 'RUT']);
   const isIndex = US_INDICES.has(symbol) || symbol.startsWith('^');
 
-  // Determinar orden de proveedores
-  // Si el símbolo tiene formato OANDA:... preferimos Finnhub primero
+  // Determinar orden de proveedores.
+  // Índices US: Yahoo primero (no requiere key, cubre VIX/SPX/NDX),
+  // TwelveData como fallback (sujeto a plan).
   const preferFinnhub = !isIndex && (symbol.includes(':') || req.query?.provider === 'finnhub');
   const providers = isIndex
-    ? [fetchTwelveData]
+    ? [fetchYahoo, fetchTwelveData]
     : preferFinnhub
       ? [fetchFinnhub, fetchTwelveData]
       : [fetchTwelveData, fetchFinnhub];
