@@ -230,18 +230,11 @@ export default function AuthCallback() {
         animation: 'cb-in 0.25s ease both',
       }}>
 
-        <div style={{
+        <img src="/logo.svg" alt="COT" style={{
           width: 56, height: 56, borderRadius: 16,
-          background: 'linear-gradient(135deg,#0055cc,#0077ed)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 28px',
+          display: 'block', margin: '0 auto 28px',
           boxShadow: '0 8px 24px rgba(0,85,204,0.4)',
-        }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2"
-              strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
+        }} />
 
         {(status === 'processing' || status === 'creating') && (
           <>
