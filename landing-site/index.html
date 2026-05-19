@@ -495,11 +495,12 @@
     background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius-lg); padding: 28px 22px;
     position: relative; transition: all .22s cubic-bezier(.4,0,.2,1);
-    display: flex; flex-direction: column; overflow: hidden;
+    display: flex; flex-direction: column;
   }
   .plan-card::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
     background: var(--gradient); opacity: 0; transition: opacity .22s;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
   .plan-card:hover { border-color: var(--border2); box-shadow: 0 20px 60px rgba(0,0,0,.4); transform: translateY(-4px); }
   .plan-card:hover::before { opacity: 1; }
