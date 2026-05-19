@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>COT Tracker — Opera con la ventaja del dinero institucional</title>
-  <meta name="description" content="El posicionamiento real del capital institucional, convertido en señal operativa. Market Decision Layer, Bias Engine, Cross Asset Flow e Intraday Execution. Prueba gratis." />
-  <meta property="og:title"       content="COT Tracker — Ventaja institucional para traders FX" />
-  <meta property="og:description" content="Convierte el posicionamiento CFTC en sesgo operativo claro. 4 módulos. Actualización semanal. Prueba gratis." />
+  <title>COT Tracker — Institutional market intelligence para traders FX</title>
+  <meta name="description" content="COT Tracker convierte el informe CFTC en bias score, composite score y análisis de divergencias para 8 pares FX. Para swing y position traders que operan con contexto — no con señales." />
+  <meta property="og:title"       content="COT Tracker — Institutional market intelligence para traders FX" />
+  <meta property="og:description" content="Bias score, composite score y detección de divergencias basados en datos CFTC verificables. Swing y position trading en FX. Acceso gratuito." />
   <meta property="og:type"        content="website" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -588,6 +588,24 @@
   .faq-item.open .faq-a { max-height: 400px; }
   .faq-a-inner { padding: 0 22px 18px; font-size: 14px; color: var(--sub); line-height: 1.75; }
 
+  /* ── DISCLAIMER ─────────────────────────────────────────────────────────── */
+  .disclaimer-banner {
+    background: var(--bg2); border-top: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  .disclaimer-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .disclaimer-icon {
+    width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px;
+    color: var(--sub2);
+  }
+  .disclaimer-text {
+    font-size: 12px; color: var(--sub2); line-height: 1.65;
+  }
+  .disclaimer-text strong { color: var(--sub); font-weight: 600; }
+
   /* ── FOOTER ──────────────────────────────────────────────────────────────── */
   footer {
     background: var(--bg2); border-top: 1px solid var(--border);
@@ -657,7 +675,7 @@
     </div>
     <div class="nav-actions">
       <a href="https://app.cot-tracker.com" class="btn btn-primary" style="padding:9px 20px;font-size:13px;">
-        Empezar gratis →
+        Acceder gratis →
       </a>
     </div>
   </div>
@@ -673,14 +691,14 @@
           <span class="live-badge"><span class="live-dot"></span> CFTC · Actualización semanal</span>
         </div>
         <h1 class="hero-title up up-d1">
-          Opera con la visión del<br><span class="grad-text">dinero institucional</span>
+          Contexto institucional<br><span class="grad-text">antes que velas</span>
         </h1>
         <p class="hero-sub up up-d2">
-          Los traders minoristas pierden porque operan sin contexto. COT Tracker convierte el posicionamiento real del capital institucional en ventaja operativa clara — en segundos.
+          COT Tracker convierte el informe CFTC en bias score, composite score y análisis de divergencias para 8 pares FX. Para swing y position traders que necesitan más que técnico.
         </p>
         <div class="hero-btns up up-d3">
           <a href="https://app.cot-tracker.com" class="btn btn-primary btn-lg">
-            Empezar gratis →
+            Acceder gratis →
           </a>
           <a href="#pricing" class="btn btn-ghost btn-lg">
             Ver planes
@@ -765,11 +783,11 @@
         <!-- Floating chips -->
         <div class="mock-chip">
           <span style="color:var(--bull);font-size:13px;">✓</span>
-          Sesgo confirmado EUR/USD
+          Bias score EUR/USD confirmado
         </div>
         <div class="mock-chip-2">
-          <span style="font-size:13px;">⚡</span>
-          Confluencia institucional
+          <span style="font-size:13px;">📊</span>
+          Positioning alineado
         </div>
       </div>
     </div>
@@ -790,8 +808,8 @@
       <div class="stat-bar"></div>
     </div>
     <div class="stat-item up up-d2">
-      <div class="stat-num"><span class="grad-text">4</span> módulos</div>
-      <div class="stat-label">Decision Layer · Bias · Cross Asset · Intraday</div>
+      <div class="stat-num"><span class="grad-text">5</span> layers</div>
+      <div class="stat-label">Decision Layer · Bias · Cross Asset · Market State · Intraday</div>
       <div class="stat-bar"></div>
     </div>
     <div class="stat-item up up-d3">
@@ -812,7 +830,7 @@
       <div class="p-card up up-d1">
         <div class="p-icon">📊</div>
         <h3>El gráfico no lo cuenta todo</h3>
-        <p>Las velas y los indicadores muestran el pasado. El COT muestra hacia dónde ya se ha posicionado el dinero real — antes de que el precio se mueva.</p>
+        <p>Las velas y los indicadores muestran el pasado. El informe CFTC muestra el positioning de large speculators y commercials — datos verificables con fuente pública semanal.</p>
       </div>
       <div class="p-card up up-d2">
         <div class="p-icon">🎯</div>
@@ -822,7 +840,7 @@
       <div class="p-card up up-d3">
         <div class="p-icon">🌊</div>
         <h3>Nadas contra la corriente</h3>
-        <p>El 85% de los trades retail van contra el posicionamiento institucional dominante. No por mala técnica — por falta de visibilidad del contexto real del mercado.</p>
+        <p>El CFTC publica semanalmente el positioning de large speculators, asset managers y commercials. Esa información existe y es pública — pero sin traducirla a contexto operativo, no cambia nada en tu análisis.</p>
       </div>
     </div>
   </div>
@@ -837,12 +855,12 @@
       <div>
         <span class="feat-tag up"><span class="feat-num">01</span> Módulo</span>
         <h2 class="feat-h up up-d1">Market Decision Layer</h2>
-        <p class="feat-p up up-d2">Un panel centralizado que sintetiza el sesgo institucional de cada par en un estado operativo claro: alcista, bajista o neutro. Sin interpretación manual, sin ruido.</p>
+        <p class="feat-p up up-d2">Panel centralizado que sintetiza el posicionamiento institucional de cada par en un estado operativo claro — incluyendo el Alignment Score (0–100) que indica el grado de coherencia entre todos los layers activos.</p>
         <ul class="feat-list up up-d3">
-          <li><span class="check">✓</span>Bias consolidado por par: posicionamiento COT + factores macro</li>
-          <li><span class="check">✓</span>Permiso operativo semanal — cuándo el mercado "da permiso" para entrar</li>
-          <li><span class="check">✓</span>Confluencias automáticas entre pares correlacionados</li>
-          <li><span class="check">✓</span>Señal de cambio de sesgo cuando los institucionales giran</li>
+          <li><span class="check">✓</span>Bias consolidado por par: positioning COT + factores macro</li>
+          <li><span class="check">✓</span>Alignment Score 0–100 — coherencia entre institutional, estructura y timing</li>
+          <li><span class="check">✓</span>Estado estructural por par: Full Alignment, Transitional, Conflicted</li>
+          <li><span class="check">✓</span>Detección de cambio de bias cuando el positioning institucional gira</li>
         </ul>
       </div>
       <div class="feat-screen up up-d2">
@@ -850,6 +868,20 @@
           <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
         </div>
         <div class="feat-screen-body">
+          <!-- Market State header -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:9px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--bull);box-shadow:0 0 6px rgba(34,197,94,.5);flex-shrink:0;"></div>
+              <div>
+                <div style="font-size:10px;font-weight:800;color:var(--bull);letter-spacing:.06em;text-transform:uppercase;">Full Alignment</div>
+                <div style="font-size:9px;color:var(--sub2);margin-top:1px;font-family:var(--mono);">Todos los layers alineados</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);margin-bottom:2px;">Alignment Score</div>
+              <div style="font-size:18px;font-weight:900;color:var(--bull);letter-spacing:-0.04em;line-height:1;">84<span style="font-size:10px;font-weight:500;color:var(--sub2);"> / 100</span></div>
+            </div>
+          </div>
           <div class="fs-row">
             <span class="fs-pair">EUR/USD</span>
             <div><span class="fs-bias fs-bull">↑ ALCISTA</span>
@@ -995,24 +1027,102 @@
             </div>
           </div>
           <div style="margin-top:10px;padding:11px 13px;border-radius:9px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.15);">
-            <div style="font-size:10px;font-weight:700;color:var(--accent3);margin-bottom:4px;">⚡ Confluencia detectada</div>
-            <div style="font-size:11px;color:var(--sub);line-height:1.55;">Risk-on confirmado: institucionales largos en renta variable + cortos en DXY → sesgo alcista EUR/USD validado.</div>
+            <div style="font-size:10px;font-weight:700;color:var(--accent3);margin-bottom:4px;">📊 Divergencia confirmada</div>
+            <div style="font-size:11px;color:var(--sub);line-height:1.55;">Large speculators largos en renta variable y cortos en DXY. Positioning cross-asset alineado con el bias alcista en EUR/USD.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 — Market State Engine -->
+    <div class="feat-row rev">
+      <div>
+        <span class="feat-tag up"><span class="feat-num">04</span> Engine</span>
+        <h2 class="feat-h up up-d1">Market State Engine</h2>
+        <p class="feat-p up up-d2">Síntesis estructural de todos los layers de análisis. Clasifica cada par en uno de cinco estados operativos y emite un Alignment Score (0–100) que mide la coherencia entre el positioning institucional, la estructura técnica y el timing de mercado.</p>
+        <ul class="feat-list up up-d3">
+          <li><span class="check">✓</span>5 estados: Full Alignment, Transitional, Distribution, Conflicted, Neutral</li>
+          <li><span class="check">✓</span>Alignment Score 0–100 — grado de coherencia entre todos los layers</li>
+          <li><span class="check">✓</span>Timing phase detection: Expansion, Confirmation, Exhaustion, Early Accumulation</li>
+          <li><span class="check">✓</span>Crowding Risk — riesgo de posicionamiento extremo de large speculators</li>
+        </ul>
+      </div>
+      <div class="feat-screen up up-d2">
+        <div class="feat-screen-bar">
+          <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
+          <span style="font-size:10px;color:var(--sub2);font-family:var(--mono);margin-left:6px;">Market State Engine</span>
+        </div>
+        <div class="feat-screen-body" style="padding:14px;display:flex;flex-direction:column;gap:8px;">
+          <!-- State rows per pair -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--bull);box-shadow:0 0 5px rgba(34,197,94,.5);flex-shrink:0;"></div>
+              <div>
+                <div style="font-size:10px;font-weight:800;color:var(--bull);letter-spacing:.05em;text-transform:uppercase;">Full Alignment</div>
+                <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);">EUR/USD · Expansion phase</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:16px;font-weight:900;color:var(--bull);line-height:1;">84<span style="font-size:9px;font-weight:500;color:var(--sub2);"> /100</span></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0;"></div>
+              <div>
+                <div style="font-size:10px;font-weight:800;color:var(--warn);letter-spacing:.05em;text-transform:uppercase;">Transitional</div>
+                <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);">GBP/USD · Institutional shift</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:16px;font-weight:900;color:var(--warn);line-height:1;">52<span style="font-size:9px;font-weight:500;color:var(--sub2);"> /100</span></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:9px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.12);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--bear);flex-shrink:0;"></div>
+              <div>
+                <div style="font-size:10px;font-weight:800;color:var(--bear);letter-spacing:.05em;text-transform:uppercase;">Conflicted</div>
+                <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);">USD/JPY · Layers contradictorios</div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:16px;font-weight:900;color:var(--bear);line-height:1;">28<span style="font-size:9px;font-weight:500;color:var(--sub2);"> /100</span></div>
+            </div>
+          </div>
+          <!-- 3-signal grid for EUR/USD -->
+          <div style="padding:10px 11px;border-radius:9px;background:var(--card);border:1px solid var(--border);margin-top:2px;">
+            <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">EUR/USD — 3 Layers</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+              <div style="text-align:center;padding:7px 4px;border-radius:7px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.12);">
+                <div style="font-size:8px;color:var(--sub2);font-family:var(--mono);margin-bottom:4px;">INSTITUCIONAL</div>
+                <div style="font-size:10px;font-weight:800;color:var(--bull);">ALCISTA</div>
+              </div>
+              <div style="text-align:center;padding:7px 4px;border-radius:7px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.12);">
+                <div style="font-size:8px;color:var(--sub2);font-family:var(--mono);margin-bottom:4px;">ESTRUCTURA</div>
+                <div style="font-size:10px;font-weight:800;color:var(--bull);">ALCISTA</div>
+              </div>
+              <div style="text-align:center;padding:7px 4px;border-radius:7px;background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.15);">
+                <div style="font-size:8px;color:var(--sub2);font-family:var(--mono);margin-bottom:4px;">TIMING</div>
+                <div style="font-size:10px;font-weight:800;color:var(--accent3);">CONFIRM.</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 4 — Intraday Execution -->
-    <div class="feat-row rev">
+    <div class="feat-row">
       <div>
-        <span class="feat-tag up"><span class="feat-num">04</span> Módulo</span>
+        <span class="feat-tag up"><span class="feat-num">05</span> Módulo</span>
         <h2 class="feat-h up up-d1">Intraday Execution</h2>
-        <p class="feat-p up up-d2">Saber la dirección es la mitad. Saber cuándo ejecutar es la otra. Intraday Execution te muestra las ventanas de liquidez donde el precio históricamente se mueve con más fuerza y consistencia.</p>
+        <p class="feat-p up up-d2">Saber la dirección es la mitad. Saber cuándo ejecutar es la otra. Intraday Execution evalúa seis factores simultáneos y emite un veredicto de ejecución claro: GO, CAUTION o NO-GO — con el score desglosado factor por factor.</p>
         <ul class="feat-list up up-d3">
-          <li><span class="check">✓</span>Ventanas horarias de alta liquidez por par y sesión</li>
-          <li><span class="check">✓</span>Análisis de volatilidad intradiaria segmentado por sesión</li>
-          <li><span class="check">✓</span>Desglose de volumen institucional por hora</li>
-          <li><span class="check">✓</span>Filtros para evitar entradas en zonas de trampa de liquidez</li>
+          <li><span class="check">✓</span>Veredicto GO / CAUTION / NO-GO con Execution Score 0–100</li>
+          <li><span class="check">✓</span>6 factores: COT Bias, Tactical Confirmation, Macro Alignment, Sentiment, R/R, Carry</li>
+          <li><span class="check">✓</span>Readiness % — porcentaje de condiciones favorables activas</li>
+          <li><span class="check">✓</span>Filtros de sesión para evitar entradas en ventanas de baja calidad operativa</li>
         </ul>
       </div>
       <div class="feat-screen up up-d2">
@@ -1020,36 +1130,59 @@
           <div class="mac-dot mac-r"></div><div class="mac-dot mac-y"></div><div class="mac-dot mac-g"></div>
         </div>
         <div class="feat-screen-body" style="padding:16px;">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sub2);margin-bottom:12px;font-family:var(--mono);">EUR/USD · Ventanas de Liquidez</div>
-          <div class="intra-slot">
-            <span class="intra-time">02–06h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:20%;background:var(--sub2);"></div></div>
-            <span class="intra-label" style="color:var(--sub2);">Baja</span>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sub2);margin-bottom:10px;font-family:var(--mono);">EUR/USD · Execution Readiness</div>
+          <!-- GO badge -->
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);margin-bottom:12px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,.15);border:2px solid var(--bull);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:var(--bull);flex-shrink:0;letter-spacing:.04em;">GO</div>
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--bull);">Ejecución habilitada</div>
+              <div style="font-size:9px;color:var(--sub2);font-family:var(--mono);margin-top:2px;">Score 76 · Readiness 82%</div>
+            </div>
           </div>
-          <div class="intra-slot">
-            <span class="intra-time">07–09h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:65%;background:var(--warn);"></div></div>
-            <span class="intra-label" style="color:var(--warn);">Media</span>
-          </div>
-          <div class="intra-slot">
-            <span class="intra-time">09–12h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:92%;background:var(--bull);"></div></div>
-            <span class="intra-label" style="color:var(--bull);">Óptima</span>
-          </div>
-          <div class="intra-slot">
-            <span class="intra-time">13–16h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:85%;background:var(--bull);"></div></div>
-            <span class="intra-label" style="color:var(--bull);">Óptima</span>
-          </div>
-          <div class="intra-slot">
-            <span class="intra-time">16–20h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:45%;background:var(--warn);"></div></div>
-            <span class="intra-label" style="color:var(--warn);">Media</span>
-          </div>
-          <div class="intra-slot">
-            <span class="intra-time">20–02h</span>
-            <div class="intra-bar-wrap"><div class="intra-bar-fill" style="width:12%;background:var(--sub2);"></div></div>
-            <span class="intra-label" style="color:var(--sub2);">Baja</span>
+          <!-- Factor bars -->
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">COT Bias Strength</span>
+                <span style="color:var(--bull);font-weight:700;">78%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:78%;height:100%;background:var(--bull);border-radius:99px;"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">Tactical Confirmation</span>
+                <span style="color:var(--bull);font-weight:700;">62%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:62%;height:100%;background:var(--bull);border-radius:99px;"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">Macro Alignment</span>
+                <span style="color:var(--bull);font-weight:700;">85%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:85%;height:100%;background:var(--bull);border-radius:99px;"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">Sentiment Confluence</span>
+                <span style="color:var(--warn);font-weight:700;">54%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:54%;height:100%;background:var(--warn);border-radius:99px;"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">R/R Ratio</span>
+                <span style="color:var(--bull);font-weight:700;">70%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:70%;height:100%;background:var(--bull);border-radius:99px;"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--sub);">Carry Favorability</span>
+                <span style="color:var(--bull);font-weight:700;">63%</span>
+              </div>
+              <div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;"><div style="width:63%;height:100%;background:var(--bull);border-radius:99px;"></div></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1075,7 +1208,7 @@
           <div class="testi-avatar" style="background:rgba(37,99,235,.15);color:#60a5fa;">M</div>
           <div>
             <div class="testi-name">Marcos R.</div>
-            <div class="testi-role">Swing trader · Madrid</div>
+            <div class="testi-role">Swing trader · 4 años en FX · Madrid</div>
           </div>
         </div>
       </div>
@@ -1088,7 +1221,7 @@
           <div class="testi-avatar" style="background:rgba(34,197,94,.12);color:var(--bull);">A</div>
           <div>
             <div class="testi-name">Andrea F.</div>
-            <div class="testi-role">Trader discrecional · Barcelona</div>
+            <div class="testi-role">Trader discrecional · 6 años en mercado · Barcelona</div>
           </div>
         </div>
       </div>
@@ -1101,7 +1234,7 @@
           <div class="testi-avatar" style="background:rgba(245,158,11,.12);color:var(--warn);">J</div>
           <div>
             <div class="testi-name">Javier S.</div>
-            <div class="testi-role">Trader independiente · Bilbao</div>
+            <div class="testi-role">Trader independiente · 7 años en mercado · Bilbao</div>
           </div>
         </div>
       </div>
@@ -1237,12 +1370,12 @@
 <!-- ── URGENCY ─────────────────────────────────────────────────────────────────── -->
 <section id="urgency">
   <div class="wrap-sm" style="position:relative;z-index:1;">
-    <p class="eyebrow up" style="justify-content:center;margin:0 auto 16px;">Sin ventaja competitiva</p>
-    <h2 class="up up-d1">Cada semana que operas sin esto<br>es una semana en desventaja</h2>
-    <p class="up up-d2">El capital institucional ya sabe dónde va. La pregunta es si tú también lo sabrás antes de que el precio confirme el movimiento.</p>
+    <p class="eyebrow up" style="justify-content:center;margin:0 auto 16px;">Actualización semanal</p>
+    <h2 class="up up-d1">El CFTC publica cada semana.<br>Cada release es información nueva.</h2>
+    <p class="up up-d2">COT Tracker la procesa y entrega bias score, análisis de divergencias y contexto macro por par FX. Sin señales de entrada — con análisis verificable basado en datos públicos CFTC.</p>
     <div class="up up-d3" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
       <a href="https://app.cot-tracker.com" class="btn btn-primary btn-lg">
-        Empezar gratis ahora →
+        Acceder gratis →
       </a>
       <a href="#pricing" class="btn btn-ghost btn-lg">
         Ver planes
@@ -1315,10 +1448,38 @@
           <div class="faq-a"><div class="faq-a-inner">Sí. La app está diseñada responsive para móvil y tablet. El calendario macro, el Bias Engine y la tabla de pares están adaptados para pantallas pequeñas. Para el análisis más detallado (Cross Asset Flow, desglose de factores) recomendamos desktop o tablet en horizontal.</div></div>
         </div>
 
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Para qué horizonte temporal es más útil?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">COT Tracker está diseñado para swing y position trading — trades de varios días a semanas. El informe CFTC tiene un lag estructural de 3 días: los datos reflejan las posiciones al cierre del martes y se publican el viernes siguiente. Para scalping o daytrading intradía, el contexto COT es referencial, no determinante. El módulo Intraday Execution añade contexto de sesión, pero el context layer principal opera en horizonte semanal.</div></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" onclick="toggleFaq(this)">
+            ¿Qué limitaciones tiene el análisis COT?
+            <span class="faq-chevron">▼</span>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">El reporte CFTC tiene 3 días de lag: datos al martes, publicación el viernes. No predice movimientos intradía. No garantiza ningún resultado — describe el positioning actual de large speculators y commercials, lo que históricamente ha precedido ciertos movimientos, pero el mercado puede comportarse diferente. COT Tracker es un context layer, no una señal de entrada ni una recomendación de inversión. Siempre debe combinarse con el criterio propio del trader.</div></div>
+        </div>
+
       </div>
     </div>
   </div>
 </section>
+
+<!-- ── DISCLAIMER ─────────────────────────────────────────────────────────────── -->
+<div class="disclaimer-banner">
+  <div class="disclaimer-inner">
+    <svg class="disclaimer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <p class="disclaimer-text">
+      <strong>Análisis informativo. No constituye recomendación de inversión.</strong> Los datos CFTC tienen un lag estructural de 3 días (posiciones al martes, publicación el viernes). COT Tracker es un context layer para swing y position trading en FX — no un servicio de señales ni una garantía de resultado. El trading en divisas implica riesgo de pérdida de capital. Opera siempre con tu propio criterio.
+    </p>
+  </div>
+</div>
 
 <!-- ── FOOTER ──────────────────────────────────────────────────────────────────── -->
 <footer>
