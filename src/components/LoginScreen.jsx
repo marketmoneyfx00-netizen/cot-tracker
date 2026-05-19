@@ -291,11 +291,7 @@ export default function LoginScreen() {
         padding: '0 20px', height: 54,
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <div style={{ width:28, height:28, borderRadius:8, background:'linear-gradient(135deg,#2563eb,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 10px rgba(37,99,235,0.4)' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
+        <img src="/logo.svg" alt="COT" style={{ width:28, height:28, borderRadius:8, display:'block', boxShadow:'0 2px 10px rgba(37,99,235,0.4)' }} />
         <span style={{ fontSize:15, fontWeight:800, color:'#e8eaf0', letterSpacing:'-0.3px' }}>COT Tracker</span>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6, fontSize:11, color:'#22c55e', background:'rgba(34,197,94,0.08)', border:'1px solid rgba(34,197,94,0.2)', padding:'3px 10px', borderRadius:99 }}>
           <span style={{ width:5, height:5, borderRadius:'50%', background:'#22c55e', display:'inline-block', animation:'livePulse 1.8s ease infinite' }}/>
@@ -310,16 +306,10 @@ export default function LoginScreen() {
 
           {/* Logo + header */}
           <div style={{ textAlign:'center', marginBottom:24 }}>
-            <div style={{
+            <img src="/logo.svg" alt="COT" style={{
               width:56, height:56, borderRadius:16, margin:'0 auto 16px',
-              background:'linear-gradient(135deg,#2563eb,#7c3aed)',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              boxShadow:'0 8px 24px rgba(37,99,235,0.4), 0 0 0 1px rgba(255,255,255,0.1)',
-            }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
+              display:'block', boxShadow:'0 8px 24px rgba(37,99,235,0.4), 0 0 0 1px rgba(255,255,255,0.1)',
+            }} />
             <h1 style={{ margin:'0 0 6px', fontSize:22, fontWeight:800, color:'#e8eaf0', letterSpacing:'-0.5px' }}>
               {titles[mode]}
             </h1>
