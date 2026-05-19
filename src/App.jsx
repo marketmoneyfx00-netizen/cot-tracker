@@ -4814,12 +4814,7 @@ if (!authUser || forceResetMode) {
           {/* Top bar */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:48}}>
             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-              <div style={{width:26,height:26,borderRadius:6,background:_thm.accent,flexShrink:0,
-                display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <path d="M5 18L10 12L14 15L19 9" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
+              <img src="/logo.svg" alt="COT" style={{width:26,height:26,borderRadius:6,flexShrink:0,display:"block"}} />
               <span style={{fontSize:14,fontWeight:700,color:_thm.txt,whiteSpace:"nowrap"}}>COT Tracker</span>
               <span style={{fontSize:10,color:_thm.sub,padding:"1px 6px",border:`1px solid ${_thm.border}`,
                 borderRadius:3,letterSpacing:"0.03em",display:"none",
