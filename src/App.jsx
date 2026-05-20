@@ -53,6 +53,7 @@ import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
 import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
+import ExportPanel from './components/ExportPanel.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4749,6 +4750,7 @@ if (!authUser || forceResetMode) {
     {id:"macro",      label:"Macro"},
     {id:"historico",  label:"Tabla Histórica"},
     {id:"importar",   label:"🔄 Sync"},
+    {id:"exportar",   label:"Exportar"},
     {id:"cuenta",     label:"Ajustes"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
@@ -5488,6 +5490,22 @@ if (!authUser || forceResetMode) {
           darkMode={darkMode}
           T={_thm}
           uploadDelta={uploadDelta}
+        />
+      )}
+
+      {/* ── TAB: EXPORTAR ── */}
+      {mainTab==="exportar"&&(
+        <ExportPanel
+          biasArr={biasArr}
+          fxPairs={fxPairs}
+          macroSignal={macroSignal}
+          ratesData={ratesData}
+          candleMap={candleMap}
+          livePrices={livePrices}
+          sentimentData={sentimentData}
+          riskData={riskData}
+          darkMode={darkMode}
+          T={_thm}
         />
       )}
 
