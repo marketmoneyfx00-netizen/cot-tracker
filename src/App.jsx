@@ -5506,6 +5506,8 @@ if (!authUser || forceResetMode) {
           riskData={riskData}
           darkMode={darkMode}
           T={_thm}
+          isPremium={isPremium}
+          onUpgrade={openBilling}
         />
       )}
 

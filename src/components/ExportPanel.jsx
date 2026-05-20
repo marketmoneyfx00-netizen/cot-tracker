@@ -1,170 +1,370 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
-  buildPairExportRow,
+  buildPairExport,
   buildSnapshotExport,
   buildRawExport,
+  pairToCSV,
+  snapshotToCSV,
   toCSV,
   downloadFile,
   buildFilename,
 } from '../lib/exportEngine.js';
 
-// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+// ── SCOPE DEFINITIONS ─────────────────────────────────────────────────────────
 
-const LEVEL_META = {
-  pair: {
-    rank:  1,
-    badge: 'BÁSICO',
-    title: 'Por par',
-    desc:  'Score, sesgo, divergencia y posicionamiento para un par específico.',
-    formats: ['csv', 'json'],
+const SCOPES = [
+  {
+    id:          'pair',
+    level:       'BÁSICO',
+    levelColor:  '#60a5fa',
+    title:       'Current Pair',
+    subtitle:    'Per-pair institutional analysis',
+    desc:        'Quick export for Excel and trading review.',
+    features:    ['Bias score + label', 'Execution permission', 'COT divergence', 'Weekly flow', 'Trend state'],
+    formats:     ['csv', 'json'],
+    premium:     false,
+    icon:        <PairIcon />,
   },
-  snapshot: {
-    rank:  2,
-    badge: 'AVANZADO',
-    title: 'Snapshot completo',
-    desc:  'Todos los pares del mercado en una fecha concreta. Ideal para análisis semanal.',
-    formats: ['csv', 'json'],
+  {
+    id:          'snapshot',
+    level:       'AVANZADO',
+    levelColor:  '#a78bfa',
+    title:       'Full Market Snapshot',
+    subtitle:    'Complete institutional overview',
+    desc:        'Complete institutional market overview for comparative analysis.',
+    features:    ['All pairs in one file', 'Market overview counts', 'Regime + trend state', 'Macro context'],
+    formats:     ['csv', 'json'],
+    premium:     false,
+    icon:        <SnapshotIcon />,
   },
-  raw: {
-    rank:  3,
-    badge: 'POWER USER',
-    title: 'Raw JSON completo',
-    desc:  'Todas las layers, historial semanal COT, métricas internas y outputs de engines.',
-    formats: ['json'],
+  {
+    id:          'raw',
+    level:       'POWER USER',
+    levelColor:  '#f59e0b',
+    title:       'Raw Institutional Data',
+    subtitle:    'Full layers + history + engine outputs',
+    desc:        'Advanced JSON export for automation and quantitative analysis.',
+    features:    ['All engine layers + deltas', 'Weekly COT history', 'V2 engine internals', 'Carry + confluence + macro'],
+    formats:     ['json'],
+    premium:     true,
+    icon:        <RawIcon />,
   },
-};
+];
 
-const BADGE_COLORS = {
-  1: { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.25)' },
-  2: { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.25)' },
-  3: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.25)' },
-};
+// ── ICONS ─────────────────────────────────────────────────────────────────────
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-
-function formatLabel(fmt) { return fmt.toUpperCase(); }
-
-function resolveSnapshotDate(fxPairs) {
-  const dates = (fxPairs ?? [])
-    .map(p => p.latest?.isoDate ?? p.weeks?.[0]?.isoDate)
-    .filter(Boolean)
-    .sort()
-    .reverse();
-  return dates[0] ?? null;
+function PairIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2" y="3" width="14" height="2" rx="1" fill="currentColor" opacity=".9"/>
+      <rect x="2" y="8" width="10" height="2" rx="1" fill="currentColor" opacity=".6"/>
+      <rect x="2" y="13" width="7"  height="2" rx="1" fill="currentColor" opacity=".4"/>
+    </svg>
+  );
 }
 
-// ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
-
-function FormatToggle({ formats, value, onChange, T }) {
+function SnapshotIcon() {
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {formats.map(f => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2" y="2" width="6" height="6" rx="1.5" fill="currentColor" opacity=".9"/>
+      <rect x="10" y="2" width="6" height="6" rx="1.5" fill="currentColor" opacity=".7"/>
+      <rect x="2" y="10" width="6" height="6" rx="1.5" fill="currentColor" opacity=".5"/>
+      <rect x="10" y="10" width="6" height="6" rx="1.5" fill="currentColor" opacity=".4"/>
+    </svg>
+  );
+}
+
+function RawIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <path d="M5 4L2 9l3 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M13 4l3 5-3 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M10.5 3l-3 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1v8M4 6l3 3 3-3M1 11h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <rect x="2" y="5.5" width="8" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M4 5.5V4a2 2 0 1 1 4 0v1.5" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2 7l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+// ── PRIMITIVES ────────────────────────────────────────────────────────────────
+
+function FormatToggle({ options, value, onChange, T, disabled }) {
+  return (
+    <div style={{
+      display:      'flex',
+      background:   T.card2,
+      border:       `1px solid ${T.border}`,
+      borderRadius: 8,
+      padding:      2,
+      gap:          2,
+    }}>
+      {options.map(opt => (
         <button
-          key={f}
-          onClick={() => onChange(f)}
+          key={opt}
+          onClick={() => !disabled && onChange(opt)}
+          disabled={disabled}
           style={{
-            padding:      '4px 12px',
+            padding:      '5px 14px',
             borderRadius: 6,
-            border:       `1px solid ${value === f ? T.accent : T.border}`,
-            background:   value === f ? `${T.accent}18` : 'transparent',
-            color:        value === f ? T.accent : T.sub,
+            border:       'none',
+            background:   value === opt ? T.accent : 'transparent',
+            color:        value === opt ? '#fff' : T.sub,
             fontSize:     11,
-            fontWeight:   value === f ? 700 : 500,
-            cursor:       'pointer',
-            letterSpacing: '0.05em',
+            fontWeight:   value === opt ? 700 : 500,
+            cursor:       disabled ? 'not-allowed' : 'pointer',
+            letterSpacing: '0.06em',
             transition:   'all 0.15s',
+            opacity:      disabled ? 0.4 : 1,
           }}
         >
-          {formatLabel(f)}
+          {opt.toUpperCase()}
         </button>
       ))}
     </div>
   );
 }
 
-function DownloadButton({ onClick, loading, disabled, label, T }) {
+function StatusDot({ active }) {
+  return (
+    <span style={{
+      display:       'inline-block',
+      width:         6,
+      height:        6,
+      borderRadius:  '50%',
+      background:    active ? '#22c55e' : '#6b7280',
+      boxShadow:     active ? '0 0 6px #22c55e88' : 'none',
+      verticalAlign: 'middle',
+    }}/>
+  );
+}
+
+// ── SCOPE CARD ────────────────────────────────────────────────────────────────
+
+function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
+  const locked  = scope.premium && !isPremium;
+  const active  = selected && !locked;
+
+  return (
+    <button
+      onClick={() => !locked && onClick(scope.id)}
+      style={{
+        flex:         1,
+        minWidth:     180,
+        position:     'relative',
+        padding:      '16px 18px',
+        borderRadius: 12,
+        border:       `1.5px solid ${active ? scope.levelColor : locked ? T.border : T.border}`,
+        background:   active
+          ? `linear-gradient(135deg, ${scope.levelColor}12 0%, ${scope.levelColor}06 100%)`
+          : darkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+        cursor:       locked ? 'not-allowed' : 'pointer',
+        textAlign:    'left',
+        transition:   'all 0.18s',
+        boxShadow:    active ? `0 0 0 1px ${scope.levelColor}30, 0 4px 20px ${scope.levelColor}14` : 'none',
+        opacity:      locked ? 0.6 : 1,
+      }}
+    >
+      {/* Selected indicator */}
+      {active && (
+        <div style={{
+          position:     'absolute',
+          inset:        0,
+          borderRadius: 11,
+          background:   `radial-gradient(ellipse at top left, ${scope.levelColor}08, transparent 70%)`,
+          pointerEvents: 'none',
+        }}/>
+      )}
+
+      {/* Level badge + lock */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{
+          fontSize:      9,
+          fontWeight:    700,
+          color:         scope.levelColor,
+          background:    `${scope.levelColor}16`,
+          border:        `1px solid ${scope.levelColor}30`,
+          padding:       '2px 8px',
+          borderRadius:  99,
+          letterSpacing: '0.08em',
+        }}>
+          {scope.level}
+        </span>
+        {locked && (
+          <span style={{ color: T.sub, opacity: 0.7 }}>
+            <LockIcon />
+          </span>
+        )}
+        {active && (
+          <div style={{
+            width:      18, height: 18,
+            borderRadius: '50%',
+            background:   scope.levelColor,
+            display:     'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <CheckIcon />
+          </div>
+        )}
+      </div>
+
+      {/* Icon + title */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, color: active ? scope.levelColor : T.txt }}>
+        {scope.icon}
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{scope.title}</span>
+      </div>
+
+      <p style={{ margin: '0 0 10px', fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
+        {scope.desc}
+      </p>
+
+      {/* Feature list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {scope.features.map(f => (
+          <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{
+              width:  4, height: 4, borderRadius: '50%', flexShrink: 0,
+              background: active ? scope.levelColor : T.sub2,
+            }}/>
+            <span style={{ fontSize: 10, color: active ? T.txt : T.sub }}>{f}</span>
+          </div>
+        ))}
+      </div>
+
+      {locked && (
+        <div style={{
+          marginTop:  10,
+          fontSize:   10,
+          fontWeight: 600,
+          color:      '#f59e0b',
+          display:    'flex', alignItems: 'center', gap: 4,
+        }}>
+          <LockIcon /> Premium feature — upgrade to unlock
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ── DOWNLOAD BUTTON ───────────────────────────────────────────────────────────
+
+function ExportButton({ onClick, loading, done, disabled, scope, T }) {
+  const label = loading ? 'Generating...' : done ? 'Downloaded' : 'Export Institutional Data';
+  const color = done ? '#22c55e' : scope?.levelColor ?? T.accent;
+
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
       style={{
-        display:      'flex',
-        alignItems:   'center',
-        gap:          6,
-        padding:      '8px 16px',
-        borderRadius: 8,
-        border:       `1px solid ${disabled ? T.border : T.accent}`,
-        background:   disabled ? 'transparent' : `${T.accent}18`,
-        color:        disabled ? T.sub : T.accent,
-        fontSize:     12,
-        fontWeight:   700,
-        cursor:       disabled ? 'not-allowed' : 'pointer',
-        opacity:      disabled ? 0.5 : 1,
-        transition:   'all 0.15s',
-        whiteSpace:   'nowrap',
+        display:       'flex',
+        alignItems:    'center',
+        justifyContent: 'center',
+        gap:           8,
+        padding:       '12px 28px',
+        borderRadius:  10,
+        border:        `1px solid ${disabled ? T.border : `${color}60`}`,
+        background:    disabled
+          ? T.card2
+          : done
+          ? 'rgba(34,197,94,0.12)'
+          : `linear-gradient(135deg, ${color}18, ${color}0c)`,
+        color:         disabled ? T.sub : color,
+        fontSize:      13,
+        fontWeight:    700,
+        cursor:        disabled ? 'not-allowed' : 'pointer',
+        opacity:       disabled ? 0.5 : 1,
+        transition:    'all 0.2s',
+        letterSpacing: '0.02em',
+        minWidth:      200,
+        boxShadow:     !disabled && !done ? `0 0 0 1px ${color}22, 0 4px 16px ${color}18` : 'none',
       }}
     >
       {loading ? (
-        <span style={{ fontSize: 12 }}>...</span>
+        <LoadingSpinner color={color} />
+      ) : done ? (
+        <CheckIcon />
       ) : (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+        <DownloadIcon />
       )}
       {label}
     </button>
   );
 }
 
-// ── LEVEL CARD ────────────────────────────────────────────────────────────────
+function LoadingSpinner({ color }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ animation: 'cot-spin 0.8s linear infinite' }}>
+      <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" strokeOpacity="0.25"/>
+      <path d="M7 1.5A5.5 5.5 0 0 1 12.5 7" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
+      <style>{`@keyframes cot-spin { to { transform: rotate(360deg); } }`}</style>
+    </svg>
+  );
+}
 
-function ExportCard({ level, meta, children, T, darkMode }) {
-  const bColors = BADGE_COLORS[meta.rank];
+// ── SNAPSHOT STATUS BAR ───────────────────────────────────────────────────────
+
+function SnapshotStatus({ biasArr, fxPairs, macroSignal, T, darkMode }) {
+  const dates = (fxPairs ?? [])
+    .map(p => p.latest?.isoDate ?? p.weeks?.[0]?.isoDate)
+    .filter(Boolean).sort().reverse();
+  const cftcDate = dates[0] ?? null;
+
+  const items = [
+    { label: 'Pairs',       value: `${biasArr?.length ?? 0}` },
+    { label: 'CFTC Report', value: cftcDate ?? '—' },
+    macroSignal?.bias
+      ? { label: 'Macro', value: macroSignal.bias.replace(/_/g, ' ') }
+      : null,
+    { label: 'Status', value: 'Active', dot: true },
+  ].filter(Boolean);
+
   return (
     <div style={{
-      background:   T.card,
-      border:       `1px solid ${T.border}`,
-      borderRadius: 14,
-      padding:      '20px 22px',
-      display:      'flex',
-      flexDirection: 'column',
-      gap:          16,
+      display:       'flex',
+      alignItems:    'center',
+      gap:           20,
+      padding:       '10px 16px',
+      background:    darkMode ? 'rgba(34,197,94,0.05)' : 'rgba(34,197,94,0.04)',
+      border:        '1px solid rgba(34,197,94,0.18)',
+      borderRadius:  10,
+      flexWrap:      'wrap',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{
-          width: 34, height: 34, borderRadius: 8,
-          background: bColors.bg,
-          border: `1px solid ${bColors.border}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: bColors.color }}>
-            {meta.rank}
+      {items.map(item => (
+        <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
+            {item.label.toUpperCase()}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+            {item.value}
+            {item.dot && <StatusDot active />}
           </span>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{meta.title}</span>
-            <span style={{
-              fontSize:  9,
-              fontWeight: 700,
-              color:     bColors.color,
-              background: bColors.bg,
-              border:    `1px solid ${bColors.border}`,
-              padding:   '2px 7px',
-              borderRadius: 99,
-              letterSpacing: '0.07em',
-            }}>{meta.badge}</span>
-          </div>
-          <p style={{ margin: 0, fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
-            {meta.desc}
-          </p>
-        </div>
+      ))}
+      <div style={{ marginLeft: 'auto', fontSize: 10, color: T.sub }}>
+        COT Tracker · Institutional Data Export
       </div>
-
-      {/* Content slot */}
-      {children}
     </div>
   );
 }
@@ -182,338 +382,286 @@ export default function ExportPanel({
   riskData,
   darkMode,
   T,
+  isPremium,
+  onUpgrade,
 }) {
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [pairFormat,     setPairFormat]     = useState('csv');
-  const [snapshotFormat, setSnapshotFormat] = useState('csv');
-  const [selectedSymbol, setSelectedSymbol] = useState(null);
-  const [loading,        setLoading]        = useState({});
-  const [lastExport,     setLastExport]     = useState({});
+  const [scope,    setScope]    = useState('pair');
+  const [format,   setFormat]   = useState('csv');
+  const [symbol,   setSymbol]   = useState(null);
+  const [status,   setStatus]   = useState('idle'); // idle | loading | done | error
+  const [lastTime, setLastTime] = useState(null);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-  const availablePairs = useMemo(
+  const hasData = (biasArr?.length ?? 0) > 0 && (fxPairs?.length ?? 0) > 0;
+
+  const pairs = useMemo(
     () => (fxPairs ?? []).filter(p => !p.pair.includes('Index')).map(p => p.pair),
     [fxPairs],
   );
+  const activePair = symbol ?? pairs[0] ?? null;
 
-  const activePair = selectedSymbol ?? availablePairs[0] ?? null;
-
-  const snapshotDate = useMemo(() => resolveSnapshotDate(fxPairs), [fxPairs]);
-
-  const hasData = biasArr?.length > 0 && fxPairs?.length > 0;
-
-  const pairMap  = useMemo(
+  const pairMap = useMemo(
     () => Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p])),
     [fxPairs],
   );
 
-  const exportOpts = {
-    macroSignal,
-    livePrices:  livePrices ?? {},
-    sentimentData,
-    riskData,
-    ratesData,
-    candleMap:   candleMap ?? {},
-  };
+  const activeScopeMeta = SCOPES.find(s => s.id === scope);
+  const availableFormats = activeScopeMeta?.formats ?? ['json'];
+  const activeFormat = availableFormats.includes(format) ? format : availableFormats[0];
 
-  // ── Download Handlers ─────────────────────────────────────────────────────
+  const exportOpts = { macroSignal, livePrices: livePrices ?? {}, sentimentData, riskData, ratesData, candleMap: candleMap ?? {} };
 
-  function setLoad(key, val) {
-    setLoading(prev => ({ ...prev, [key]: val }));
-  }
-  function markDone(key) {
-    setLastExport(prev => ({ ...prev, [key]: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }));
-    setLoad(key, false);
-  }
+  const handleExport = useCallback(() => {
+    if (!hasData || status === 'loading') return;
 
-  function handlePairDownload() {
-    if (!hasData || !activePair) return;
-    setLoad('pair', true);
+    // Gate raw to premium
+    if (scope === 'raw' && !isPremium) {
+      onUpgrade?.();
+      return;
+    }
+
+    setStatus('loading');
+
     setTimeout(() => {
       try {
-        const biasEntry = biasArr.find(b => b.pair === activePair);
-        const pairRow   = pairMap[activePair];
-        const row = buildPairExportRow(pairRow, biasEntry, { ...exportOpts, livePrice: livePrices?.[activePair] });
-        if (!row) return;
-        const filename = buildFilename('pair', activePair, pairFormat);
-        if (pairFormat === 'json') {
-          downloadFile(JSON.stringify(row, null, 2), filename, 'application/json');
-        } else {
-          downloadFile(toCSV([row]), filename, 'text/csv;charset=utf-8');
+        let content, filename, mime;
+
+        if (scope === 'pair') {
+          const biasEntry = biasArr.find(b => b.pair === activePair);
+          const pairRow   = pairMap[activePair];
+          const data = buildPairExport(pairRow, biasEntry, { ...exportOpts, livePrice: livePrices?.[activePair] });
+          if (!data) throw new Error('No data for pair');
+
+          filename = buildFilename('pair', activePair, activeFormat);
+          if (activeFormat === 'json') {
+            content = JSON.stringify(data, null, 2);
+            mime    = 'application/json';
+          } else {
+            content = pairToCSV(data);
+            mime    = 'text/csv;charset=utf-8';
+          }
+
+        } else if (scope === 'snapshot') {
+          const snap = buildSnapshotExport(biasArr, fxPairs, exportOpts);
+          filename = buildFilename('snapshot', null, activeFormat);
+          if (activeFormat === 'json') {
+            content = JSON.stringify({ snapshot_date: new Date().toISOString().slice(0, 10), export_version: '2.0', ...snap }, null, 2);
+            mime    = 'application/json';
+          } else {
+            content = snapshotToCSV(snap);
+            mime    = 'text/csv;charset=utf-8';
+          }
+
+        } else if (scope === 'raw') {
+          const raw = buildRawExport(biasArr, fxPairs, exportOpts);
+          filename = buildFilename('raw', null, 'json');
+          content  = JSON.stringify(raw, null, 2);
+          mime     = 'application/json';
         }
-        markDone('pair');
+
+        downloadFile(content, filename, mime);
+        setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+        setStatus('done');
+        setTimeout(() => setStatus('idle'), 3000);
       } catch (e) {
-        console.error('[ExportPanel] pair export error:', e);
-        setLoad('pair', false);
+        console.error('[ExportPanel]', e);
+        setStatus('error');
+        setTimeout(() => setStatus('idle'), 2500);
       }
     }, 0);
-  }
+  }, [scope, activeFormat, activePair, hasData, biasArr, fxPairs, exportOpts, isPremium]);
 
-  function handleSnapshotDownload() {
-    if (!hasData) return;
-    setLoad('snapshot', true);
-    setTimeout(() => {
-      try {
-        const rows = buildSnapshotExport(biasArr, fxPairs, exportOpts);
-        const filename = buildFilename('snapshot', null, snapshotFormat);
-        if (snapshotFormat === 'json') {
-          downloadFile(JSON.stringify(rows, null, 2), filename, 'application/json');
-        } else {
-          downloadFile(toCSV(rows), filename, 'text/csv;charset=utf-8');
-        }
-        markDone('snapshot');
-      } catch (e) {
-        console.error('[ExportPanel] snapshot export error:', e);
-        setLoad('snapshot', false);
-      }
-    }, 0);
-  }
-
-  function handleRawDownload() {
-    if (!hasData) return;
-    setLoad('raw', true);
-    setTimeout(() => {
-      try {
-        const data     = buildRawExport(biasArr, fxPairs, exportOpts);
-        const filename = buildFilename('raw', null, 'json');
-        downloadFile(JSON.stringify(data, null, 2), filename, 'application/json');
-        markDone('raw');
-      } catch (e) {
-        console.error('[ExportPanel] raw export error:', e);
-        setLoad('raw', false);
-      }
-    }, 0);
-  }
-
-  // ── Empty State ───────────────────────────────────────────────────────────
+  // ── Empty state ───────────────────────────────────────────────────────────
   if (!hasData) {
     return (
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
         <div style={{
-          background: T.card,
-          border:     `1px solid ${T.border}`,
+          background:   T.card,
+          border:       `1px solid ${T.border}`,
           borderRadius: 14,
-          padding:    '36px 24px',
-          textAlign:  'center',
+          padding:      '48px 32px',
+          textAlign:    'center',
         }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
-            Sin datos disponibles
+          <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.3 }}>⬡</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
+            No snapshot available
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6 }}>
-            La exportación requiere que los datos COT estén cargados.
-            Espera el sync automático del viernes o sube un archivo CFTC manualmente desde Sync.
+          <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6, maxWidth: 380, marginInline: 'auto' }}>
+            The export system requires COT data to be loaded.
+            Await the automatic Friday sync or upload a CFTC file manually from the Sync tab.
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  const Divider = () => <div style={{ height: 1, background: T.border, margin: '4px 0' }} />;
+  // ── Main render ───────────────────────────────────────────────────────────
+  const isLocked  = activeScopeMeta?.premium && !isPremium;
+  const btnDisabled = !hasData || isLocked;
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 24px' }}>
+    <div style={{ maxWidth: 980, margin: '0 auto', padding: '28px 24px' }}>
 
-      {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: T.txt, letterSpacing: '-0.3px' }}>
-            Exportación de datos COT
+      {/* ── Page header ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: T.txt, letterSpacing: '-0.4px', lineHeight: 1.2 }}>
+            Institutional Data Export
           </h2>
           <span style={{
             fontSize: 9, fontWeight: 700, color: T.sub,
             background: T.card2, border: `1px solid ${T.border}`,
-            padding: '2px 8px', borderRadius: 99, letterSpacing: '0.07em',
-          }}>BETA</span>
+            padding: '2px 8px', borderRadius: 99, letterSpacing: '0.08em',
+          }}>v2.0</span>
         </div>
-        <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6 }}>
-          Descarga los análisis del snapshot actual en CSV o JSON.
-          Los datos reflejan el estado de engines e inferencias en el momento de la exportación.
+        <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6, maxWidth: 560 }}>
+          Professional-grade export system for advanced traders. Access and exploit institutional positioning data in CSV or JSON.
         </p>
       </div>
 
-      {/* Snapshot status bar */}
-      <div style={{
-        display:     'flex',
-        alignItems:  'center',
-        gap:         20,
-        padding:     '12px 16px',
-        background:  darkMode ? 'rgba(34,197,94,0.06)' : 'rgba(34,197,94,0.04)',
-        border:      '1px solid rgba(34,197,94,0.2)',
-        borderRadius: 10,
-        marginBottom: 24,
-        flexWrap:    'wrap',
-      }}>
-        <StatusChip label="Pares" value={`${biasArr.length}`} T={T} color="#22c55e" />
-        <StatusChip label="Informe CFTC" value={snapshotDate ?? '—'} T={T} color="#22c55e" />
-        {macroSignal?.bias && (
-          <StatusChip label="Sesgo macro" value={macroSignal.bias.replace('_', ' ')} T={T} color="#60a5fa" />
-        )}
-        <div style={{ marginLeft: 'auto', fontSize: 10, color: T.sub }}>
-          Snapshot activo
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#22c55e', marginLeft: 6, verticalAlign: 'middle' }}/>
+      {/* ── Scope selector ── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.08em', marginBottom: 10 }}>
+          EXPORT SCOPE
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {SCOPES.map(s => (
+            <ScopeCard
+              key={s.id}
+              scope={s}
+              selected={scope === s.id}
+              onClick={setScope}
+              isPremium={isPremium}
+              T={T}
+              darkMode={darkMode}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Export cards grid */}
+      {/* ── Options row ── */}
       <div style={{
-        display:  'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap:      16,
-        marginBottom: 16,
+        display:       'flex',
+        alignItems:    'flex-end',
+        gap:           16,
+        flexWrap:      'wrap',
+        padding:       '16px 20px',
+        background:    T.card,
+        border:        `1px solid ${T.border}`,
+        borderRadius:  12,
+        marginBottom:  16,
       }}>
 
-        {/* ── Level 1: Per Pair ── */}
-        <ExportCard level="pair" meta={LEVEL_META.pair} T={T} darkMode={darkMode}>
-          {/* Pair selector */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.06em', marginBottom: 6 }}>
-              PAR
-            </div>
+        {/* Pair selector — only when scope = pair */}
+        {scope === 'pair' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
+              SELECT PAIR
+            </label>
             <select
               value={activePair ?? ''}
-              onChange={e => setSelectedSymbol(e.target.value)}
+              onChange={e => setSymbol(e.target.value)}
               style={{
-                width:        '100%',
-                padding:      '7px 10px',
+                padding:      '7px 32px 7px 10px',
                 borderRadius: 8,
                 border:       `1px solid ${T.border}`,
-                background:   darkMode ? 'rgba(255,255,255,0.05)' : '#f9f9fb',
+                background:   T.card2,
                 color:        T.txt,
                 fontSize:     13,
                 fontWeight:   600,
                 cursor:       'pointer',
                 fontFamily:   'inherit',
                 outline:      'none',
+                appearance:   'none',
+                WebkitAppearance: 'none',
+                minWidth:     130,
               }}
             >
-              {availablePairs.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
+              {pairs.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
+        )}
 
-          <Divider />
-
-          {/* Format + Download */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <FormatToggle
-              formats={LEVEL_META.pair.formats}
-              value={pairFormat}
-              onChange={setPairFormat}
-              T={T}
-            />
-            <DownloadButton
-              onClick={handlePairDownload}
-              loading={loading.pair}
-              disabled={!activePair}
-              label={`Descargar ${pairFormat.toUpperCase()}`}
-              T={T}
-            />
-          </div>
-          {lastExport.pair && (
-            <div style={{ fontSize: 10, color: T.sub }}>Última exportación: {lastExport.pair}</div>
-          )}
-        </ExportCard>
-
-        {/* ── Level 2: Full Snapshot ── */}
-        <ExportCard level="snapshot" meta={LEVEL_META.snapshot} T={T} darkMode={darkMode}>
-          <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
-            <strong style={{ color: T.txt }}>{biasArr.length} pares</strong> incluidos en el snapshot
-            {snapshotDate && (
-              <> · Informe <strong style={{ color: T.txt }}>{snapshotDate}</strong></>
-            )}
-          </div>
-
-          <Divider />
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <FormatToggle
-              formats={LEVEL_META.snapshot.formats}
-              value={snapshotFormat}
-              onChange={setSnapshotFormat}
-              T={T}
-            />
-            <DownloadButton
-              onClick={handleSnapshotDownload}
-              loading={loading.snapshot}
-              disabled={false}
-              label={`Descargar ${snapshotFormat.toUpperCase()}`}
-              T={T}
-            />
-          </div>
-          {lastExport.snapshot && (
-            <div style={{ fontSize: 10, color: T.sub }}>Última exportación: {lastExport.snapshot}</div>
-          )}
-        </ExportCard>
-
-      </div>
-
-      {/* ── Level 3: Raw JSON — full width ── */}
-      <ExportCard level="raw" meta={LEVEL_META.raw} T={T} darkMode={darkMode}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 10,
-        }}>
-          {[
-            ['Historial COT semanal', 'Todas las semanas disponibles por par'],
-            ['Engine outputs',        'Bias, Z-Score, divergencia, confluencia, ejecución'],
-            ['Contexto macro/carry',  'macroConfidence, carryScore, stanceDivergence'],
-            ['Formato JSON',          'Listo para automatización, backtesting e IA'],
-          ].map(([title, sub]) => (
-            <div key={title} style={{
-              background: darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
-              border: `1px solid ${T.border}`,
-              borderRadius: 8,
-              padding: '10px 12px',
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: T.txt, marginBottom: 2 }}>{title}</div>
-              <div style={{ fontSize: 10, color: T.sub, lineHeight: 1.4 }}>{sub}</div>
-            </div>
-          ))}
-        </div>
-
-        <Divider />
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 10, color: T.sub }}>
-            Solo disponible en JSON · Tamaño estimado: ~{Math.round(biasArr.length * 12)}KB
-          </div>
-          <DownloadButton
-            onClick={handleRawDownload}
-            loading={loading.raw}
-            disabled={false}
-            label="Descargar raw.json"
+        {/* Format toggle */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
+            FORMAT
+          </label>
+          <FormatToggle
+            options={availableFormats}
+            value={activeFormat}
+            onChange={setFormat}
             T={T}
+            disabled={availableFormats.length === 1}
           />
         </div>
-        {lastExport.raw && (
-          <div style={{ fontSize: 10, color: T.sub }}>Última exportación: {lastExport.raw}</div>
-        )}
-      </ExportCard>
 
-      {/* Footer note */}
-      <p style={{ margin: '20px 0 0', fontSize: 10, color: T.sub, lineHeight: 1.6 }}>
-        Los datos exportados reflejan el análisis del motor COT en tiempo real y no constituyen asesoramiento financiero.
-        Fuente: CFTC · Traders in Financial Futures.
-      </p>
-    </div>
-  );
-}
+        {/* Scope info */}
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em', marginBottom: 5 }}>
+            DESCRIPTION
+          </div>
+          <p style={{ margin: 0, fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
+            {activeScopeMeta?.desc}
+            {scope === 'raw' && !isPremium && (
+              <span style={{ color: '#f59e0b', fontWeight: 600 }}> — Premium only.</span>
+            )}
+          </p>
+        </div>
+      </div>
 
-// ── STATUS CHIP ───────────────────────────────────────────────────────────────
+      {/* ── Snapshot status ── */}
+      <SnapshotStatus biasArr={biasArr} fxPairs={fxPairs} macroSignal={macroSignal} T={T} darkMode={darkMode} />
 
-function StatusChip({ label, value, T, color }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
-        {label.toUpperCase()}
-      </span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: color ?? T.txt }}>
-        {value}
-      </span>
+      {/* ── Export CTA ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          {lastTime && status !== 'loading' && (
+            <div style={{ fontSize: 11, color: T.sub }}>
+              Last export: <span style={{ color: '#22c55e', fontWeight: 600 }}>{lastTime}</span>
+              {' · '}{buildFilename(scope, activePair, activeFormat)}
+            </div>
+          )}
+          {status === 'error' && (
+            <div style={{ fontSize: 11, color: '#ef4444' }}>Export failed — check console for details.</div>
+          )}
+          {!lastTime && (
+            <div style={{ fontSize: 11, color: T.sub2 }}>
+              Download raw positioning and layer metrics.
+            </div>
+          )}
+        </div>
+
+        <ExportButton
+          onClick={handleExport}
+          loading={status === 'loading'}
+          done={status === 'done'}
+          disabled={btnDisabled}
+          scope={activeScopeMeta}
+          T={T}
+        />
+      </div>
+
+      {/* ── Footer ── */}
+      <div style={{
+        marginTop:  28,
+        paddingTop: 16,
+        borderTop:  `1px solid ${T.border}`,
+        display:    'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        flexWrap:   'wrap',
+        gap:        12,
+      }}>
+        <p style={{ margin: 0, fontSize: 10, color: T.sub2, lineHeight: 1.6, maxWidth: 440 }}>
+          All exported data reflects the current snapshot state of the COT Tracker engine suite.
+          Export is for analytical use only and does not constitute financial advice.
+          Source: CFTC · Traders in Financial Futures.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em' }}>COT TRACKER</span>
+          <span style={{ fontSize: 9, color: T.sub2 }}>Institutional Export System v2.0</span>
+        </div>
+      </div>
     </div>
   );
 }
