@@ -11,6 +11,8 @@
 
 import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
 import { calculateExecutionScore }                  from '../intradayExecutionEngine.js';
+import { generateXLSX }                            from './xlsxExporter.js';
+import { generateHTMLReport }                      from './htmlReportGenerator.js';
 
 export const EXPORT_VERSION = '2.0';
 
@@ -584,5 +586,77 @@ export function buildFilename(scope, symbol, format) {
   if (scope === 'pair')     return `${prefix}_${(symbol ?? 'Pair').replace('/', '')}_${d}.${format}`;
   if (scope === 'snapshot') return `${prefix}_FullMarketSnapshot_${d}.${format}`;
   if (scope === 'raw')      return `${prefix}_RawInstitutionalData_${d}.json`;
+  if (scope === 'visual')   return `${prefix}_InstitutionalReport_${d}.${format}`;
   return `${prefix}_Export_${d}.${format}`;
+}
+
+// ── VISUAL EXPORTS (XLSX / HTML / PDF) ───────────────────────────────────────
+
+/**
+ * Generates an XLSX Uint8Array for download.
+ * Returns { data: Uint8Array, filename: string, mime: string }
+ */
+export function buildXLSXExport(biasArr, fxPairs, opts = {}) {
+  const {
+    macroSignal, sentimentData, riskData, ratesData,
+    snapshotDate, cotDate, livePrices = {}, candleMap = {},
+  } = opts;
+
+  const execMap = {};
+  (biasArr ?? []).forEach(b => {
+    const bs = b.bias?.score ?? b.score;
+    try {
+      execMap[b.pair] = calculateExecutionScore({
+        biasScore:     bs,
+        biasDirection: b.bias?.direction ?? (bs > 0 ? 'bullish' : bs < 0 ? 'bearish' : 'neutral'),
+        riskScore:     riskData?.score    ?? 0,
+        fg:            sentimentData?.fg       ?? 50,
+        vix:           sentimentData?.vix      ?? 18,
+        highCount:     sentimentData?.highCount ?? 0,
+        midCount:      sentimentData?.midCount  ?? 0,
+        carryScore:    b.carryScore ?? null,
+      });
+    } catch { execMap[b.pair] = null; }
+  });
+
+  const data = generateXLSX(biasArr, fxPairs, {
+    macroSignal, sentimentData, riskData, ratesData,
+    snapshotDate: snapshotDate ?? isoDate(),
+    cotDate,
+    execMap,
+  });
+
+  return {
+    data,
+    filename: buildFilename('visual', null, 'xlsx'),
+    mime:     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+}
+
+/**
+ * Generates a self-contained HTML string for download or printing.
+ * Returns { data: string, filename: string, mime: string }
+ */
+export function buildHTMLExport(biasArr, fxPairs, opts = {}) {
+  const html = generateHTMLReport(biasArr, fxPairs, opts);
+  return {
+    data:     html,
+    filename: buildFilename('visual', null, 'html'),
+    mime:     'text/html;charset=utf-8',
+  };
+}
+
+/**
+ * Opens the HTML report in a new window and triggers window.print().
+ * Caller should call this directly (requires browser context).
+ */
+export function openPDFPrint(biasArr, fxPairs, opts = {}) {
+  const html = generateHTMLReport(biasArr, fxPairs, opts);
+  const win  = window.open('', '_blank');
+  if (!win) return false;
+  win.document.write(html);
+  win.document.close();
+  // Give the browser a frame to render before triggering print
+  win.onload = () => win.print();
+  return true;
 }
