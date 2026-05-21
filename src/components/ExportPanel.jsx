@@ -3,6 +3,9 @@ import {
   buildPairExport,
   buildSnapshotExport,
   buildRawExport,
+  buildXLSXExport,
+  buildHTMLExport,
+  openPDFPrint,
   pairToCSV,
   snapshotToCSV,
   toCSV,
@@ -49,6 +52,18 @@ const SCOPES = [
     premium:     true,
     icon:        <RawIcon />,
   },
+  {
+    id:          'visual',
+    level:       'REPORT',
+    levelColor:  '#10b981',
+    title:       'Visual Report',
+    subtitle:    'Styled XLSX, HTML & PDF exports',
+    desc:        'Professional branded reports with charts, narratives and formatted tables.',
+    features:    ['XLSX with 3 styled sheets', 'HTML institutional report', 'PDF via browser print', 'Auto-generated narratives'],
+    formats:     ['xlsx', 'html', 'pdf'],
+    premium:     true,
+    icon:        <VisualIcon />,
+  },
 ];
 
 // ── ICONS ─────────────────────────────────────────────────────────────────────
@@ -84,6 +99,16 @@ function RawIcon() {
   );
 }
 
+function VisualIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="2" y="2" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M5 8l2.5-3L10 8l2-2 2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2 15h5M8 15h2M11 15h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" opacity=".5"/>
+    </svg>
+  );
+}
+
 function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -111,6 +136,14 @@ function CheckIcon() {
 
 // ── PRIMITIVES ────────────────────────────────────────────────────────────────
 
+const FORMAT_DESC = {
+  csv:  'Spreadsheet-ready',
+  json: 'For automation',
+  xlsx: 'Best for Excel',
+  html: 'Best for reports',
+  pdf:  'Best for sharing',
+};
+
 function FormatToggle({ options, value, onChange, T, disabled }) {
   return (
     <div style={{
@@ -126,6 +159,7 @@ function FormatToggle({ options, value, onChange, T, disabled }) {
           key={opt}
           onClick={() => !disabled && onChange(opt)}
           disabled={disabled}
+          title={FORMAT_DESC[opt] ?? opt}
           style={{
             padding:      '5px 14px',
             borderRadius: 6,
@@ -269,8 +303,12 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
 
 // ── DOWNLOAD BUTTON ───────────────────────────────────────────────────────────
 
-function ExportButton({ onClick, loading, done, disabled, scope, T }) {
-  const label = loading ? 'Generating...' : done ? 'Downloaded' : 'Export Institutional Data';
+function ExportButton({ onClick, loading, done, disabled, scope, format, T }) {
+  const actionLabel = format === 'pdf'  ? 'Open PDF Preview'
+                    : format === 'xlsx' ? 'Export Excel Report'
+                    : format === 'html' ? 'Export HTML Report'
+                    : 'Export Institutional Data';
+  const label = loading ? 'Generating...' : done ? 'Downloaded' : actionLabel;
   const color = done ? '#22c55e' : scope?.levelColor ?? T.accent;
 
   return (
@@ -413,8 +451,8 @@ export default function ExportPanel({
   const handleExport = useCallback(() => {
     if (!hasData || status === 'loading') return;
 
-    // Gate raw to premium
-    if (scope === 'raw' && !isPremium) {
+    // Gate premium scopes
+    if ((scope === 'raw' || scope === 'visual') && !isPremium) {
       onUpgrade?.();
       return;
     }
@@ -456,6 +494,38 @@ export default function ExportPanel({
           filename = buildFilename('raw', null, 'json');
           content  = JSON.stringify(raw, null, 2);
           mime     = 'application/json';
+
+        } else if (scope === 'visual') {
+          if (activeFormat === 'xlsx') {
+            const result = buildXLSXExport(biasArr, fxPairs, exportOpts);
+            // Uint8Array → Blob download
+            const blob = new Blob([result.data], { type: result.mime });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url; a.download = result.filename; a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 200);
+            setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+            setStatus('done');
+            setTimeout(() => setStatus('idle'), 3000);
+            return;
+
+          } else if (activeFormat === 'pdf') {
+            const success = openPDFPrint(biasArr, fxPairs, exportOpts);
+            if (!success) throw new Error('Could not open print window. Check pop-up blocker.');
+            setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+            setStatus('done');
+            setTimeout(() => setStatus('idle'), 3000);
+            return;
+
+          } else {
+            // html
+            const result = buildHTMLExport(biasArr, fxPairs, exportOpts);
+            content  = result.data;
+            filename = result.filename;
+            mime     = result.mime;
+          }
         }
 
         downloadFile(content, filename, mime);
@@ -593,6 +663,11 @@ export default function ExportPanel({
             T={T}
             disabled={availableFormats.length === 1}
           />
+          {FORMAT_DESC[activeFormat] && (
+            <span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.04em' }}>
+              {FORMAT_DESC[activeFormat]}
+            </span>
+          )}
         </div>
 
         {/* Scope info */}
@@ -637,6 +712,7 @@ export default function ExportPanel({
           done={status === 'done'}
           disabled={btnDisabled}
           scope={activeScopeMeta}
+          format={activeFormat}
           T={T}
         />
       </div>
