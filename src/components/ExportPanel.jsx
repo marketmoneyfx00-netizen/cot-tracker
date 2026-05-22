@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   buildPairExport,
   buildSnapshotExport,
@@ -8,9 +8,10 @@ import {
   openPDFPrint,
   pairToCSV,
   snapshotToCSV,
-  toCSV,
   downloadFile,
   buildFilename,
+  buildMultiPairCSV,
+  buildMultiPairJSON,
 } from '../lib/exportEngine.js';
 
 // ── SCOPE DEFINITIONS ─────────────────────────────────────────────────────────
@@ -20,10 +21,10 @@ const SCOPES = [
     id:          'pair',
     level:       'BÁSICO',
     levelColor:  '#60a5fa',
-    title:       'Current Pair',
-    subtitle:    'Per-pair institutional analysis',
-    desc:        'Quick export for Excel and trading review.',
-    features:    ['Bias score + label', 'Execution permission', 'COT divergence', 'Weekly flow', 'Trend state'],
+    title:       'Selected Assets',
+    subtitle:    'Per-asset institutional analysis',
+    desc:        'Export one or more assets. Each selected asset becomes a row in CSV or an object in JSON.',
+    features:    ['Multi-asset selection', 'Bias score + label', 'Execution permission', 'COT divergence', 'Weekly flow'],
     formats:     ['csv', 'json'],
     premium:     false,
     icon:        <PairIcon />,
@@ -134,6 +135,15 @@ function CheckIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: 'block' }}>
+      <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M8 8l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 // ── PRIMITIVES ────────────────────────────────────────────────────────────────
 
 const FORMAT_DESC = {
@@ -143,6 +153,17 @@ const FORMAT_DESC = {
   html: 'Best for reports',
   pdf:  'Best for sharing',
 };
+
+function estimateExportSize(count, format) {
+  if (!count) return '';
+  // Conservative estimates: CSV ~650B fixed + ~550B/asset; JSON ~400B fixed + ~2600B/asset
+  const fixed      = { csv: 650,  json: 400  };
+  const perAsset   = { csv: 550,  json: 2600 };
+  const bytes = (fixed[format] ?? 0) + count * (perAsset[format] ?? 1000);
+  if (bytes < 1024)        return `~${bytes} B`;
+  if (bytes < 1024 * 1024) return `~${(bytes / 1024).toFixed(1)} KB`;
+  return `~${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function FormatToggle({ options, value, onChange, T, disabled }) {
   return (
@@ -195,6 +216,320 @@ function StatusDot({ active }) {
   );
 }
 
+// ── ASSET CHIP ────────────────────────────────────────────────────────────────
+// Removable chip showing a single selected asset. Used in MultiAssetSelector.
+
+function AssetChip({ pair, onRemove, T }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <span style={{
+      display:        'inline-flex',
+      alignItems:     'center',
+      gap:            3,
+      padding:        '2px 5px 2px 8px',
+      borderRadius:   99,
+      background:     T.card2,
+      border:         `1px solid ${T.border}`,
+      fontSize:       11,
+      fontWeight:     700,
+      color:          T.txt,
+      fontFamily:     'monospace',
+      letterSpacing:  '0.03em',
+      userSelect:     'none',
+    }}>
+      {pair}
+      <button
+        onClick={() => onRemove(pair)}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          width:          15,
+          height:         15,
+          borderRadius:   '50%',
+          border:         'none',
+          background:     hov ? 'rgba(239,68,68,0.18)' : 'transparent',
+          color:          hov ? '#ef4444' : T.sub,
+          cursor:         'pointer',
+          padding:        0,
+          fontSize:       13,
+          lineHeight:     1,
+          transition:     'background 0.12s, color 0.12s',
+          flexShrink:     0,
+        }}
+        aria-label={`Remove ${pair}`}
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+// ── MULTI-ASSET SELECTOR ──────────────────────────────────────────────────────
+// Replaces the single <select> for scope=pair.
+// Renders assets grouped by category (FX | INDEX | COMMODITIES | BONDS).
+// Shows inline bias score/label per asset when available.
+
+function MultiAssetSelector({ assets, selected, onChange, T, darkMode }) {
+  const [query, setQuery] = useState('');
+
+  // Group filtered assets by cat. FX stays first.
+  const grouped = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const filtered = q
+      ? assets.filter(a =>
+          a.pair.toLowerCase().includes(q) ||
+          (a.label ?? '').toLowerCase().includes(q)
+        )
+      : assets;
+
+    const order = ['FX', 'INDEX', 'COMMODITIES', 'BONDS'];
+    const map = {};
+    for (const a of filtered) {
+      const g = a.cat ?? 'FX';
+      if (!map[g]) map[g] = [];
+      map[g].push(a);
+    }
+    // Sort groups by canonical order, unknown groups go last
+    return Object.fromEntries(
+      Object.entries(map).sort(([a], [b]) => {
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      })
+    );
+  }, [assets, query]);
+
+  const allPairs    = assets.map(a => a.pair);
+  const allSelected = allPairs.length > 0 && allPairs.every(p => selected.includes(p));
+  const noneVisible = Object.keys(grouped).length === 0;
+
+  const toggle = useCallback((pair) => {
+    onChange(prev =>
+      prev.includes(pair) ? prev.filter(p => p !== pair) : [...prev, pair]
+    );
+  }, [onChange]);
+
+  const selectAll = () => onChange([...allPairs]);
+  const clearAll  = () => onChange([]);
+
+  // Show at most 5 chips; the rest become a "+N more" badge
+  const MAX_CHIPS   = 5;
+  const visibleChips = selected.slice(0, MAX_CHIPS);
+  const hiddenCount  = selected.length - visibleChips.length;
+
+  return (
+    <div>
+      {/* ── Controls row ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {/* Search */}
+        <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span style={{
+            position:      'absolute',
+            left:          9,
+            color:         T.sub,
+            opacity:       0.5,
+            pointerEvents: 'none',
+            display:       'flex',
+          }}>
+            <SearchIcon />
+          </span>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search assets..."
+            style={{
+              width:        '100%',
+              padding:      '6px 10px 6px 28px',
+              borderRadius: 7,
+              border:       `1px solid ${T.border}`,
+              background:   T.card2,
+              color:        T.txt,
+              fontSize:     12,
+              outline:      'none',
+              fontFamily:   'inherit',
+              boxSizing:    'border-box',
+            }}
+          />
+        </div>
+
+        {/* Select All / Clear All */}
+        <button
+          onClick={allSelected ? clearAll : selectAll}
+          style={{
+            padding:      '6px 12px',
+            borderRadius: 7,
+            border:       `1px solid ${T.border}`,
+            background:   T.card2,
+            color:        T.sub,
+            fontSize:     11,
+            fontWeight:   600,
+            cursor:       'pointer',
+            whiteSpace:   'nowrap',
+            fontFamily:   'inherit',
+            transition:   'color 0.15s, border-color 0.15s',
+          }}
+        >
+          {allSelected ? 'Clear All' : 'Select All'}
+        </button>
+
+        {/* Count badge */}
+        <span style={{
+          fontSize:   11,
+          fontWeight: 700,
+          color:      selected.length > 0 ? T.accent : T.sub,
+          whiteSpace: 'nowrap',
+          minWidth:   72,
+          textAlign:  'right',
+        }}>
+          {selected.length} selected
+        </span>
+      </div>
+
+      {/* ── Checkbox list ── */}
+      <div style={{
+        maxHeight:    224,
+        overflowY:    'auto',
+        border:       `1px solid ${T.border}`,
+        borderRadius: 8,
+        background:   T.card2,
+      }}>
+        {noneVisible ? (
+          <div style={{
+            padding:   '18px 14px',
+            textAlign: 'center',
+            fontSize:  12,
+            color:     T.sub,
+          }}>
+            No assets match &ldquo;{query}&rdquo;
+          </div>
+        ) : (
+          Object.entries(grouped).map(([group, items], gi) => (
+            <div key={group}>
+              {/* Group label */}
+              <div style={{
+                padding:      '5px 12px 4px',
+                fontSize:     9,
+                fontWeight:   700,
+                color:        T.sub,
+                letterSpacing:'0.09em',
+                background:   darkMode ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)',
+                borderBottom: `1px solid ${T.border}`,
+                ...(gi > 0 ? { borderTop: `1px solid ${T.border}` } : {}),
+              }}>
+                {group}
+              </div>
+
+              {/* Asset rows */}
+              {items.map((asset, ai) => {
+                const isChecked  = selected.includes(asset.pair);
+                const isLast     = ai === items.length - 1;
+                const scoreColor = asset.biasDirection === 'bullish' ? '#22c55e'
+                  : asset.biasDirection === 'bearish' ? '#ef4444' : '#6b7280';
+
+                return (
+                  <label
+                    key={asset.pair}
+                    style={{
+                      display:      'flex',
+                      alignItems:   'center',
+                      gap:          9,
+                      padding:      '7px 12px',
+                      cursor:       'pointer',
+                      borderBottom: isLast ? 'none' : `1px solid ${T.border}`,
+                      background:   isChecked
+                        ? (darkMode ? 'rgba(37,99,235,0.09)' : 'rgba(37,99,235,0.05)')
+                        : 'transparent',
+                      transition:   'background 0.12s',
+                      userSelect:   'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggle(asset.pair)}
+                      style={{
+                        cursor:      'pointer',
+                        accentColor: T.accent,
+                        width:       13,
+                        height:      13,
+                        flexShrink:  0,
+                      }}
+                    />
+                    {asset.emoji && (
+                      <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
+                        {asset.emoji}
+                      </span>
+                    )}
+                    <span style={{
+                      flex:          1,
+                      fontSize:      12,
+                      fontWeight:    700,
+                      color:         isChecked ? T.txt : T.sub,
+                      fontFamily:    'monospace',
+                      letterSpacing: '0.03em',
+                      transition:    'color 0.12s',
+                    }}>
+                      {asset.pair}
+                    </span>
+                    {asset.biasScore != null && (
+                      <span style={{
+                        fontSize:      10,
+                        fontWeight:    600,
+                        color:         scoreColor,
+                        background:    `${scoreColor}18`,
+                        border:        `1px solid ${scoreColor}28`,
+                        padding:       '1px 7px',
+                        borderRadius:  99,
+                        letterSpacing: '0.02em',
+                        whiteSpace:    'nowrap',
+                        flexShrink:    0,
+                      }}>
+                        {asset.biasScore} · {asset.biasLabel ?? '—'}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── Selected chips ── */}
+      {selected.length > 0 && (
+        <div style={{
+          display:    'flex',
+          flexWrap:   'wrap',
+          gap:        5,
+          marginTop:  10,
+          alignItems: 'center',
+        }}>
+          {visibleChips.map(pair => (
+            <AssetChip key={pair} pair={pair} onRemove={toggle} T={T} />
+          ))}
+          {hiddenCount > 0 && (
+            <span style={{
+              fontSize:     11,
+              fontWeight:   600,
+              color:        T.sub,
+              padding:      '2px 9px',
+              borderRadius: 99,
+              background:   T.card2,
+              border:       `1px solid ${T.border}`,
+            }}>
+              +{hiddenCount} more
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SCOPE CARD ────────────────────────────────────────────────────────────────
 
 function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
@@ -221,18 +556,16 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
         opacity:      locked ? 0.6 : 1,
       }}
     >
-      {/* Selected indicator */}
       {active && (
         <div style={{
-          position:     'absolute',
-          inset:        0,
-          borderRadius: 11,
-          background:   `radial-gradient(ellipse at top left, ${scope.levelColor}08, transparent 70%)`,
+          position:      'absolute',
+          inset:         0,
+          borderRadius:  11,
+          background:    `radial-gradient(ellipse at top left, ${scope.levelColor}08, transparent 70%)`,
           pointerEvents: 'none',
         }}/>
       )}
 
-      {/* Level badge + lock */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{
           fontSize:      9,
@@ -247,9 +580,7 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
           {scope.level}
         </span>
         {locked && (
-          <span style={{ color: T.sub, opacity: 0.7 }}>
-            <LockIcon />
-          </span>
+          <span style={{ color: T.sub, opacity: 0.7 }}><LockIcon /></span>
         )}
         {active && (
           <div style={{
@@ -263,7 +594,6 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
         )}
       </div>
 
-      {/* Icon + title */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, color: active ? scope.levelColor : T.txt }}>
         {scope.icon}
         <span style={{ fontSize: 13, fontWeight: 700 }}>{scope.title}</span>
@@ -273,7 +603,6 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
         {scope.desc}
       </p>
 
-      {/* Feature list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {scope.features.map(f => (
           <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -303,11 +632,16 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
 
 // ── DOWNLOAD BUTTON ───────────────────────────────────────────────────────────
 
-function ExportButton({ onClick, loading, done, disabled, scope, format, T }) {
-  const actionLabel = format === 'pdf'  ? 'Open PDF Preview'
-                    : format === 'xlsx' ? 'Export Excel Report'
-                    : format === 'html' ? 'Export HTML Report'
-                    : 'Export Institutional Data';
+function ExportButton({ onClick, loading, done, disabled, scope, format, selectedCount, T }) {
+  const isPairScope  = scope?.id === 'pair';
+  const multiAsset   = isPairScope && selectedCount > 1;
+
+  const actionLabel  = format === 'pdf'  ? 'Open PDF Preview'
+                     : format === 'xlsx' ? 'Export Excel Report'
+                     : format === 'html' ? 'Export HTML Report'
+                     : multiAsset        ? `Export ${selectedCount} assets`
+                     : 'Export Institutional Data';
+
   const label = loading ? 'Generating...' : done ? 'Downloaded' : actionLabel;
   const color = done ? '#22c55e' : scope?.levelColor ?? T.accent;
 
@@ -316,27 +650,27 @@ function ExportButton({ onClick, loading, done, disabled, scope, format, T }) {
       onClick={onClick}
       disabled={disabled || loading}
       style={{
-        display:       'flex',
-        alignItems:    'center',
+        display:        'flex',
+        alignItems:     'center',
         justifyContent: 'center',
-        gap:           8,
-        padding:       '12px 28px',
-        borderRadius:  10,
-        border:        `1px solid ${disabled ? T.border : `${color}60`}`,
-        background:    disabled
+        gap:            8,
+        padding:        '12px 28px',
+        borderRadius:   10,
+        border:         `1px solid ${disabled ? T.border : `${color}60`}`,
+        background:     disabled
           ? T.card2
           : done
           ? 'rgba(34,197,94,0.12)'
           : `linear-gradient(135deg, ${color}18, ${color}0c)`,
-        color:         disabled ? T.sub : color,
-        fontSize:      13,
-        fontWeight:    700,
-        cursor:        disabled ? 'not-allowed' : 'pointer',
-        opacity:       disabled ? 0.5 : 1,
-        transition:    'all 0.2s',
-        letterSpacing: '0.02em',
-        minWidth:      200,
-        boxShadow:     !disabled && !done ? `0 0 0 1px ${color}22, 0 4px 16px ${color}18` : 'none',
+        color:          disabled ? T.sub : color,
+        fontSize:       13,
+        fontWeight:     700,
+        cursor:         disabled ? 'not-allowed' : 'pointer',
+        opacity:        disabled ? 0.5 : 1,
+        transition:     'all 0.2s',
+        letterSpacing:  '0.02em',
+        minWidth:       200,
+        boxShadow:      !disabled && !done ? `0 0 0 1px ${color}22, 0 4px 16px ${color}18` : 'none',
       }}
     >
       {loading ? (
@@ -363,7 +697,7 @@ function LoadingSpinner({ color }) {
 
 // ── SNAPSHOT STATUS BAR ───────────────────────────────────────────────────────
 
-function SnapshotStatus({ biasArr, fxPairs, macroSignal, T, darkMode }) {
+function SnapshotStatus({ biasArr, fxPairs, macroSignal, selectedCount, T, darkMode }) {
   const dates = (fxPairs ?? [])
     .map(p => p.latest?.isoDate ?? p.weeks?.[0]?.isoDate)
     .filter(Boolean).sort().reverse();
@@ -371,6 +705,9 @@ function SnapshotStatus({ biasArr, fxPairs, macroSignal, T, darkMode }) {
 
   const items = [
     { label: 'Pairs',       value: `${biasArr?.length ?? 0}` },
+    selectedCount != null
+      ? { label: 'Selected', value: `${selectedCount}`, accent: true }
+      : null,
     { label: 'CFTC Report', value: cftcDate ?? '—' },
     macroSignal?.bias
       ? { label: 'Macro', value: macroSignal.bias.replace(/_/g, ' ') }
@@ -394,7 +731,14 @@ function SnapshotStatus({ biasArr, fxPairs, macroSignal, T, darkMode }) {
           <span style={{ fontSize: 9, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
             {item.label.toUpperCase()}
           </span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{
+            fontSize:   12,
+            fontWeight: 700,
+            color:      item.accent ? T.accent : '#22c55e',
+            display:    'flex',
+            alignItems: 'center',
+            gap:        5,
+          }}>
             {item.value}
             {item.dot && <StatusDot active />}
           </span>
@@ -412,6 +756,10 @@ function SnapshotStatus({ biasArr, fxPairs, macroSignal, T, darkMode }) {
 export default function ExportPanel({
   biasArr,
   fxPairs,
+  allBiasArr,
+  allPairsArr,
+  riskRegime,
+  combinedData,
   macroSignal,
   ratesData,
   candleMap,
@@ -423,30 +771,86 @@ export default function ExportPanel({
   isPremium,
   onUpgrade,
 }) {
-  const [scope,    setScope]    = useState('pair');
-  const [format,   setFormat]   = useState('csv');
-  const [symbol,   setSymbol]   = useState(null);
-  const [status,   setStatus]   = useState('idle'); // idle | loading | done | error
-  const [lastTime, setLastTime] = useState(null);
+  const [scope,           setScope]           = useState('pair');
+  const [format,          setFormat]          = useState('csv');
+  const [selectedSymbols, setSelectedSymbols] = useState([]);  // replaces single `symbol`
+  const [status,          setStatus]          = useState('idle'); // idle | loading | done | error
+  const [lastTime,        setLastTime]        = useState(null);
+  const [lastFilename,    setLastFilename]    = useState(null);
 
-  const hasData = (biasArr?.length ?? 0) > 0 && (fxPairs?.length ?? 0) > 0;
-
-  const pairs = useMemo(
-    () => (fxPairs ?? []).filter(p => !p.pair.includes('Index')).map(p => p.pair),
-    [fxPairs],
+  // Prefer the cross-asset arrays when available; fall back to FX-only for backward compat.
+  const effectivePairs = useMemo(
+    () => allPairsArr?.length ? allPairsArr : (fxPairs ?? []),
+    [allPairsArr, fxPairs],
   );
-  const activePair = symbol ?? pairs[0] ?? null;
+  const effectiveBiasArr = useMemo(
+    () => allBiasArr?.length ? allBiasArr : (biasArr ?? []),
+    [allBiasArr, biasArr],
+  );
+
+  const hasData = effectiveBiasArr.length > 0 && effectivePairs.length > 0;
+
+  // Pairs available for selection (same filter as before, excludes any "Index"-named pair)
+  const pairs = useMemo(
+    () => effectivePairs.filter(p => !p.pair.includes('Index')).map(p => p.pair),
+    [effectivePairs],
+  );
+
+  // Initialize selection with the first available pair once data arrives.
+  // A ref prevents re-initializing when the user has already made a selection.
+  const initRef = useRef(false);
+  useEffect(() => {
+    if (!initRef.current && pairs.length > 0) {
+      setSelectedSymbols([pairs[0]]);
+      initRef.current = true;
+    }
+  }, [pairs]);
+
+  // Asset metadata for the multi-selector (pair name + bias score/label inline)
+  const assetsList = useMemo(() => {
+    const biasMap = Object.fromEntries(effectiveBiasArr.map(b => [b.pair, b]));
+    return effectivePairs
+      .filter(p => !p.pair.includes('Index'))
+      .map(p => {
+        const b    = biasMap[p.pair];
+        const bias = b?.bias ?? b;
+        const normScore = bias?.score != null
+          ? Math.round(((bias.score + 5) / 10) * 100)
+          : null;
+        return {
+          pair:          p.pair,
+          label:         p.label ?? p.pair,
+          cat:           (p.cat ?? 'fx').toUpperCase(),
+          emoji:         p.emoji ?? '',
+          biasScore:     normScore,
+          biasLabel:     bias?.label ?? null,
+          biasDirection: bias?.direction ?? 'neutral',
+        };
+      });
+  }, [effectivePairs, effectiveBiasArr]);
 
   const pairMap = useMemo(
-    () => Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p])),
-    [fxPairs],
+    () => Object.fromEntries(effectivePairs.map(p => [p.pair, p])),
+    [effectivePairs],
   );
 
-  const activeScopeMeta = SCOPES.find(s => s.id === scope);
-  const availableFormats = activeScopeMeta?.formats ?? ['json'];
-  const activeFormat = availableFormats.includes(format) ? format : availableFormats[0];
+  // Backward-compat single-pair reference (used by single-asset export path)
+  const activePair = selectedSymbols[0] ?? pairs[0] ?? null;
 
-  const exportOpts = { macroSignal, livePrices: livePrices ?? {}, sentimentData, riskData, ratesData, candleMap: candleMap ?? {} };
+  const activeScopeMeta   = SCOPES.find(s => s.id === scope);
+  const availableFormats  = activeScopeMeta?.formats ?? ['json'];
+  const activeFormat      = availableFormats.includes(format) ? format : availableFormats[0];
+
+  const exportOpts = useMemo(() => ({
+    macroSignal,
+    livePrices:    livePrices ?? {},
+    sentimentData,
+    riskData,
+    ratesData,
+    candleMap:     candleMap ?? {},
+    riskRegime:    riskRegime    ?? null,
+    combinedData:  combinedData  ?? null,
+  }), [macroSignal, livePrices, sentimentData, riskData, ratesData, candleMap, riskRegime, combinedData]);
 
   const handleExport = useCallback(() => {
     if (!hasData || status === 'loading') return;
@@ -463,65 +867,94 @@ export default function ExportPanel({
       try {
         let content, filename, mime;
 
+        // ── scope: pair — single or multi ──────────────────────────────────
         if (scope === 'pair') {
-          const biasEntry = biasArr.find(b => b.pair === activePair);
-          const pairRow   = pairMap[activePair];
-          const data = buildPairExport(pairRow, biasEntry, { ...exportOpts, livePrice: livePrices?.[activePair] });
-          if (!data) throw new Error('No data for pair');
+          const isSingle = selectedSymbols.length <= 1;
 
-          filename = buildFilename('pair', activePair, activeFormat);
-          if (activeFormat === 'json') {
-            content = JSON.stringify(data, null, 2);
-            mime    = 'application/json';
+          if (isSingle) {
+            // Original single-pair behavior — preserved for backward compat
+            const pair      = selectedSymbols[0] ?? activePair;
+            const biasEntry = effectiveBiasArr.find(b => b.pair === pair);
+            const pairRow   = pairMap[pair];
+            const data      = buildPairExport(pairRow, biasEntry, {
+              ...exportOpts,
+              livePrice: livePrices?.[pair],
+            });
+            if (!data) throw new Error('No data for pair');
+
+            filename = buildFilename('pair', pair, activeFormat);
+            if (activeFormat === 'json') {
+              content = JSON.stringify(data, null, 2);
+              mime    = 'application/json';
+            } else {
+              content = pairToCSV(data);
+              mime    = 'text/csv;charset=utf-8';
+            }
+
           } else {
-            content = pairToCSV(data);
-            mime    = 'text/csv;charset=utf-8';
+            // Multi-pair: one row/object per selected asset
+            filename = buildFilename('multi', null, activeFormat);
+            if (activeFormat === 'json') {
+              const data = buildMultiPairJSON(selectedSymbols, effectiveBiasArr, effectivePairs, exportOpts);
+              content = JSON.stringify(data, null, 2);
+              mime    = 'application/json';
+            } else {
+              content = buildMultiPairCSV(selectedSymbols, effectiveBiasArr, effectivePairs, exportOpts);
+              mime    = 'text/csv;charset=utf-8';
+            }
           }
 
+        // ── scope: snapshot ─────────────────────────────────────────────────
         } else if (scope === 'snapshot') {
-          const snap = buildSnapshotExport(biasArr, fxPairs, exportOpts);
+          const snap = buildSnapshotExport(effectiveBiasArr, effectivePairs, exportOpts);
           filename = buildFilename('snapshot', null, activeFormat);
           if (activeFormat === 'json') {
-            content = JSON.stringify({ snapshot_date: new Date().toISOString().slice(0, 10), export_version: '2.0', ...snap }, null, 2);
-            mime    = 'application/json';
+            content = JSON.stringify({
+              snapshot_date:   new Date().toISOString().slice(0, 10),
+              export_version:  '2.0',
+              ...snap,
+            }, null, 2);
+            mime = 'application/json';
           } else {
             content = snapshotToCSV(snap);
             mime    = 'text/csv;charset=utf-8';
           }
 
+        // ── scope: raw ──────────────────────────────────────────────────────
         } else if (scope === 'raw') {
-          const raw = buildRawExport(biasArr, fxPairs, exportOpts);
-          filename = buildFilename('raw', null, 'json');
-          content  = JSON.stringify(raw, null, 2);
-          mime     = 'application/json';
+          const raw = buildRawExport(effectiveBiasArr, effectivePairs, exportOpts);
+          filename  = buildFilename('raw', null, 'json');
+          content   = JSON.stringify(raw, null, 2);
+          mime      = 'application/json';
 
+        // ── scope: visual ───────────────────────────────────────────────────
         } else if (scope === 'visual') {
           if (activeFormat === 'xlsx') {
-            const result = buildXLSXExport(biasArr, fxPairs, exportOpts);
-            // Uint8Array → Blob download
-            const blob = new Blob([result.data], { type: result.mime });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
+            const result = buildXLSXExport(effectiveBiasArr, effectivePairs, exportOpts);
+            const blob   = new Blob([result.data], { type: result.mime });
+            const url    = URL.createObjectURL(blob);
+            const a      = document.createElement('a');
             a.href = url; a.download = result.filename; a.style.display = 'none';
             document.body.appendChild(a);
             a.click();
             setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 200);
             setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+            setLastFilename(result.filename);
             setStatus('done');
             setTimeout(() => setStatus('idle'), 3000);
             return;
 
           } else if (activeFormat === 'pdf') {
-            const success = openPDFPrint(biasArr, fxPairs, exportOpts);
+            const success = openPDFPrint(effectiveBiasArr, effectivePairs, exportOpts);
             if (!success) throw new Error('Could not open print window. Check pop-up blocker.');
             setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+            setLastFilename('PDF via browser print');
             setStatus('done');
             setTimeout(() => setStatus('idle'), 3000);
             return;
 
           } else {
-            // html
-            const result = buildHTMLExport(biasArr, fxPairs, exportOpts);
+            const result = buildHTMLExport(effectiveBiasArr, effectivePairs, exportOpts);
             content  = result.data;
             filename = result.filename;
             mime     = result.mime;
@@ -530,15 +963,21 @@ export default function ExportPanel({
 
         downloadFile(content, filename, mime);
         setLastTime(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+        setLastFilename(filename);
         setStatus('done');
         setTimeout(() => setStatus('idle'), 3000);
+
       } catch (e) {
         console.error('[ExportPanel]', e);
         setStatus('error');
         setTimeout(() => setStatus('idle'), 2500);
       }
     }, 0);
-  }, [scope, activeFormat, activePair, hasData, biasArr, fxPairs, exportOpts, isPremium]);
+  }, [
+    scope, activeFormat, selectedSymbols, activePair,
+    hasData, effectiveBiasArr, effectivePairs, exportOpts, isPremium,
+    livePrices, onUpgrade, pairMap, status,
+  ]);
 
   // ── Empty state ───────────────────────────────────────────────────────────
   if (!hasData) {
@@ -565,8 +1004,17 @@ export default function ExportPanel({
   }
 
   // ── Main render ───────────────────────────────────────────────────────────
-  const isLocked  = activeScopeMeta?.premium && !isPremium;
-  const btnDisabled = !hasData || isLocked;
+  const isLocked    = activeScopeMeta?.premium && !isPremium;
+  const noneSelected = scope === 'pair' && selectedSymbols.length === 0;
+  const btnDisabled  = !hasData || isLocked || noneSelected;
+
+  // Count shown on button and status bar only for pair scope
+  const exportCount = scope === 'pair' ? selectedSymbols.length : null;
+
+  // Estimated file size shown only for pair scope (csv/json)
+  const sizeEstimate = scope === 'pair' && ['csv', 'json'].includes(activeFormat)
+    ? estimateExportSize(selectedSymbols.length, activeFormat)
+    : null;
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '28px 24px' }}>
@@ -608,7 +1056,34 @@ export default function ExportPanel({
         </div>
       </div>
 
-      {/* ── Options row ── */}
+      {/* ── Multi-asset selector (only for pair scope) ── */}
+      {scope === 'pair' && (
+        <div style={{
+          marginBottom: 16,
+          padding:      '16px 20px',
+          background:   T.card,
+          border:       `1px solid ${T.border}`,
+          borderRadius: 12,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.08em', marginBottom: 10 }}>
+            SELECT ASSETS
+          </div>
+          <MultiAssetSelector
+            assets={assetsList}
+            selected={selectedSymbols}
+            onChange={setSelectedSymbols}
+            T={T}
+            darkMode={darkMode}
+          />
+          {noneSelected && (
+            <p style={{ margin: '10px 0 0', fontSize: 11, color: '#f59e0b' }}>
+              Select at least one asset to export.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Options row (format + description + size estimate) ── */}
       <div style={{
         display:       'flex',
         alignItems:    'flex-end',
@@ -620,37 +1095,6 @@ export default function ExportPanel({
         borderRadius:  12,
         marginBottom:  16,
       }}>
-
-        {/* Pair selector — only when scope = pair */}
-        {scope === 'pair' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <label style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
-              SELECT PAIR
-            </label>
-            <select
-              value={activePair ?? ''}
-              onChange={e => setSymbol(e.target.value)}
-              style={{
-                padding:      '7px 32px 7px 10px',
-                borderRadius: 8,
-                border:       `1px solid ${T.border}`,
-                background:   T.card2,
-                color:        T.txt,
-                fontSize:     13,
-                fontWeight:   600,
-                cursor:       'pointer',
-                fontFamily:   'inherit',
-                outline:      'none',
-                appearance:   'none',
-                WebkitAppearance: 'none',
-                minWidth:     130,
-              }}
-            >
-              {pairs.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-        )}
-
         {/* Format toggle */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <label style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
@@ -670,7 +1114,7 @@ export default function ExportPanel({
           )}
         </div>
 
-        {/* Scope info */}
+        {/* Scope description */}
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em', marginBottom: 5 }}>
             DESCRIPTION
@@ -682,18 +1126,37 @@ export default function ExportPanel({
             )}
           </p>
         </div>
+
+        {/* File size estimate (pair scope only) */}
+        {sizeEstimate && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
+              EST. SIZE
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.txt }}>
+              {sizeEstimate}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Snapshot status ── */}
-      <SnapshotStatus biasArr={biasArr} fxPairs={fxPairs} macroSignal={macroSignal} T={T} darkMode={darkMode} />
+      <SnapshotStatus
+        biasArr={effectiveBiasArr}
+        fxPairs={effectivePairs}
+        macroSignal={macroSignal}
+        selectedCount={exportCount}
+        T={T}
+        darkMode={darkMode}
+      />
 
       {/* ── Export CTA ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          {lastTime && status !== 'loading' && (
+          {lastTime && status !== 'loading' && lastFilename && (
             <div style={{ fontSize: 11, color: T.sub }}>
               Last export: <span style={{ color: '#22c55e', fontWeight: 600 }}>{lastTime}</span>
-              {' · '}{buildFilename(scope, activePair, activeFormat)}
+              {' · '}{lastFilename}
             </div>
           )}
           {status === 'error' && (
@@ -701,7 +1164,9 @@ export default function ExportPanel({
           )}
           {!lastTime && (
             <div style={{ fontSize: 11, color: T.sub2 }}>
-              Download raw positioning and layer metrics.
+              {scope === 'pair'
+                ? `${selectedSymbols.length} asset${selectedSymbols.length !== 1 ? 's' : ''} selected · ${activeFormat.toUpperCase()}`
+                : 'Download raw positioning and layer metrics.'}
             </div>
           )}
         </div>
@@ -713,6 +1178,7 @@ export default function ExportPanel({
           disabled={btnDisabled}
           scope={activeScopeMeta}
           format={activeFormat}
+          selectedCount={selectedSymbols.length}
           T={T}
         />
       </div>

@@ -54,6 +54,7 @@ import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
 import ExportPanel from './components/ExportPanel.jsx';
+import { computeRiskRegime } from './lib/riskRegimeEngine.js';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4414,6 +4415,13 @@ function AppInner() {
     [pairsData]
   );
 
+  // All parsed assets (FX + indices + bonds + commodities from TFF upload).
+  // Used by ExportPanel and cross-asset analysis — does NOT touch FX dashboard.
+  const allPairsArr = useMemo(
+    () => (pairsData || []).filter(p => p.weeks?.length >= 2),
+    [pairsData]
+  );
+
   // Derive COT report date from the most recent entry in pairsData
   const cotDataDate = useMemo(() => {
     const dates = (pairsData || [])
@@ -4443,6 +4451,22 @@ function AppInner() {
     () => buildBiasArray(fxPairs, { candleMap, ratesData, macroSignal }),
     [fxPairs, candleMap, ratesData, macroSignal],
   );
+
+  // Cross-asset bias array: all uploaded assets scored by the same engines.
+  // FX-specific factors (carry, macro USD alignment, policy stance) degrade
+  // gracefully to 0 for non-FX assets — no engine changes required.
+  const allBiasArr = useMemo(
+    () => buildBiasArray(allPairsArr, { candleMap, ratesData, macroSignal }),
+    [allPairsArr, candleMap, ratesData, macroSignal],
+  );
+
+  // Macro risk regime: detects dominant regime from multi-asset COT positioning.
+  // Uses allBiasArr (TFF Futures Only) + combinedData (TFF Combined) + macroSignal.
+  const riskRegime = useMemo(
+    () => computeRiskRegime({ allBiasArr, combinedData, macroSignal }),
+    [allBiasArr, combinedData, macroSignal],
+  );
+
   const biasMap = useMemo(()=>{
     const m={};biasArr.forEach(b=>{if(b?.pair)m[b.pair]=b;});return m;
   },[biasArr]);
@@ -5498,6 +5522,10 @@ if (!authUser || forceResetMode) {
         <ExportPanel
           biasArr={biasArr}
           fxPairs={fxPairs}
+          allBiasArr={allBiasArr}
+          allPairsArr={allPairsArr}
+          riskRegime={riskRegime}
+          combinedData={combinedData}
           macroSignal={macroSignal}
           ratesData={ratesData}
           candleMap={candleMap}

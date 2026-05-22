@@ -11,7 +11,8 @@
  */
 
 import { zipSync, strToU8 } from 'fflate';
-import { generateExecutiveSummary, generateMarketRegimeLabel, generatePairNarrative } from './narrativeEngine.js';
+import { generateExecutiveSummary, generateMarketRegimeLabel, generatePairNarrative, generateMacroRegimeNarrative } from './narrativeEngine.js';
+import { buildCrossAssetContext } from './crossAssetInterpretationEngine.js';
 
 // ── PALETTE (ARGB hex) ────────────────────────────────────────────────────────
 const C = {
@@ -279,7 +280,7 @@ function fmtK(n) {
 
 // ── SHEET 1: EXECUTIVE SUMMARY ────────────────────────────────────────────────
 
-function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap) {
+function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap, riskRegime = null, combinedData = null) {
   const sb = new SheetBuilder();
   const COLS = 8;
 
@@ -305,7 +306,7 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap)
   const bull = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bullish').length;
   const bear = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bearish').length;
   const neut = biasArr.length - bull - bear;
-  const regime = generateMarketRegimeLabel(biasArr, macroSignal);
+  const regime = generateMarketRegimeLabel(biasArr, macroSignal, riskRegime);
 
   r = sb.addRow([strCell('A4', 'MARKET OVERVIEW', S.SECTION)], 24);
   sb.merge(0, r, COLS - 1, r);
@@ -338,7 +339,10 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap)
   r = sb.addRow([strCell('A8', 'EXECUTIVE COMMENTARY', S.SECTION)], 24);
   sb.merge(0, r, COLS - 1, r);
 
-  const narrative = generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapshotDate });
+  const crossAssetCtx = riskRegime
+    ? buildCrossAssetContext({ regime: riskRegime, allBiasArr: biasArr, combinedData, macroSignal })
+    : null;
+  const narrative = generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapshotDate, regime: riskRegime, crossAssetCtx });
   // Split narrative into ~120-char chunks for readable rows
   const words     = narrative.split(' ');
   let   line      = '';
@@ -353,6 +357,41 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap)
     r = sb.addRow([strCell('A' + (r + 1), ln, S.DATA)], 18);
     sb.merge(0, r, COLS - 1, r);
   });
+
+  // ── Macro Regime Context (v2) ──
+  if (riskRegime?.regime) {
+    sb.addEmptyRow(8);
+    const regimeNarrative = generateMacroRegimeNarrative(riskRegime, crossAssetCtx);
+    r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'MACRO REGIME CONTEXT', S.SECTION)], 24);
+    sb.merge(0, r, COLS - 1, r);
+
+    r = sb.addRow([strCell('A' + (r + 1), `Regime: ${regimeNarrative.headline}`, S.DATA_BOLD)], 20);
+    sb.merge(0, r, COLS - 1, r);
+
+    // Regime description wrapped to rows
+    const rWords = regimeNarrative.body.split(' ');
+    let rLine = ''; const rLines = [];
+    for (const w of rWords) {
+      if ((rLine + ' ' + w).length > 120) { rLines.push(rLine.trim()); rLine = w; }
+      else rLine += ' ' + w;
+    }
+    if (rLine.trim()) rLines.push(rLine.trim());
+    rLines.forEach(ln => {
+      r = sb.addRow([strCell('A' + (r + 1), ln, S.DATA)], 16);
+      sb.merge(0, r, COLS - 1, r);
+    });
+
+    // Key drivers
+    if (regimeNarrative.keyDrivers?.length) {
+      sb.addEmptyRow(6);
+      r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'KEY CROSS-ASSET DRIVERS', S.LABEL)], 18);
+      sb.merge(0, r, COLS - 1, r);
+      regimeNarrative.keyDrivers.forEach(d => {
+        r = sb.addRow([strCell('A' + (r + 1), `· ${d}`, S.DATA)], 16);
+        sb.merge(0, r, COLS - 1, r);
+      });
+    }
+  }
 
   sb.addEmptyRow(10);
 
@@ -633,12 +672,12 @@ function workbookRelsXml(sheetCount) {
 // ── MAIN ENTRY POINT ──────────────────────────────────────────────────────────
 
 export function generateXLSX(biasArr, fxPairs, opts = {}) {
-  const { macroSignal, sentimentData, riskData, snapshotDate, cotDate, execMap = {} } = opts;
+  const { macroSignal, sentimentData, riskData, snapshotDate, cotDate, execMap = {}, riskRegime = null, combinedData = null } = opts;
 
   const snap = snapshotDate ?? new Date().toISOString().slice(0, 10);
   const cot  = cotDate ?? (fxPairs ?? [])[0]?.latest?.isoDate ?? snap;
 
-  const sheet1 = buildSummarySheet(biasArr, macroSignal, cot, snap, execMap);
+  const sheet1 = buildSummarySheet(biasArr, macroSignal, cot, snap, execMap, riskRegime, combinedData);
   const sheet2 = buildSnapshotSheet(biasArr, fxPairs, macroSignal, execMap);
   const sheet3 = buildPairDetailSheet(biasArr, fxPairs, execMap, sentimentData, riskData);
 

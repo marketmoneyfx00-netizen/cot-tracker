@@ -563,7 +563,7 @@ export function snapshotToCSV(snapshotData) {
 
 export function pairToCSV(pairExport) {
   if (!pairExport) return '';
-  const { layers, ...flat } = pairExport;
+  const { layers: _layers, ...flat } = pairExport;
   return csvBrandingHeader('Per-Pair Analysis', flat.symbol, flat.cftc_report_date)
     + toCSV([flat]);
 }
@@ -584,6 +584,7 @@ export function buildFilename(scope, symbol, format) {
   const d = isoDate();
   const prefix = 'COTTracker';
   if (scope === 'pair')     return `${prefix}_${(symbol ?? 'Pair').replace('/', '')}_${d}.${format}`;
+  if (scope === 'multi')    return `${prefix}_MultiAsset_${d}.${format}`;
   if (scope === 'snapshot') return `${prefix}_FullMarketSnapshot_${d}.${format}`;
   if (scope === 'raw')      return `${prefix}_RawInstitutionalData_${d}.json`;
   if (scope === 'visual')   return `${prefix}_InstitutionalReport_${d}.${format}`;
@@ -599,7 +600,8 @@ export function buildFilename(scope, symbol, format) {
 export function buildXLSXExport(biasArr, fxPairs, opts = {}) {
   const {
     macroSignal, sentimentData, riskData, ratesData,
-    snapshotDate, cotDate, livePrices = {}, candleMap = {},
+    snapshotDate, cotDate, livePrices: _lp = {}, candleMap: _cm = {},
+    riskRegime = null, combinedData = null,
   } = opts;
 
   const execMap = {};
@@ -624,6 +626,8 @@ export function buildXLSXExport(biasArr, fxPairs, opts = {}) {
     snapshotDate: snapshotDate ?? isoDate(),
     cotDate,
     execMap,
+    riskRegime,
+    combinedData,
   });
 
   return {
@@ -659,4 +663,67 @@ export function openPDFPrint(biasArr, fxPairs, opts = {}) {
   // Give the browser a frame to render before triggering print
   win.onload = () => win.print();
   return true;
+}
+
+// ── MULTI-PAIR EXPORT ─────────────────────────────────────────────────────────
+// Used by ExportPanel when scope=pair and more than one asset is selected.
+// Both functions reuse existing builders — no new analysis logic introduced.
+
+/**
+ * Flat CSV with one row per selected asset.
+ * Same columns as the single-pair CSV export — just N rows instead of 1.
+ * Layers are stripped (CSV doesn't support nested data).
+ */
+export function buildMultiPairCSV(selectedPairs, biasArr, fxPairs, opts = {}) {
+  const { livePrices = {}, macroSignal, sentimentData, riskData } = opts;
+  const pairMap = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
+
+  const rows = (selectedPairs ?? [])
+    .map(pair => {
+      const biasEntry = (biasArr ?? []).find(b => b.pair === pair);
+      const pairRow   = pairMap[pair];
+      if (!biasEntry || !pairRow) return null;
+
+      const exec    = computeExecution(biasEntry, sentimentData, riskData);
+      const summary = buildSummaryRow(pairRow, biasEntry, exec, {
+        macroSignal,
+        livePrice: livePrices[pair] ?? null,
+      });
+      return summary;
+    })
+    .filter(Boolean);
+
+  if (!rows.length) return '';
+  const cotDate = rows[0]?.cftc_report_date ?? null;
+  return csvBrandingHeader('Multi-Asset Analysis', null, cotDate) + toCSV(rows);
+}
+
+/**
+ * JSON array envelope: one full pairExport object per selected asset.
+ * Includes layers, engine outputs, COT history — same depth as single-pair raw.
+ */
+export function buildMultiPairJSON(selectedPairs, biasArr, fxPairs, opts = {}) {
+  const { livePrices = {} } = opts;
+
+  const assets = (selectedPairs ?? [])
+    .map(pair => {
+      const biasEntry = (biasArr ?? []).find(b => b.pair === pair);
+      const pairMap   = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
+      const pairRow   = pairMap[pair];
+      if (!biasEntry || !pairRow) return null;
+      return buildPairExport(pairRow, biasEntry, {
+        ...opts,
+        livePrice: livePrices[pair] ?? null,
+      });
+    })
+    .filter(Boolean);
+
+  return {
+    export_type:    'multi_pair',
+    export_version: EXPORT_VERSION,
+    generated_at:   isoNow(),
+    snapshot_date:  isoDate(),
+    assets_count:   assets.length,
+    assets,
+  };
 }

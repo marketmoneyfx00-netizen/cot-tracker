@@ -5,7 +5,8 @@
  * No external assets or fonts. Designed for browser open + window.print() PDF.
  */
 
-import { generateExecutiveSummary, generatePairNarrative, generateMarketRegimeLabel } from './narrativeEngine.js';
+import { generateExecutiveSummary, generatePairNarrative, generateMarketRegimeLabel, generateMacroRegimeNarrative } from './narrativeEngine.js';
+import { buildCrossAssetContext } from './crossAssetInterpretationEngine.js';
 import { buildLayersArray } from './exportEngine.js';
 import { calculateExecutionScore } from '../intradayExecutionEngine.js';
 
@@ -427,7 +428,9 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
     riskData,
     snapshotDate,
     cotDate,
-    livePrices = {},
+    livePrices  = {},
+    riskRegime  = null,
+    combinedData = null,
   } = opts;
 
   if (!biasArr?.length) return '<html><body><p>No data available.</p></body></html>';
@@ -446,8 +449,14 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   const cftcD   = cotDate ?? dates[0] ?? '—';
   const today   = snapshotDate ?? new Date().toISOString().slice(0, 10);
 
-  const regime    = generateMarketRegimeLabel(biasArr, macroSignal);
-  const execSummary = generateExecutiveSummary({ biasArr, macroSignal, cotDate: cftcD, snapshotDate: today });
+  // Cross-asset context and regime narrative (v2 — graceful if no regime data)
+  const crossAssetCtx  = riskRegime
+    ? buildCrossAssetContext({ regime: riskRegime, allBiasArr: biasArr, combinedData, macroSignal })
+    : null;
+  const regimeNarrative = generateMacroRegimeNarrative(riskRegime, crossAssetCtx);
+
+  const regime      = generateMarketRegimeLabel(biasArr, macroSignal, riskRegime);
+  const execSummary = generateExecutiveSummary({ biasArr, macroSignal, cotDate: cftcD, snapshotDate: today, regime: riskRegime, crossAssetCtx });
 
   const avgBias = biasArr.reduce((s, b) => s + (b.bias?.score ?? b.score ?? 0), 0) / biasArr.length;
   const globalBias = avgBias > 0.3 ? 'Bullish Tilt' : avgBias < -0.3 ? 'Bearish Tilt' : 'Neutral';
@@ -492,7 +501,7 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   <div class="cover">
     <div class="cover-brand">COT Tracker · Institutional Intelligence</div>
     <div class="cover-title">Institutional Positioning Report</div>
-    <div class="cover-subtitle">CFTC Commitment of Traders · Leveraged Money Analysis · FX Markets</div>
+    <div class="cover-subtitle">CFTC Commitment of Traders · Leveraged Money Analysis · Multi-Asset Institutional Positioning</div>
     <div class="cover-meta">
       <div class="cover-meta-item">
         <div class="cover-meta-label">Snapshot Date</div>
@@ -545,6 +554,22 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
 
   <!-- MACRO BAR -->
   ${macroBarItems ? `<div class="macro-bar">${macroBarItems}</div>` : ''}
+
+  <!-- MACRO REGIME CONTEXT (v2 — present when regime data available) -->
+  ${riskRegime?.regime ? `
+  <div class="card" style="border-left:3px solid ${esc(riskRegime.color ?? '#8491a8')};">
+    <div class="card-title" style="color:${esc(riskRegime.color ?? PALETTE.accent)};">
+      Macro Regime · ${esc(regimeNarrative.headline)}
+    </div>
+    <div class="summary-text">${esc(regimeNarrative.body)}</div>
+    ${regimeNarrative.keyDrivers?.length ? `
+    <div style="margin-top:14px;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">CROSS-ASSET DRIVERS</div>
+      <ul style="margin:0;padding:0 0 0 16px;list-style:disc;">
+        ${regimeNarrative.keyDrivers.map(d => `<li style="font-size:11px;color:${PALETTE.sub};line-height:1.6;margin-bottom:4px;">${esc(d)}</li>`).join('')}
+      </ul>
+    </div>` : ''}
+  </div>` : ''}
 
   <!-- EXECUTIVE SUMMARY -->
   <div class="card">
