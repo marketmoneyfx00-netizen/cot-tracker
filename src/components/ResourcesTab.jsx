@@ -105,6 +105,9 @@ export default function ResourcesTab({ darkMode }) {
   );
 }
 
+// ── IC Trading brand colors ────────────────────────────────────────────────────
+const IC_GREEN = '#1FD458';
+
 // ── Featured broker card ───────────────────────────────────────────────────────
 
 function FeaturedBrokerCard({ resource: r, darkMode, T }) {
@@ -115,51 +118,78 @@ function FeaturedBrokerCard({ resource: r, darkMode, T }) {
       overflow: 'hidden',
       background: T.card,
       boxShadow: darkMode
-        ? '0 4px 32px rgba(0,0,0,0.35)'
-        : '0 4px 24px rgba(0,0,0,0.06)',
+        ? '0 8px 40px rgba(0,0,0,0.4)'
+        : '0 4px 28px rgba(0,0,0,0.08)',
     }}>
-      {/* Accent stripe */}
-      <div style={{ height: 3, background: 'linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)' }} />
+      {/* IC Trading brand stripe — black + green */}
+      <div style={{ height: 3, background: `linear-gradient(90deg, #000 0%, ${IC_GREEN} 100%)` }} />
 
-      <div style={{ padding: '26px 28px 28px' }}>
+      {/* Header band with logo */}
+      <div style={{
+        background: darkMode ? '#0a0f0a' : '#0d0d0d',
+        padding: '20px 28px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: `1px solid ${darkMode ? '#1a2a1a' : '#1a1a1a'}`,
+      }}>
+        {/* Logo — horizontal IC Trading logo on dark bg */}
+        <img
+          src="/ic-trading-logo.png"
+          alt="IC Trading"
+          style={{ height: 32, objectFit: 'contain', display: 'block' }}
+          onError={e => {
+            e.target.style.display = 'none';
+            e.target.nextSibling.style.display = 'flex';
+          }}
+        />
+        {/* CSS fallback if image missing */}
+        <div style={{
+          display: 'none', alignItems: 'center', gap: 6,
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 7, background: '#000',
+            border: `1px solid ${IC_GREEN}44`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <img
+              src="/ic-trading-icon.png"
+              alt=""
+              style={{ width: 26, height: 26, objectFit: 'contain' }}
+              onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:14px;font-weight:900;color:${IC_GREEN};font-style:italic;letter-spacing:-0.5px">ic</span>`; }}
+            />
+          </div>
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>IC Trading</span>
+        </div>
 
-        {/* Top row: category label + badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        {/* Badge */}
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: IC_GREEN,
+          background: `${IC_GREEN}18`, border: `1px solid ${IC_GREEN}40`,
+          padding: '4px 12px', borderRadius: 99, letterSpacing: '0.05em',
+          flexShrink: 0,
+        }}>
+          ✓ {r.badge}
+        </span>
+      </div>
+
+      <div style={{ padding: '22px 28px 28px' }}>
+
+        {/* Category label */}
+        <div style={{ marginBottom: 14 }}>
           <span style={{
             fontSize: 10, fontWeight: 700, color: T.accent,
             letterSpacing: '0.1em', textTransform: 'uppercase',
           }}>
             {r.categoryLabel}
           </span>
-          <span style={{
-            fontSize: 10, fontWeight: 700, color: r.badgeColor,
-            background: `${r.badgeColor}18`, padding: '3px 10px',
-            borderRadius: 99, letterSpacing: '0.05em',
-          }}>
-            ✓ {r.badge}
-          </span>
         </div>
 
-        {/* Logo + name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-          <div style={{
-            width: 50, height: 50, borderRadius: 13, flexShrink: 0,
-            background: darkMode ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.07)',
-            border: '1px solid rgba(37,99,235,0.22)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
-          }}>
-            🏦
-          </div>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: T.txt, letterSpacing: '-0.3px', marginBottom: 3 }}>
-              {r.name}
-            </div>
-            <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>{r.tagline}</div>
-          </div>
-        </div>
+        {/* Tagline */}
+        <p style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 600, color: T.txt, lineHeight: 1.5 }}>
+          {r.tagline}
+        </p>
 
         {/* Divider */}
-        <div style={{ height: 1, background: T.border, marginBottom: 18 }} />
+        <div style={{ height: 1, background: T.border, margin: '16px 0' }} />
 
         {/* Description */}
         <p style={{ margin: '0 0 20px', fontSize: 13, color: T.sub, lineHeight: 1.72 }}>
