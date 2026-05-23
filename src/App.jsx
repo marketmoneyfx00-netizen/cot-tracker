@@ -54,6 +54,7 @@ import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
 import ExportPanel from './components/ExportPanel.jsx';
+import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
 
 
@@ -1745,6 +1746,16 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
           onPress={()=>window.open(TELEGRAM_URL,"_blank")}/>
         <Row icon="📊" label={t.copy} desc={t.copyDesc}
           onPress={()=>window.open(COPYTRADING_URL,"_blank")}/>
+
+        {/* RECURSOS */}
+        <SectionTitle title={lang==="en"?"Recommended Resources":"Recursos Recomendados"}/>
+        <Row icon="🏦"
+          label={lang==="en"?"Recommended Broker":"Broker Recomendado"}
+          desc={lang==="en"?"IC Trading — regulated, stable, trusted":"IC Trading — regulado, estable y de confianza"}
+          onPress={()=>window.open("https://www.ictrading.com?camp=88636","_blank")}/>
+        <Row icon="🔜"
+          label={lang==="en"?"More tools soon":"Más herramientas próximamente"}
+          desc={lang==="en"?"VPS, prop firms, AI tools and more":"VPS, prop firms, herramientas IA y más"}/>
 
         {/* SUPPORT */}
         <SectionTitle title={t.support}/>
@@ -4775,6 +4786,7 @@ if (!authUser || forceResetMode) {
     {id:"historico",  label:"Tabla Histórica"},
     {id:"importar",   label:"🔄 Sync"},
     {id:"exportar",   label:"Exportar"},
+    {id:"recursos",   label:"Recursos"},
     {id:"cuenta",     label:"Ajustes"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
@@ -5537,6 +5549,11 @@ if (!authUser || forceResetMode) {
           isPremium={isPremium}
           onUpgrade={openBilling}
         />
+      )}
+
+      {/* ── TAB: RECURSOS ── */}
+      {mainTab==="recursos"&&(
+        <ResourcesTab darkMode={darkMode} />
       )}
 
       {/* ── TAB 5: AJUSTES ── */}

@@ -5,10 +5,16 @@
  * No external assets or fonts. Designed for browser open + window.print() PDF.
  */
 
-import { generateExecutiveSummary, generatePairNarrative, generateMarketRegimeLabel, generateMacroRegimeNarrative } from './narrativeEngine.js';
+import { generateExecutiveSummary, generatePairNarrative, generateMarketRegimeLabel, generateMacroRegimeNarrative, generateEnrichedAssetReport } from './narrativeEngine.js';
 import { buildCrossAssetContext } from './crossAssetInterpretationEngine.js';
 import { buildLayersArray } from './exportEngine.js';
 import { calculateExecutionScore } from '../intradayExecutionEngine.js';
+import { buildCbCycleProfiles, enrichCarryPairWithCycle } from './cbCycleEngine.js';
+import { buildConvictionProfile, buildPrioritizationMatrix, convictionColor, TIER_COLORS } from './convictionEngine.js';
+import { buildTemporalHorizon, horizonViewColor, horizonShortLabel } from './temporalHorizonEngine.js';
+import { buildFlowPersistence, FLOW_STATE_COLORS } from './flowPersistenceEngine.js';
+import { buildRegimeTransition, buildAssetRegimeTrend, TRANSITION_COLORS } from './regimeTransitionEngine.js';
+import { buildIntermarketStability } from './intermarketStabilityEngine.js';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
@@ -58,11 +64,6 @@ function biasColor(direction) {
   return PALETTE.neutral;
 }
 
-function biasBarWidth(score, maxScore = 5) {
-  if (score == null) return 50;
-  const normalized = ((score + maxScore) / (maxScore * 2)) * 100;
-  return Math.max(2, Math.min(100, normalized));
-}
 
 function execColor(score) {
   if (score == null) return PALETTE.neutral;
@@ -104,10 +105,6 @@ function buildBiasBarChart(biasArr) {
     const dir    = b.bias?.direction ?? b.direction ?? 'neutral';
     const color  = biasColor(dir);
     const y      = 5 + i * (barH + gap);
-    const barPct = biasBarWidth(raw);
-    const fillW  = (barPct / 100) * chartW;
-    const fillX  = labelW + (raw < 0 ? midX - labelW - (chartW / 2 - Math.abs(raw) / 5 * chartW / 2) : chartW / 2);
-
     // Simple left-anchored bar from center
     const bw  = (Math.abs(raw) / 5) * (chartW / 2);
     const bx  = raw >= 0 ? midX : midX - bw;
@@ -302,7 +299,7 @@ function buildMarketTable(biasArr, execMap) {
     const confStr = conf != null ? Math.round(conf) : '—';
 
     const badgeClass = dir === 'bullish' ? 'badge-bull' : dir === 'bearish' ? 'badge-bear' : 'badge-neut';
-    const execClass  = execS != null ? (execS >= 70 ? 'bull' : execS >= 50 ? 'amb' : 'bear') : 'neut';
+    const _execClass = execS != null ? (execS >= 70 ? 'bull' : execS >= 50 ? 'amb' : 'bear') : 'neut'; // reserved for future table styling
     const divClass   = div === 'EXHAUSTION' ? 'amb' : div.includes('DIVERGENCE') ? 'acc' : 'neut';
 
     const barW = Math.round((Math.abs(score) / 5) * 38);
@@ -350,16 +347,392 @@ function buildMarketTable(biasArr, execMap) {
   `;
 }
 
+// ── ASSET CLASS LABEL ─────────────────────────────────────────────────────────
+
+const CAT_META = {
+  fx:          { label: 'FX — Currency Pairs',         icon: '💱', color: '#2563eb', readingType: 'Carry / USD Regime' },
+  index:       { label: 'Equity Indices',               icon: '📈', color: '#22c55e', readingType: 'Risk Appetite' },
+  bonds:       { label: 'Fixed Income — Bond Futures',  icon: '🏛️', color: '#60a5fa', readingType: 'Rate Expectations' },
+  commodities: { label: 'Commodities',                  icon: '🛢️', color: '#f59e0b', readingType: 'Inflation / Demand' },
+};
+
+// Asset-class-specific reading banner (displayed above pair section)
+function buildAssetReadingBanner(cat, biasEntry) {
+  const meta = CAT_META[cat] ?? CAT_META.fx;
+  const dir  = biasEntry?.bias?.direction ?? biasEntry?.direction ?? 'neutral';
+
+  const READINGS = {
+    fx: {
+      bullish: 'Long base currency — Leveraged Money net long, carry-aligned',
+      bearish: 'Short base currency — Leveraged Money net short, carry pressure',
+      neutral: 'No dominant FX directional bias from Leveraged Money',
+    },
+    index: {
+      bullish: 'Risk-On — institutional equity risk appetite expanding',
+      bearish: 'Risk-Off — institutional de-risking in equity futures',
+      neutral: 'Neutral equity positioning — no dominant directional signal',
+    },
+    bonds: {
+      bullish: 'Rate-decline expectation — fixed income accumulation (duration bid)',
+      bearish: 'Rate-rise expectation — bond selling, inflation premium in yields',
+      neutral: 'No dominant rate expectation signal from Leveraged Money',
+    },
+    commodities: {
+      bullish: 'Commodity bid — demand-side confidence or inflation hedge accumulation',
+      bearish: 'Commodity selling — demand softness or disinflation positioning',
+      neutral: 'No dominant commodity directional signal',
+    },
+  };
+
+  const reading = READINGS[cat]?.[dir] ?? 'No signal available';
+  const dirColor = dir === 'bullish' ? PALETTE.bull : dir === 'bearish' ? PALETTE.bear : PALETTE.neutral;
+
+  return `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:${meta.color}14;border:1px solid ${meta.color}30;border-radius:8px;margin-bottom:10px;">
+      <span style="font-size:14px;">${meta.icon}</span>
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${meta.color};text-transform:uppercase;">${meta.readingType}</div>
+        <div style="font-size:11px;color:${dirColor};font-weight:600;">${esc(reading)}</div>
+      </div>
+    </div>
+  `;
+}
+
+// Section header for each asset class group
+function buildAssetGroupHeader(cat) {
+  const meta = CAT_META[cat] ?? { label: cat.toUpperCase(), icon: '📊', color: PALETTE.accent };
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin:28px 0 12px;padding-bottom:10px;border-bottom:2px solid ${meta.color}40;">
+      <span style="font-size:18px;">${meta.icon}</span>
+      <div>
+        <div style="font-size:14px;font-weight:800;color:${PALETTE.txt};letter-spacing:-0.3px;">${esc(meta.label)}</div>
+        <div style="font-size:10px;color:${PALETTE.sub};margin-top:1px;">CFTC Leveraged Money Positioning</div>
+      </div>
+    </div>
+  `;
+}
+
 // ── SECTION: PAIR DETAILS ─────────────────────────────────────────────────────
 
-function buildPairSection(b, pairRow, exec, T) {
+// ── RATES SECTION ─────────────────────────────────────────────────────────────
+
+function buildRatesSection(ratesData) {
+  if (!ratesData?.pairs?.length && !ratesData?.banks) return '';
+
+  const pairs = ratesData.pairs ?? [];
+  const banks = ratesData.banks ?? {};
+
+  const topCarry = [...pairs]
+    .filter(p => p.rate_diff_bps != null)
+    .sort((a, b) => Math.abs(b.rate_diff_bps) - Math.abs(a.rate_diff_bps))
+    .slice(0, 6);
+
+  const carryRows = topCarry.map(p => {
+    const dirColor = p.carry_direction === 'long_base'  ? PALETTE.bull
+                   : p.carry_direction === 'long_quote' ? PALETTE.bear : PALETTE.neutral;
+    const diffStr  = p.rate_diff_bps != null ? (p.rate_diff_bps > 0 ? '+' : '') + p.rate_diff_bps + ' bps' : '—';
+    return `
+      <tr>
+        <td><span style="font-weight:700;font-size:11px;">${esc(p.pair)}</span></td>
+        <td style="font-size:10px;">${esc(p.base_bank)} ${p.base_rate != null ? p.base_rate.toFixed(2) + '%' : ''}</td>
+        <td style="font-size:10px;">${esc(p.quote_bank)} ${p.quote_rate != null ? p.quote_rate.toFixed(2) + '%' : ''}</td>
+        <td class="mono" style="font-size:10px;font-weight:700;color:${p.rate_diff_bps > 0 ? PALETTE.bull : p.rate_diff_bps < 0 ? PALETTE.bear : PALETTE.neutral};">${esc(diffStr)}</td>
+        <td style="font-size:10px;color:${dirColor};font-weight:600;">${esc(p.carry_direction?.replace(/_/g, ' ') ?? '—')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const bankStances = Object.entries(banks).map(([bankId, bk]) => {
+    const sColor = (bk.stanceScore ?? 0) > 0 ? PALETTE.bull
+                 : (bk.stanceScore ?? 0) < 0 ? PALETTE.bear : PALETTE.neutral;
+    return `
+      <div style="background:${PALETTE.card2};border:1px solid ${PALETTE.border};border-radius:8px;padding:10px 14px;min-width:100px;flex:1;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;">${esc(bankId)}</div>
+        <div style="font-size:16px;font-weight:800;color:${PALETTE.txt};margin:4px 0 2px;">${bk.current != null ? bk.current.toFixed(2) + '%' : '—'}</div>
+        <div style="font-size:10px;font-weight:600;color:${sColor};">${esc(bk.stanceLabel ?? '—')}</div>
+        <div style="font-size:9px;color:${PALETTE.sub2};margin-top:2px;">${esc(bk.lastDate ?? '')}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="card">
+      <div class="card-title">Central Bank Rates &amp; Carry Differentials</div>
+      ${bankStances ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${bankStances}</div>
+      ` : ''}
+      ${carryRows ? `
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">TOP CARRY DIFFERENTIALS</div>
+        <table>
+          <thead><tr>
+            <th>Pair</th><th>Base CB / Rate</th><th>Quote CB / Rate</th><th>Diff</th><th>Carry Direction</th>
+          </tr></thead>
+          <tbody>${carryRows}</tbody>
+        </table>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ── CONVICTION BADGE ──────────────────────────────────────────────────────────
+
+function buildConvictionBadge(conviction) {
+  if (!conviction || conviction.conviction_label === 'INSUFFICIENT') return '';
+  const score  = conviction.conviction_score;
+  const label  = conviction.conviction_label;
+  const tier   = conviction.confidence_tier;
+  const color  = convictionColor(label);
+  const tColor = TIER_COLORS[tier] ?? '#6b7280';
+
+  // Mini gauge: filled bar 0-100
+  const barW = Math.max(2, score);
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;">CONVICTION</div>
+      <div style="background:${PALETTE.card2};border-radius:4px;height:8px;width:80px;overflow:hidden;">
+        <div style="height:100%;width:${barW}%;background:${color};border-radius:4px;transition:width 0.3s;"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${color};">${score}/100</span>
+      <span style="font-size:9px;font-weight:700;color:${color};letter-spacing:0.06em;">${label}</span>
+      <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:${tColor}22;color:${tColor};border:1px solid ${tColor}44;">${tier}</span>
+    </div>`;
+}
+
+// ── HORIZON TAGS ──────────────────────────────────────────────────────────────
+
+function buildHorizonTags(horizon) {
+  if (!horizon) return '';
+  const tag = (label, view) => {
+    if (!view) return '';
+    const color = horizonViewColor(view);
+    const short = horizonShortLabel(view);
+    return `<span style="font-size:9px;padding:2px 7px;border-radius:3px;background:${color}22;color:${color};border:1px solid ${color}44;font-weight:600;">${label}: ${esc(short)}</span>`;
+  };
+  return `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px;">
+      ${tag('Tactical', horizon.tactical?.view)}
+      ${tag('Swing',    horizon.swing?.view)}
+      ${tag('Macro',    horizon.macro?.view)}
+    </div>`;
+}
+
+// ── PRIORITY MATRIX SECTION ───────────────────────────────────────────────────
+
+function buildPriorityMatrixSection(matrix) {
+  if (!matrix?.top_opportunities?.length && !matrix?.contrarian_extremes?.length) return '';
+
+  const dirColor = (dir) => dir === 'bullish' ? PALETTE.bull : dir === 'bearish' ? PALETTE.bear : PALETTE.neutral;
+  const dirArr   = (dir) => dir === 'bullish' ? '↑' : dir === 'bearish' ? '↓' : '→';
+
+  const opportunityRow = (a) => `
+    <tr>
+      <td style="font-weight:700;color:${PALETTE.txt};font-size:11px;">${esc(a.pair)}</td>
+      <td style="color:${dirColor(a.direction)};font-weight:700;font-size:10px;">${dirArr(a.direction)} ${esc(a.direction?.toUpperCase())}</td>
+      <td style="color:${convictionColor(a.conviction_label)};font-weight:700;font-size:10px;">${a.conviction_score} — ${esc(a.conviction_label)}</td>
+      <td style="color:${horizonViewColor(a.swing_view)};font-size:10px;">${esc(horizonShortLabel(a.swing_view) ?? '—')}</td>
+      <td style="color:${horizonViewColor(a.macro_view)};font-size:10px;">${esc(horizonShortLabel(a.macro_view) ?? '—')}</td>
+      <td style="color:${PALETTE.sub};font-size:9px;">${esc((a.key_factors ?? []).join(' · '))}</td>
+    </tr>`;
+
+  const topRows = (matrix.top_opportunities ?? []).map(opportunityRow).join('');
+  const crowdedRows = (matrix.crowded_trades ?? []).map(a => `
+    <tr>
+      <td style="font-weight:700;color:${PALETTE.txt};font-size:11px;">${esc(a.pair)}</td>
+      <td style="color:${dirColor(a.direction)};font-weight:700;font-size:10px;">${dirArr(a.direction)} ${esc(a.direction?.toUpperCase())}</td>
+      <td style="color:${PALETTE.amber};font-size:10px;">Z: ${a.zscore > 0 ? '+' : ''}${a.zscore?.toFixed(2) ?? '—'}</td>
+      <td colspan="3" style="color:${PALETTE.bear};font-size:9px;">${esc(a.warning ?? '')}</td>
+    </tr>`).join('');
+
+  return `
+  <div style="background:${PALETTE.card};border:1px solid ${PALETTE.border};border-radius:8px;padding:20px 24px;margin-bottom:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:14px;">
+      DECISION PRIORITY MATRIX
+    </div>
+
+    ${topRows ? `
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">TOP OPPORTUNITIES</div>
+    <table style="font-size:10px;width:100%;margin-bottom:16px;">
+      <thead><tr>
+        <th style="text-align:left;">ASSET</th>
+        <th style="text-align:left;">DIR</th>
+        <th style="text-align:left;">CONVICTION</th>
+        <th style="text-align:left;">SWING</th>
+        <th style="text-align:left;">MACRO</th>
+        <th style="text-align:left;">CONFIRMING FACTORS</th>
+      </tr></thead>
+      <tbody>${topRows}</tbody>
+    </table>` : ''}
+
+    ${crowdedRows ? `
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:8px;">CROWDED / FADE RISK</div>
+    <table style="font-size:10px;width:100%;">
+      <thead><tr>
+        <th style="text-align:left;">ASSET</th>
+        <th style="text-align:left;">DIR</th>
+        <th style="text-align:left;">Z-SCORE</th>
+        <th colspan="3" style="text-align:left;">WARNING</th>
+      </tr></thead>
+      <tbody>${crowdedRows}</tbody>
+    </table>` : ''}
+  </div>`;
+}
+
+// ── SCENARIO / INVALIDATION BLOCK ────────────────────────────────────────────
+
+function buildScenarioBlock(enriched) {
+  if (!enriched) return '';
+  const { scenario_main, scenario_alt, invalidation, conclusion, rates_reading } = enriched;
+  if (!scenario_main && !scenario_alt && !invalidation && !conclusion) return '';
+
+  const row = (label, color, text) => text ? `
+    <div style="display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${color};text-transform:uppercase;white-space:nowrap;min-width:80px;padding-top:2px;">${esc(label)}</div>
+      <div style="font-size:10.5px;color:${PALETTE.txt};line-height:1.55;">${esc(text)}</div>
+    </div>` : '';
+
+  return `
+    <div style="margin-top:18px;border-top:1px solid ${PALETTE.border};padding-top:16px;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:12px;">SCENARIOS &amp; CONCLUSION</div>
+      ${row('Primary', PALETTE.bull, scenario_main)}
+      ${row('Alternative', PALETTE.amber, scenario_alt)}
+      ${row('Invalidation', PALETTE.bear, invalidation)}
+      ${rates_reading ? row('Rates / Carry', PALETTE.purple, rates_reading) : ''}
+      ${conclusion ? `
+        <div style="margin-top:12px;background:${PALETTE.card2};border-left:3px solid ${PALETTE.accent};padding:10px 14px;border-radius:4px;">
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:5px;">OPERATIONAL CONCLUSION</div>
+          <div style="font-size:10.5px;color:${PALETTE.txt};line-height:1.55;">${esc(conclusion)}</div>
+        </div>` : ''}
+    </div>`;
+}
+
+// ── FLOW STATE TAG ─────────────────────────────────────────────────────────────
+
+function buildFlowStateTag(fp) {
+  if (!fp || fp.data_quality === 'insufficient') return '';
+  const color = FLOW_STATE_COLORS[fp.flow_state] ?? PALETTE.neutral;
+  const vel   = fp.positioning_velocity != null
+    ? ` · Vel: ${fp.positioning_velocity > 0 ? '+' : ''}${Math.round(fp.positioning_velocity / 1000)}K`
+    : '';
+  const exh   = fp.exhaustion_probability != null && fp.exhaustion_probability >= 40
+    ? ` · Exhaust: ${fp.exhaustion_probability}%`
+    : '';
+  return `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span style="background:${color}20;border:1px solid ${color};color:${color};border-radius:4px;padding:2px 8px;font-size:9.5px;font-weight:700;letter-spacing:0.05em;">${esc(fp.flow_state_label ?? fp.flow_state)}</span>
+    ${fp.conviction_trend && fp.conviction_trend !== 'UNKNOWN' ? `<span style="color:${PALETTE.sub};font-size:9px;">Conv. Trend: <b style="color:${fp.conviction_trend === 'BUILDING' ? PALETTE.bull : fp.conviction_trend === 'FADING' || fp.conviction_trend === 'REVERSING' ? PALETTE.bear : PALETTE.neutral};">${fp.conviction_trend}</b></span>` : ''}
+    ${fp.structural_strength != null ? `<span style="color:${PALETTE.sub};font-size:9px;">Str. Strength: <b style="color:${fp.structural_strength >= 70 ? PALETTE.bull : fp.structural_strength >= 40 ? PALETTE.amber : PALETTE.bear};">${fp.structural_strength}</b></span>` : ''}
+    <span style="color:${PALETTE.sub2};font-size:9px;font-family:monospace;">${vel}${exh}</span>
+  </div>`;
+}
+
+// ── REGIME TRANSITION SECTION ─────────────────────────────────────────────────
+
+function buildRegimeTransitionSection(regimeTransition) {
+  if (!regimeTransition || regimeTransition.transition_type === 'STABLE') return '';
+
+  const tType  = regimeTransition.transition_type;
+  const tColor = TRANSITION_COLORS[tType] ?? PALETTE.neutral;
+  const vel    = regimeTransition.velocity;
+  const stab   = regimeTransition.stability;
+  const cTrend = regimeTransition.confidence_trend;
+
+  const confirmHtml = (regimeTransition.confirmation_signals ?? []).length
+    ? `<div style="margin-top:12px;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:6px;">CONFIRMATION SIGNALS</div>
+        <ul style="margin:0;padding:0 0 0 14px;list-style:disc;">
+          ${regimeTransition.confirmation_signals.map(s => `<li style="font-size:10.5px;color:${PALETTE.sub};line-height:1.55;margin-bottom:3px;">${esc(s)}</li>`).join('')}
+        </ul>
+      </div>`
+    : '';
+
+  const deterHtml = (regimeTransition.deterioration_signals ?? []).length
+    ? `<div style="margin-top:10px;">
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:6px;">RISK WATCH</div>
+        <ul style="margin:0;padding:0 0 0 14px;list-style:disc;">
+          ${regimeTransition.deterioration_signals.map(s => `<li style="font-size:10.5px;color:${PALETTE.amber};line-height:1.55;margin-bottom:3px;">${esc(s)}</li>`).join('')}
+        </ul>
+      </div>`
+    : '';
+
+  const timeline = regimeTransition.regime_timeline;
+  const emerging = timeline?.emerging;
+
+  return `
+  <div class="card" style="border-left:3px solid ${tColor};">
+    <div class="card-title" style="color:${tColor};">
+      Regime Transition · ${esc(regimeTransition.transition_label)}
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:9px;color:${PALETTE.sub};">Velocity: <b style="color:${vel === 'RAPID' ? PALETTE.bear : vel === 'MODERATE' ? PALETTE.amber : PALETTE.sub};">${esc(vel)}</b></span>
+      <span style="font-size:9px;color:${PALETTE.sub};">Stability: <b style="color:${stab >= 65 ? PALETTE.bull : stab >= 40 ? PALETTE.amber : PALETTE.bear};">${stab}</b>/100</span>
+      <span style="font-size:9px;color:${PALETTE.sub};">Confidence Trend: <b style="color:${cTrend === 'IMPROVING' ? PALETTE.bull : cTrend === 'DETERIORATING' ? PALETTE.bear : PALETTE.neutral};">${esc(cTrend)}</b></span>
+      ${emerging ? `<span style="font-size:9px;color:${PALETTE.sub};">Emerging Regime: <b style="color:${PALETTE.amber};">${esc(emerging)}</b></span>` : ''}
+      <span style="font-size:9px;color:${PALETTE.sub};">Coverage: <b>${esc(regimeTransition.signal_coverage)}</b> (${regimeTransition.available_key_assets} key assets)</span>
+    </div>
+    ${confirmHtml}
+    ${deterHtml}
+    ${timeline?.key_watch ? `
+    <div style="margin-top:12px;background:${PALETTE.card2};border-radius:6px;padding:10px 12px;border-left:2px solid ${PALETTE.accent};">
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:4px;">KEY WATCH</div>
+      <div style="font-size:10.5px;color:${PALETTE.sub};line-height:1.5;">${esc(timeline.key_watch)}</div>
+    </div>` : ''}
+  </div>`;
+}
+
+// ── INTERMARKET STABILITY SECTION ─────────────────────────────────────────────
+
+function buildIntermarketStabilitySection(stability) {
+  if (!stability || stability.available_roles < 2) return '';
+
+  const score    = stability.stability_score;
+  const coh      = stability.regime_coherence;
+  const bkdns    = stability.breakdowns ?? [];
+  const strInt   = stability.structural_integrity;
+  const scoreColor = score >= 70 ? PALETTE.bull : score >= 45 ? PALETTE.amber : PALETTE.bear;
+  const cohColor   = coh === 'HIGH' ? PALETTE.bull : coh === 'MODERATE' ? PALETTE.neutral : coh === 'LOW' ? PALETTE.amber : PALETTE.bear;
+
+  const breakdownHtml = bkdns.length
+    ? bkdns.map(b => {
+        const sevColor = b.severity === 'CRITICAL' ? PALETTE.bear : b.severity === 'SEVERE' ? '#f97316'
+          : b.severity === 'MODERATE' ? PALETTE.amber : PALETTE.sub;
+        return `<div style="margin-bottom:10px;padding:8px 12px;background:${PALETTE.card2};border-radius:6px;border-left:2px solid ${sevColor};">
+          <div style="font-size:9.5px;font-weight:700;color:${sevColor};margin-bottom:3px;">${esc(b.severity)} · ${esc(b.type?.replace(/_/g, ' '))}</div>
+          <div style="font-size:10px;color:${PALETTE.sub};line-height:1.5;">${esc(b.interpretation)}</div>
+        </div>`;
+      }).join('')
+    : `<div style="font-size:10.5px;color:${PALETTE.sub};">No significant cross-asset correlation anomalies detected.</div>`;
+
+  const obsHtml = (stability.observations ?? []).length
+    ? `<div style="margin-top:10px;"><ul style="margin:0;padding:0 0 0 14px;list-style:disc;">${stability.observations.map(o => `<li style="font-size:10.5px;color:${PALETTE.sub};line-height:1.55;margin-bottom:3px;">${esc(o)}</li>`).join('')}</ul></div>`
+    : '';
+
+  return `
+  <div class="card" style="border-left:3px solid ${scoreColor};">
+    <div class="card-title" style="color:${PALETTE.txt};">Intermarket Stability</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Stability Score</div>
+        <div style="font-size:20px;font-weight:800;color:${scoreColor};">${score}<span style="font-size:11px;color:${PALETTE.sub};">/100</span></div></div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Regime Coherence</div>
+        <div style="font-size:14px;font-weight:700;color:${cohColor};">${esc(coh)}</div></div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Structural Integrity</div>
+        <div style="font-size:14px;font-weight:700;color:${strInt >= 70 ? PALETTE.bull : strInt >= 40 ? PALETTE.amber : PALETTE.bear};">${strInt}/100</div></div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Coverage</div>
+        <div style="font-size:14px;font-weight:700;color:${PALETTE.sub};">${esc(stability.signal_coverage)}</div></div>
+    </div>
+    ${bkdns.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">ANOMALY DETECTIONS (${bkdns.length})</div>` : ''}
+    ${breakdownHtml}
+    ${obsHtml}
+  </div>`;
+}
+
+function buildPairSection(b, pairRow, exec, T, cat, enriched, conviction, horizon, flowPersistence) {
   const dir     = b.bias?.direction ?? b.direction ?? 'neutral';
   const score   = round(b.bias?.score ?? b.score, 1) ?? 0;
   const label   = b.bias?.label ?? (dir === 'bullish' ? 'Bullish' : dir === 'bearish' ? 'Bearish' : 'Neutral');
   const badgeClass = dir === 'bullish' ? 'badge-bull' : dir === 'bearish' ? 'badge-bear' : 'badge-neut';
-  const scoreColor = score > 0 ? PALETTE.bull : score < 0 ? PALETTE.bear : PALETTE.neutral;
+  const assetCat = cat ?? pairRow?.cat ?? 'fx';
 
-  const narrative = generatePairNarrative(pairRow, b, exec) || 'No narrative available for this pair.';
+  // Use enriched headline as narrative when available, otherwise fall back to generatePairNarrative
+  const narrative = enriched?.institutional ?? generatePairNarrative(pairRow, b, exec) ?? 'No narrative available for this pair.';
 
   const layers = buildLayersArray(b, pairRow, exec);
 
@@ -400,6 +773,11 @@ function buildPairSection(b, pairRow, exec, T) {
         </div>
       </div>
 
+      ${buildAssetReadingBanner(assetCat, b)}
+      ${buildConvictionBadge(conviction)}
+      ${buildHorizonTags(horizon)}
+      ${buildFlowStateTag(flowPersistence)}
+
       <p class="narrative-text">${esc(narrative)}</p>
 
       <div class="layers-grid">${layerCells}</div>
@@ -415,6 +793,8 @@ function buildPairSection(b, pairRow, exec, T) {
           </table>
         </div>
       ` : ''}
+
+      ${buildScenarioBlock(enriched)}
     </div>
   `;
 }
@@ -428,13 +808,15 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
     riskData,
     snapshotDate,
     cotDate,
-    livePrices  = {},
+    livePrices: _livePrices = {},  // accepted for future price overlays
     riskRegime  = null,
     combinedData = null,
+    ratesData   = null,
   } = opts;
 
   if (!biasArr?.length) return '<html><body><p>No data available.</p></body></html>';
 
+  // fxPairs here may be allPairsArr when cross-asset is active
   const pairMap  = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
   const execMap  = {};
   biasArr.forEach(b => {
@@ -466,13 +848,100 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
 
   const marketTableHTML = buildMarketTable(biasArr, execMap);
 
-  const pairSections = biasArr
-    .map(b => {
-      const pairRow = pairMap[b.pair];
-      if (!pairRow) return '';
-      return buildPairSection(b, pairRow, execMap[b.pair], PALETTE);
-    })
-    .join('');
+  // Group assets by category for structured rendering
+  const getcat = (b) => pairMap[b.pair]?.cat ?? b.cat ?? 'fx';
+  const CATEGORY_ORDER = ['fx', 'index', 'bonds', 'commodities'];
+  const byCategory = {};
+  CATEGORY_ORDER.forEach(c => { byCategory[c] = []; });
+  biasArr.forEach(b => {
+    const cat = getcat(b);
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(b);
+  });
+
+  // Pre-compute CB cycle profiles (used by enriched asset reports and conviction engine)
+  const cycleProfiles = ratesData ? buildCbCycleProfiles(ratesData) : {};
+  const ratesList     = ratesData?.pairs ?? [];
+
+  // Pre-compute enriched narrative reports, conviction profiles, temporal horizons, and flow persistence
+  const enrichedMap       = {};
+  const convictionMap     = {};
+  const horizonMap        = {};
+  const flowPersistenceMap = {};
+  const regimeTrendMap     = {};
+  const decisionAssets    = [];
+
+  biasArr.forEach(b => {
+    const pairRow = pairMap[b.pair];
+    if (!pairRow) return;
+    const exec = execMap[b.pair];
+
+    // Carry conviction for FX pairs
+    const pairKey  = b.pair?.replace('/', '').toUpperCase();
+    const ratesRaw = ratesList.find(r => r.pair?.replace('/', '').toUpperCase() === pairKey);
+    const enrichedRates = ratesRaw && Object.keys(cycleProfiles).length
+      ? enrichCarryPairWithCycle(ratesRaw, cycleProfiles) : ratesRaw ?? null;
+    const carryConviction = enrichedRates?.carry_conviction ?? 'NEUTRAL';
+
+    // Narrative report
+    enrichedMap[b.pair] = generateEnrichedAssetReport(pairRow, b, {
+      exec, riskRegime, macroSignal, ratesData, cycleProfiles, crossAssetCtx,
+    });
+
+    // Conviction + horizon
+    const conviction = buildConvictionProfile(b, pairRow, {
+      riskRegime, cycleProfiles, exec, crossAssetCtx, carryConviction,
+    });
+    const horizon = buildTemporalHorizon(b, pairRow, {
+      exec, riskRegime, cycleProfiles, convictionProfile: conviction,
+    });
+
+    // Flow persistence + regime trend (Phase 3)
+    const flowPersistence = buildFlowPersistence(pairRow, b);
+    const cat = pairRow.cat ?? 'fx';
+    const regimeTrend = buildAssetRegimeTrend(b, flowPersistence, riskRegime, cat);
+
+    convictionMap[b.pair]      = conviction;
+    horizonMap[b.pair]         = horizon;
+    flowPersistenceMap[b.pair] = flowPersistence;
+    regimeTrendMap[b.pair]     = regimeTrend;
+    decisionAssets.push({
+      pair:           b.pair,
+      cat,
+      direction:      b.bias?.direction ?? b.direction ?? 'neutral',
+      conviction,
+      horizon,
+      exec,
+      biasEntry:      b,
+      flowPersistence,
+    });
+  });
+
+  // Cross-asset priority matrix
+  const priorityMatrix = buildPrioritizationMatrix(decisionAssets);
+
+  // Regime transition and intermarket stability (Phase 3)
+  const regimeTransition     = buildRegimeTransition(riskRegime, decisionAssets);
+  const intermarketStability = buildIntermarketStability(riskRegime, biasArr);
+
+  // Build grouped pair sections
+  const groupedPairSections = CATEGORY_ORDER
+    .filter(cat => byCategory[cat].length > 0)
+    .map(cat => {
+      const items = byCategory[cat].map(b => {
+        const pairRow = pairMap[b.pair];
+        if (!pairRow) return '';
+        return buildPairSection(
+          b, pairRow, execMap[b.pair], PALETTE, cat,
+          enrichedMap[b.pair], convictionMap[b.pair], horizonMap[b.pair],
+          flowPersistenceMap[b.pair],
+        );
+      }).join('');
+      return buildAssetGroupHeader(cat) + items;
+    }).join('');
+
+  // Carry / CB rates section (if available)
+  const ratesSection = buildRatesSection(ratesData, riskRegime);
 
   const macroBarItems = [
     { label: 'Macro Signal',   value: macroSignal?.bias?.replace(/_/g, ' ') ?? '—' },
@@ -595,11 +1064,24 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
     ${marketTableHTML}
   </div>
 
-  <!-- PER-PAIR DETAILS -->
+  <!-- DECISION PRIORITY MATRIX -->
+  ${buildPriorityMatrixSection(priorityMatrix)}
+
+  <!-- REGIME TRANSITION ANALYSIS -->
+  ${buildRegimeTransitionSection(regimeTransition)}
+
+  <!-- INTERMARKET STABILITY -->
+  ${buildIntermarketStabilitySection(intermarketStability)}
+
+  <!-- CARRY / RATES SECTION -->
+  ${ratesSection}
+
+  <!-- PER-ASSET DETAILS — GROUPED BY ASSET CLASS -->
   <div class="card" style="padding:20px 22px;">
-    <div class="card-title">Pair-by-Pair Institutional Analysis</div>
+    <div class="card-title">Asset-by-Asset Institutional Analysis</div>
+    <p style="font-size:10.5px;color:${PALETTE.sub};margin:0;">Leveraged Money positioning, bias scores, divergence signals and weekly flow — grouped by asset class.</p>
   </div>
-  ${pairSections}
+  ${groupedPairSections}
 
   <!-- FOOTER -->
   <div class="footer">

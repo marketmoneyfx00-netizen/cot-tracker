@@ -13,8 +13,14 @@ import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
 import { calculateExecutionScore }                  from '../intradayExecutionEngine.js';
 import { generateXLSX }                            from './xlsxExporter.js';
 import { generateHTMLReport }                      from './htmlReportGenerator.js';
+import { buildCbCycleProfiles, derivePolicyCycleRegime, enrichCarryPairWithCycle } from './cbCycleEngine.js';
+import { buildConvictionProfile, buildPrioritizationMatrix } from './convictionEngine.js';
+import { buildTemporalHorizon } from './temporalHorizonEngine.js';
+import { buildFlowPersistence } from './flowPersistenceEngine.js';
+import { buildRegimeTransition, buildAssetRegimeTrend } from './regimeTransitionEngine.js';
+import { buildIntermarketStability } from './intermarketStabilityEngine.js';
 
-export const EXPORT_VERSION = '2.0';
+export const EXPORT_VERSION = '2.3';
 
 // ── INTERNAL UTILS ────────────────────────────────────────────────────────────
 
@@ -428,8 +434,12 @@ export function buildPairExport(pairRow, biasEntry, opts = {}) {
 // ── LEVEL 2: SNAPSHOT EXPORT ──────────────────────────────────────────────────
 
 export function buildSnapshotExport(biasArr, fxPairs, opts = {}) {
-  const { macroSignal, livePrices = {}, sentimentData, riskData } = opts;
-  const pairMap = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
+  const { macroSignal, livePrices = {}, sentimentData, riskData, ratesData, riskRegime } = opts;
+  const pairMap   = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
+  const ratesList = ratesData?.pairs ?? [];
+
+  // Conviction context (lightweight — no cross-asset ctx needed for snapshot)
+  const cycleProfiles = ratesData ? buildCbCycleProfiles(ratesData) : {};
 
   const assets = (biasArr ?? [])
     .filter(Boolean)
@@ -437,7 +447,50 @@ export function buildSnapshotExport(biasArr, fxPairs, opts = {}) {
       const pairRow = pairMap[b.pair];
       if (!pairRow) return null;
       const exec = computeExecution(b, sentimentData, riskData);
-      return buildSummaryRow(pairRow, b, exec, { macroSignal, livePrice: livePrices[b.pair] });
+      const row  = buildSummaryRow(pairRow, b, exec, { macroSignal, livePrice: livePrices[b.pair] });
+      if (!row) return null;
+
+      // Carry conviction for FX
+      const pairKey  = b.pair?.replace('/', '').toUpperCase();
+      const ratesRaw = ratesList.find(r => r.pair?.replace('/', '').toUpperCase() === pairKey);
+      const enriched = ratesRaw && Object.keys(cycleProfiles).length
+        ? enrichCarryPairWithCycle(ratesRaw, cycleProfiles) : ratesRaw ?? null;
+      const carryConviction = enriched?.carry_conviction ?? 'NEUTRAL';
+
+      // Conviction (lightweight — no crossAssetCtx)
+      const conviction = buildConvictionProfile(b, pairRow, {
+        riskRegime, cycleProfiles, exec, carryConviction,
+      });
+
+      // Swing view from temporal horizon (no full opts needed for snapshot)
+      const horizon = buildTemporalHorizon(b, pairRow, {
+        exec, riskRegime, cycleProfiles, convictionProfile: conviction,
+      });
+
+      // Flow persistence (lightweight per-asset)
+      const flowPersistence = buildFlowPersistence(pairRow, b);
+      const regimeTrend     = buildAssetRegimeTrend(b, flowPersistence, riskRegime, pairRow.cat ?? 'fx');
+
+      return {
+        ...row,
+        conviction_score:         conviction.conviction_score,
+        conviction_label:         conviction.conviction_label,
+        confidence_tier:          conviction.confidence_tier,
+        swing_view:               horizon.swing?.view    ?? null,
+        macro_view:               horizon.macro?.view    ?? null,
+        tactical_view:            horizon.tactical?.view ?? null,
+        dominant_horizon:         horizon.dominant_view  ?? null,
+        // Phase 3 additions
+        flow_state:               flowPersistence.flow_state,
+        flow_state_label:         flowPersistence.flow_state_label,
+        persistence_score:        flowPersistence.persistence_score,
+        positioning_velocity:     flowPersistence.positioning_velocity,
+        exhaustion_probability:   flowPersistence.exhaustion_probability,
+        transition_risk:          flowPersistence.transition_risk,
+        structural_strength:      flowPersistence.structural_strength,
+        conviction_trend:         flowPersistence.conviction_trend,
+        regime_trend:             regimeTrend,
+      };
     })
     .filter(Boolean);
 
@@ -450,21 +503,57 @@ export function buildRawExport(biasArr, fxPairs, opts = {}) {
   const {
     macroSignal, ratesData, candleMap = {},
     livePrices = {}, sentimentData, riskData,
+    riskRegime = null,
   } = opts;
 
   const pairMap   = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
   const ratesList = ratesData?.pairs ?? [];
 
-  const assets = (biasArr ?? [])
-    .filter(Boolean)
-    .map(biasEntry => {
-      const pairRow = pairMap[biasEntry.pair];
-      if (!pairRow) return null;
+  // ── CB Cycle enrichment ──────────────────────────────────────────────────────
+  const cycleProfiles     = ratesData ? buildCbCycleProfiles(ratesData) : {};
+  const policyCycleRegime = Object.keys(cycleProfiles).length
+    ? derivePolicyCycleRegime(cycleProfiles)
+    : null;
 
+  // ── Conviction + Horizon pre-pass ────────────────────────────────────────────
+  // Build raw asset list with per-asset conviction and horizon profiles.
+  // Two passes: first compute per-asset conviction, then cross-asset prioritization.
+
+  const assetContexts = (biasArr ?? []).filter(Boolean).map(biasEntry => {
+    const pairRow  = pairMap[biasEntry.pair];
+    if (!pairRow) return null;
+    const exec     = computeExecution(biasEntry, sentimentData, riskData);
+    const pairKey  = biasEntry.pair.replace('/', '').toUpperCase();
+    const ratesRaw = ratesList.find(r => r.pair?.replace('/', '').toUpperCase() === pairKey);
+    const rates    = ratesRaw && Object.keys(cycleProfiles).length
+      ? enrichCarryPairWithCycle(ratesRaw, cycleProfiles) : ratesRaw ?? null;
+    const carryConviction = rates?.carry_conviction ?? 'NEUTRAL';
+    const conviction = buildConvictionProfile(biasEntry, pairRow, {
+      riskRegime, cycleProfiles, exec, carryConviction,
+    });
+    const horizon = buildTemporalHorizon(biasEntry, pairRow, {
+      exec, riskRegime, cycleProfiles, convictionProfile: conviction,
+    });
+    const flowPersistence = buildFlowPersistence(pairRow, biasEntry);
+    const cat = pairRow.cat ?? 'fx';
+    const direction = biasEntry.bias?.direction ?? biasEntry.direction ?? 'neutral';
+    const regimeTrend = buildAssetRegimeTrend(biasEntry, flowPersistence, riskRegime, cat);
+    return {
+      biasEntry, pairRow, exec, rates, conviction, horizon, flowPersistence, regimeTrend,
+      pair: biasEntry.pair, cat, direction,
+    };
+  }).filter(Boolean);
+
+  // Cross-asset prioritization matrix
+  const prioritization = buildPrioritizationMatrix(assetContexts);
+
+  // ── Regime Transition & Intermarket Stability (cross-asset) ─────────────────
+  const regimeTransition = buildRegimeTransition(riskRegime, assetContexts);
+  const intermarketStability = buildIntermarketStability(riskRegime, biasArr);
+
+  // Final per-asset objects
+  const assets = assetContexts.map(({ biasEntry, pairRow, exec, rates, conviction, horizon, flowPersistence, regimeTrend }) => {
       const latest  = pairRow.latest ?? pairRow.weeks?.[0] ?? {};
-      const exec    = computeExecution(biasEntry, sentimentData, riskData);
-      const pairKey = biasEntry.pair.replace('/', '').toUpperCase();
-      const rates   = ratesList.find(r => r.pair?.replace('/', '').toUpperCase() === pairKey);
       const summary = buildSummaryRow(pairRow, biasEntry, exec, { macroSignal, livePrice: livePrices[biasEntry.pair] });
       const layers  = buildLayersArray(biasEntry, pairRow, exec);
 
@@ -522,12 +611,38 @@ export function buildRawExport(biasArr, fxPairs, opts = {}) {
           open_interest:      w.openInterest ?? null,
         })),
 
-        // Rates / carry details
+        // Rates / carry details (enriched with CB cycle when available)
         rates_carry: rates ?? null,
 
         // Price context
         live_price:           livePrices[biasEntry.pair]    ?? null,
         price_candles_count:  (candleMap[biasEntry.pair] ?? []).length,
+
+        // ── Decision Intelligence Layer ───────────────────────────────────────
+        conviction,
+        horizon,
+        flow_persistence: flowPersistence,
+        decision_context: {
+          regime_alignment:         conviction.factors?.macro_regime?.status  ?? 'NEUTRAL',
+          carry_policy_alignment:   conviction.factors?.carry_policy?.status  ?? 'NEUTRAL',
+          cross_asset_confirmation: conviction.factors?.cross_asset?.status   ?? 'NEUTRAL',
+          execution_permission:     exec?.permission?.label ?? 'UNKNOWN',
+          alignment_count:          conviction.alignment_count,
+          conflict_count:           conviction.conflict_count,
+          risk_factors:             conviction.risk_factors,
+          signal_conflicts:         conviction.signal_conflicts,
+          // ── Phase 3 additions ───────────────────────────────────────────────
+          regime_trend:             regimeTrend,
+          conviction_trend:         flowPersistence.conviction_trend,
+          flow_persistence_score:   flowPersistence.persistence_score,
+          positioning_velocity:     flowPersistence.positioning_velocity,
+          positioning_acceleration: flowPersistence.positioning_acceleration,
+          flow_momentum:            flowPersistence.flow_momentum,
+          transition_risk:          flowPersistence.transition_risk,
+          structural_strength:      flowPersistence.structural_strength,
+          exhaustion_probability:   flowPersistence.exhaustion_probability,
+          flow_state:               flowPersistence.flow_state,
+        },
       };
     })
     .filter(Boolean);
@@ -545,8 +660,22 @@ export function buildRawExport(biasArr, fxPairs, opts = {}) {
       ? { fear_greed: sentimentData.fg, vix: sentimentData.vix, high_impact_events: sentimentData.highCount }
       : null,
     rates_meta: ratesData
-      ? { pairs_tracked: ratesList.length }
+      ? {
+          pairs_tracked:    ratesList.length,
+          cb_banks_tracked: Object.keys(cycleProfiles).length,
+        }
       : null,
+
+    // CB rate cycle intelligence
+    cb_cycle_profiles:   Object.keys(cycleProfiles).length ? cycleProfiles   : null,
+    policy_cycle_regime: policyCycleRegime,
+
+    // Decision Intelligence — conviction-ranked opportunity matrix
+    prioritization,
+
+    // ── Phase 3: Dynamic regime & market structure intelligence ───────────────
+    regime_transition:     regimeTransition,
+    intermarket_stability: intermarketStability,
 
     assets_count: assets.length,
     assets,

@@ -841,6 +841,16 @@ export default function ExportPanel({
   const availableFormats  = activeScopeMeta?.formats ?? ['json'];
   const activeFormat      = availableFormats.includes(format) ? format : availableFormats[0];
 
+  // Derive CFTC report date from the most recent week in the effective pairs
+  const cotDate = useMemo(() => {
+    const dates = effectivePairs
+      .map(p => p.latest?.isoDate ?? p.weeks?.[0]?.isoDate)
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    return dates[0] ?? null;
+  }, [effectivePairs]);
+
   const exportOpts = useMemo(() => ({
     macroSignal,
     livePrices:    livePrices ?? {},
@@ -850,7 +860,9 @@ export default function ExportPanel({
     candleMap:     candleMap ?? {},
     riskRegime:    riskRegime    ?? null,
     combinedData:  combinedData  ?? null,
-  }), [macroSignal, livePrices, sentimentData, riskData, ratesData, candleMap, riskRegime, combinedData]);
+    cotDate:       cotDate       ?? null,
+    snapshotDate:  new Date().toISOString().slice(0, 10),
+  }), [macroSignal, livePrices, sentimentData, riskData, ratesData, candleMap, riskRegime, combinedData, cotDate]);
 
   const handleExport = useCallback(() => {
     if (!hasData || status === 'loading') return;

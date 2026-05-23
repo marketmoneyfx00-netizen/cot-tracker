@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 const TELEGRAM_URL = 'https://t.me/COT_TRACKER';
 
@@ -513,6 +513,77 @@ function ExplainStep({ onNext, isMobile }) {
   );
 }
 
+// ── Step 7: Broker ────────────────────────────────────────────────────────────
+const IC_TRADING_URL = 'https://www.ictrading.com?camp=88636';
+
+function BrokerStep({ onNext, isMobile }) {
+  return (
+    <div className="ob-step" style={{ padding: isMobile ? '28px 22px 26px' : '36px 38px 32px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 16, margin: '0 auto 20px',
+          background: 'rgba(37,99,235,0.10)', border: '1px solid rgba(37,99,235,0.22)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+        }}>
+          🏦
+        </div>
+        <h2 style={{
+          margin: '0 0 10px', fontSize: isMobile ? 20 : 22, fontWeight: 800,
+          color: '#e8eaf0', letterSpacing: '-0.35px', lineHeight: 1.25,
+        }}>
+          Opera con un broker fiable
+        </h2>
+        <p style={{
+          margin: 0, fontSize: 14, color: '#8b90a0', lineHeight: 1.65,
+          maxWidth: 360, marginInline: 'auto',
+        }}>
+          Evita intermediarios poco transparentes. Este es el broker que usamos y recomendamos por estabilidad, regulación y variedad de mercados disponibles.
+        </p>
+      </div>
+
+      <div style={{
+        background: 'rgba(255,255,255,0.025)', border: '1px solid #263041',
+        borderRadius: 12, padding: '16px 18px', marginBottom: 22,
+      }}>
+        {[
+          { icon: '🛡️', text: 'Broker regulado internacionalmente' },
+          { icon: '⚡', text: 'Ejecución rápida — Forex, índices, oro, CFDs' },
+          { icon: '📊', text: 'Spreads competitivos con miles de instrumentos' },
+        ].map(({ icon, text }) => (
+          <div key={text} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #1a2230',
+          }}>
+            <span style={{ fontSize: 16, flexShrink: 0, width: 24, textAlign: 'center' }}>{icon}</span>
+            <span style={{ fontSize: 13, color: '#8b90a0' }}>{text}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 16, flexShrink: 0, width: 24, textAlign: 'center' }}>🌐</span>
+          <span style={{ fontSize: 13, color: '#8b90a0' }}>Plataforma reconocida y de confianza en más de 200 países</span>
+        </div>
+      </div>
+
+      <a
+        href={IC_TRADING_URL}
+        id="referalLink"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="ob-btn-pri"
+        style={{ display: 'block', textDecoration: 'none', textAlign: 'center', marginBottom: 0 }}
+        onClick={() => setTimeout(onNext, 120)}
+      >
+        Ver IC Trading →
+      </a>
+      <button className="ob-btn-sec" onClick={onNext}>Continuar</button>
+
+      <p style={{ margin: '14px 0 0', fontSize: 10, color: '#3a404e', textAlign: 'center', lineHeight: 1.6 }}>
+        Enlace de afiliado — sin coste adicional para ti. Solo recomendamos lo que usamos.
+      </p>
+    </div>
+  );
+}
+
 // ── Step 4: Ready ─────────────────────────────────────────────────────────────
 function ReadyStep({ market, onFinish, isMobile }) {
   const m = MARKETS.find(x => x.id === market);
@@ -649,6 +720,10 @@ export default function OnboardingModal({ profile, onComplete }) {
     setStep(6);
   }, []);
 
+  const handleBrokerDone = useCallback(() => {
+    setStep(8);
+  }, []);
+
   const handleError = useCallback((e) => {
     console.error('[OnboardingModal] render error in step', step, e);
     skip();
@@ -666,7 +741,8 @@ export default function OnboardingModal({ profile, onComplete }) {
           {step === 4 && <TradingGoalStep   onNext={handleGoal}            isMobile={isMobile} />}
           {step === 5 && <TelegramStep      onNext={handleTelegramDone}    isMobile={isMobile} profile={profile} />}
           {step === 6 && <ExplainStep       onNext={() => setStep(7)}      isMobile={isMobile} />}
-          {step === 7 && <ReadyStep         market={market} onFinish={finish} isMobile={isMobile} />}
+          {step === 7 && <BrokerStep        onNext={handleBrokerDone}      isMobile={isMobile} />}
+          {step === 8 && <ReadyStep         market={market} onFinish={finish} isMobile={isMobile} />}
         </div>
       </div>
     </OnboardingErrorBoundary>
