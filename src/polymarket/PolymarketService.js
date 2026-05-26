@@ -808,7 +808,7 @@ class PolymarketService {
     try {
       const nextFedSlug = 'fed-rate-cut-june-2025';
       const month       = nextFedSlug.includes('june') ? 'june' : 'july';
-      const res = await fetch(`/api/fed-probability?month=${month}`, {
+      const res = await fetch(`/api/macro?type=fed-probability&month=${month}`, {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
