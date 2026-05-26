@@ -287,7 +287,11 @@ export function calculateGeopoliticalTailRiskPulse(geoMarkets) {
 // 5. MACRO STRESS COMPOSITE (MSC)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MSC_WEIGHTS = { rrc: 0.35, gtrp: 0.30, pui: 0.20, fds: 0.15 };
+const MSC_BASE_WEIGHTS = { rrc: 0.35, gtrp: 0.30, pui: 0.20, fds: 0.15 };
+
+// Confidence → weight multiplier. LOW confidence components contribute less;
+// INSUFFICIENT components are excluded from the composite entirely.
+const CONF_WEIGHT_MULT = { HIGH: 1.0, MEDIUM: 0.80, LOW: 0.50, INSUFFICIENT: 0 };
 
 export function calculateMacroStressComposite(rrc, gtrp, pui, fds, previousMSCValues) {
   const rrcScore  = rrc.value;
@@ -295,21 +299,63 @@ export function calculateMacroStressComposite(rrc, gtrp, pui, fds, previousMSCVa
   const puiScore  = pui.value;
   const fdsScore  = fds ? Math.abs(fds.divergence ?? 0) * 500 : 0;
 
-  const mscRaw =
-    rrcScore  * MSC_WEIGHTS.rrc  +
-    gtrpScore * MSC_WEIGHTS.gtrp +
-    puiScore  * MSC_WEIGHTS.pui  +
-    Math.min(fdsScore, 100) * MSC_WEIGHTS.fds;
+  // Effective weights scaled by confidence so thin-OI components don't
+  // dominate the composite. Renormalized so weights always sum to 1.0.
+  const wRRC  = MSC_BASE_WEIGHTS.rrc  * (CONF_WEIGHT_MULT[rrc.confidence]  ?? 0);
+  const wGTRP = MSC_BASE_WEIGHTS.gtrp * (CONF_WEIGHT_MULT[gtrp.confidence] ?? 0);
+  const wPUI  = MSC_BASE_WEIGHTS.pui  * (CONF_WEIGHT_MULT[pui.confidence]  ?? 0);
+  // FDS confidence is HIGH when OI ≥ 500K, derived inside calculateFedDivergenceSignal
+  const wFDS  = MSC_BASE_WEIGHTS.fds  * (fds ? (CONF_WEIGHT_MULT[fds.confidence] ?? 0) : 0);
+
+  const totalW = wRRC + wGTRP + wPUI + wFDS;
+
+  // If all inputs have INSUFFICIENT confidence, return neutral MSC (no signal)
+  if (totalW === 0) {
+    return {
+      value: 50, components: { rrc: rrcScore, gtrp: gtrpScore, pui: puiScore, fds: 0 },
+      riskCompressionExpansion: 0, ema30d: 50, regime: 'MODERATE',
+      dataQuality: 'INSUFFICIENT',
+      explanation: 'MSC no calculable: todos los inputs tienen confianza insuficiente.',
+      calculatedAt: Date.now(),
+    };
+  }
+
+  const mscRaw = (
+    rrcScore         * wRRC +
+    gtrpScore        * wGTRP +
+    puiScore         * wPUI +
+    Math.min(fdsScore, 100) * wFDS
+  ) / totalW;
 
   const allValues = [...previousMSCValues, mscRaw];
-  const ema30d = ema(allValues.slice(-30), 30);
-  const rce    = mscRaw - ema30d;
+  const ema30d    = ema(allValues.slice(-30), 30);
+  const rce       = mscRaw - ema30d;
 
   const regime =
     mscRaw >= 80 ? 'EXTREME'  :
     mscRaw >= 60 ? 'HIGH'     :
     mscRaw >= 40 ? 'ELEVATED' :
     mscRaw >= 20 ? 'MODERATE' : 'LOW';
+
+  // Determine overall data quality
+  const confOrder = ['INSUFFICIENT', 'LOW', 'MEDIUM', 'HIGH'];
+  const minConf   = [rrc.confidence, gtrp.confidence, pui.confidence]
+    .reduce((min, c) => confOrder.indexOf(c) < confOrder.indexOf(min) ? c : min, 'HIGH');
+
+  // Build explanation object — used by UI tooltips and explainability API
+  const components = {
+    rrc:  Math.round(rrcScore  * (wRRC  / totalW) * 10) / 10,
+    gtrp: Math.round(gtrpScore * (wGTRP / totalW) * 10) / 10,
+    pui:  Math.round(puiScore  * (wPUI  / totalW) * 10) / 10,
+    fds:  Math.round(Math.min(fdsScore, 100) * (wFDS / totalW) * 10) / 10,
+  };
+
+  const dominantComponent = Object.entries(components)
+    .sort(([, a], [, b]) => b - a)[0]?.[0] ?? 'rrc';
+
+  const explanation = _buildMSCExplanation(
+    Math.round(mscRaw), regime, components, dominantComponent, minConf
+  );
 
   return {
     value: Math.round(mscRaw),
@@ -319,11 +365,33 @@ export function calculateMacroStressComposite(rrc, gtrp, pui, fds, previousMSCVa
       pui:  puiScore,
       fds:  Math.min(fdsScore, 100),
     },
+    weightedContributions: components,
     riskCompressionExpansion: Math.round(rce * 10) / 10,
-    ema30d: Math.round(ema30d),
+    ema30d:    Math.round(ema30d),
     regime,
+    dataQuality:       minConf,
+    dominantComponent,
+    explanation,
     calculatedAt: Date.now(),
   };
+}
+
+function _buildMSCExplanation(value, regime, contributions, dominant, quality) {
+  const regimePhrases = {
+    EXTREME:  'Estrés macro extremo',
+    HIGH:     'Estrés macro alto',
+    ELEVATED: 'Estrés macro elevado',
+    MODERATE: 'Estrés macro moderado',
+    LOW:      'Estrés macro bajo',
+  };
+  const dominantLabels = { rrc: 'RRC', gtrp: 'GTRP', pui: 'PUI', fds: 'FDS' };
+  const label = regimePhrases[regime] ?? 'Estrés macro';
+  const dom   = dominantLabels[dominant] ?? dominant.toUpperCase();
+  return (
+    `${label} (MSC=${value}). ` +
+    `Driver principal: ${dom} (${contributions[dominant]}pp). ` +
+    `Calidad de datos: ${quality}.`
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -431,7 +499,165 @@ export function calculateFedDivergenceSignal(polymarketCutMarket, meetingDate, c
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. BIAS MODIFIER (for COT Bias Engine integration — Phase 2)
+// 9. SYSTEM EXPLAINABILITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Generates a structured explanation of the current signal state.
+ * Used by: MacroEventCard tooltips, bias modifier attribution, audit log.
+ *
+ * @param {object} metrics - service._metrics snapshot
+ * @param {string} [instrument] - optional FX pair for modifier-specific explanation
+ * @returns {object} { summary, drivers, suppressors, dataQuality, modifierChain }
+ */
+export function generateSystemExplanation(metrics, instrument) {
+  const { msc, rrc, gtrp, pui, fds, crr, ssi } = metrics;
+
+  const drivers    = [];
+  const suppressors = [];
+
+  // ── RRC contribution ──────────────────────────────────────────────────────
+  if (rrc) {
+    const rrcEntry = {
+      composite: 'RRC',
+      value:     rrc.value,
+      regime:    rrc.regime,
+      confidence: rrc.confidence,
+      delta7d:   rrc.delta7d,
+    };
+    if (rrc.value >= 40) drivers.push(rrcEntry);
+    else suppressors.push({ ...rrcEntry, note: 'Bajo riesgo de recesión' });
+  }
+
+  // ── GTRP contribution ─────────────────────────────────────────────────────
+  if (gtrp) {
+    const gtrpEntry = {
+      composite:  'GTRP',
+      value:      Math.round(gtrp.value * 100),
+      dominantRisk: gtrp.dominantRisk,
+      confidence: gtrp.confidence,
+    };
+    if (gtrp.value >= 0.45) drivers.push(gtrpEntry);
+    else suppressors.push({ ...gtrpEntry, note: 'Riesgo geopolítico contenido' });
+  }
+
+  // ── PUI contribution ──────────────────────────────────────────────────────
+  if (pui) {
+    const puiEntry = {
+      composite:  'PUI',
+      value:      pui.value,
+      nOutcomes:  pui.nOutcomesActive,
+      confidence: pui.confidence,
+    };
+    if (pui.value >= 50) drivers.push(puiEntry);
+    else suppressors.push({ ...puiEntry, note: 'Baja incertidumbre de política' });
+  }
+
+  // ── FDS contribution ──────────────────────────────────────────────────────
+  if (fds?.isSignificant) {
+    drivers.push({
+      composite:   'FDS',
+      divergence:  fds.divergence !== null ? Math.round(fds.divergence * 100) : null,
+      pmPCut:      Math.round(fds.polymarketPCut * 100),
+      cmePCut:     fds.cmePCut !== null ? Math.round(fds.cmePCut * 100) : null,
+      implication: fds.implication,
+      confidence:  fds.confidence,
+    });
+  }
+
+  // ── Crypto layer ──────────────────────────────────────────────────────────
+  if (crr && crr.regime !== 'NEUTRAL' && crr.regime !== 'FAVORABLE') {
+    drivers.push({
+      composite: 'CRR',
+      value:     crr.value,
+      regime:    crr.regime,
+      note:      crr.explanation,
+    });
+  }
+  if (ssi && ssi.value >= 0.05) {
+    drivers.push({
+      composite: 'SSI',
+      value:     Math.round(ssi.value * 100),
+      risk:      ssi.risk,
+      note:      ssi.explanation,
+    });
+  }
+
+  // ── Modifier chain for a specific instrument ──────────────────────────────
+  let modifierChain = null;
+  if (instrument && msc) {
+    modifierChain = _buildModifierChain(instrument, { rrc, gtrp, pui, fds, msc });
+  }
+
+  // ── Overall data quality ──────────────────────────────────────────────────
+  const confOrder = ['INSUFFICIENT', 'LOW', 'MEDIUM', 'HIGH'];
+  const confidences = [rrc?.confidence, gtrp?.confidence, pui?.confidence].filter(Boolean);
+  const dataQuality = confidences.length === 0 ? 'INSUFFICIENT'
+    : confidences.reduce((min, c) =>
+        confOrder.indexOf(c) < confOrder.indexOf(min) ? c : min,
+        'HIGH'
+      );
+
+  return {
+    summary:       msc?.explanation ?? 'Sin datos MSC disponibles.',
+    drivers,
+    suppressors,
+    dataQuality,
+    modifierChain,
+    mscValue:      msc?.value ?? null,
+    mscRegime:     msc?.regime ?? null,
+    generatedAt:   Date.now(),
+  };
+}
+
+function _buildModifierChain(instrument, { rrc, gtrp, pui, fds, msc }) {
+  const instr = instrument.toUpperCase();
+  const steps = [];
+
+  // cotBiasEngine macroConfidence
+  let macroConf = 1.0;
+  const mscVal  = msc?.value ?? null;
+  if (mscVal !== null) {
+    if (mscVal >= 70)      { macroConf = Math.max(0.75, macroConf - 0.20); steps.push(`MSC=${mscVal}≥70 → macroConf×0.75`); }
+    else if (mscVal >= 55) { macroConf = Math.max(0.82, macroConf - 0.12); steps.push(`MSC=${mscVal}≥55 → macroConf×0.82`); }
+    else if (mscVal >= 42) { macroConf = Math.max(0.90, macroConf - 0.05); steps.push(`MSC=${mscVal}≥42 → macroConf×0.90`); }
+  }
+
+  // AUD/NZD/CAD RRC attenuation
+  if (/AUD|NZD|CAD/.test(instr) && rrc) {
+    if (rrc.regime === 'HIGH_RISK' || rrc.regime === 'SEVERE') {
+      macroConf = Math.max(0.75, macroConf - 0.10);
+      steps.push(`RRC=${rrc.regime} + ${instr} risk-sensitive → macroConf-0.10`);
+    }
+  }
+
+  // eventImpactEngine polymarketMod estimate
+  const polyMod = _estimateEventMod(instr, { rrc, gtrp, pui, fds, msc });
+
+  return {
+    instrument: instr,
+    macroConfidence: Math.round(macroConf * 1000) / 1000,
+    modifierSteps: steps,
+    estimatedEventMod: polyMod,
+  };
+}
+
+function _estimateEventMod(instr, { gtrp, pui, fds, msc }) {
+  let mod = 0;
+  const mscVal = msc?.value ?? 0;
+  const puiVal = pui?.value ?? 0;
+
+  if (mscVal >= 65) mod += 10;
+  else if (mscVal >= 50) mod += 5;
+  if (puiVal >= 70) mod += 6;
+  if ((gtrp?.value ?? 0) >= 0.60) mod += 8;
+  if (fds?.isSignificant && Math.abs(fds.divergence ?? 0) >= 0.10) mod += 8;
+
+  return Math.min(15, mod);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. BIAS MODIFIER (for COT Bias Engine integration — Phase 2)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function calculateBiasModifier(instrument, rrc, gtrp, pui, fds) {

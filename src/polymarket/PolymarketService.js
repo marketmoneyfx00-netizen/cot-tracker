@@ -15,6 +15,14 @@ import { QualityFilter }     from './filters/QualityFilter.js';
 import { MarketRegistry }    from './registry/MarketRegistry.js';
 import { NarrativeGenerator } from './narrative/NarrativeGenerator.js';
 import { signalBus }         from './signals/SignalBus.js';
+import { HealthMonitor }     from './health/HealthMonitor.js';
+import { SignalLog }         from './validation/SignalLog.js';
+import { CRYPTO_REGISTRY }   from './crypto/CryptoRegistryData.js';
+import {
+  calculateCryptoRegulatoryRegime,
+  calculateCryptoETFSignal,
+  calculateStablecoinStress,
+} from './crypto/CryptoMetrics.js';
 import {
   calculateConsensusVelocity,
   calculateRecessionRiskComposite,
@@ -24,6 +32,7 @@ import {
   calculateNarrativeTransitionScore,
   calculateFedDivergenceSignal,
   calculateBiasModifier,
+  generateSystemExplanation,
 } from './metrics/MetricEngine.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,14 +44,22 @@ const DEFAULT_CONFIG = {
     batchIntervalMs:          8 * 60 * 60 * 1000,  // 8h
     eventPollingIntervalMs:   15 * 60 * 1000,       // 15 min
     wsReconnectDelayMs:       5_000,
-    maxWsReconnectAttempts:   10,
+    maxWsReconnectAttempts:   8,
+    criticalMarketPollMs:     10 * 60 * 1000,       // 10 min fallback when WS fails
+    batchDebounceMs:          30_000,               // min gap between WS-triggered batch runs
   },
   features: {
-    enableWebSocket:             false, // Phase 1: disabled until token IDs are verified
+    enableWebSocket:             true,  // Phase 3: active for REALTIME_WS markets
     enableManipulationDetection: true,
     enableNarrativeGeneration:   true,
     enableBiasModification:      true,
-    enableCryptoLayer:           false, // Phase 4
+    enableCryptoLayer:           true,  // Phase 4: institutional crypto intelligence
+    enableSignalLog:             true,  // Phase 4: localStorage audit trail
+  },
+  fds: {
+    cacheTtlMs: 60 * 60 * 1000, // 1h cache for CME probability
+    cutSizeBp:  0.25,
+    minDivergenceToSignal: 0.10,
   },
 };
 
@@ -66,11 +83,18 @@ class PolymarketService {
     this._registry     = new MarketRegistry(this._fetcher);
     this._narrativeGen = new NarrativeGenerator(signalBus);
 
-    this._ws                 = null;
-    this._wsReconnectCount   = 0;
-    this._batchTimer         = null;
-    this._eventPollingTimers = new Map();
-    this._initialized        = false;
+    this._ws                    = null;
+    this._wsReconnectCount      = 0;
+    this._wsFallbackTimer       = null;
+    this._batchTimer            = null;
+    this._eventPollingTimers    = new Map();
+    this._initialized           = false;
+    this._fdsCache              = { value: null, fetchedAt: 0 };
+    this._lastBatchAt           = 0;  // for WS-triggered batch dedup
+
+    // Phase 4: health monitor + signal audit log
+    this._health    = new HealthMonitor();
+    this._signalLog = new SignalLog();
 
     // EMA history accumulators (reset on service restart)
     this._rrcEmaHistory = [];
@@ -81,12 +105,16 @@ class PolymarketService {
       rrc:  null,
       gtrp: null,
       msc:  null,
+      // Crypto layer (Phase 4)
       crr:  null,
+      cesi: null,
+      ssi:  null,
       velocities:  new Map(),
       nts:         new Map(),
       pisi:        new Map(),
       fds:         null,
       lastFullRecalculation: 0,
+      lastMarketCount:       0,
     };
   }
 
@@ -99,6 +127,12 @@ class PolymarketService {
     try {
       await this._registry.resolveAll();
       console.info(`[PolymarketService] Registry resolved: ${this._registry.count()} markets`);
+
+      // Phase 4: load crypto intelligence markets if enabled
+      if (this._cfg.features.enableCryptoLayer) {
+        await this._registry.resolveAdditional(CRYPTO_REGISTRY);
+        console.info(`[PolymarketService] Crypto layer active: ${this._registry.count()} total markets`);
+      }
 
       await this._runBatch();
 
@@ -121,20 +155,22 @@ class PolymarketService {
   }
 
   shutdown() {
-    if (this._batchTimer) clearInterval(this._batchTimer);
+    this._initialized = false; // set first so WS onclose doesn't reconnect
+    if (this._batchTimer)     clearInterval(this._batchTimer);
+    if (this._wsFallbackTimer) clearInterval(this._wsFallbackTimer);
     this._eventPollingTimers.forEach(t => clearInterval(t));
     this._eventPollingTimers.clear();
     if (this._ws) {
       this._ws.onclose = null;
       this._ws.close();
     }
-    this._initialized = false;
   }
 
   // ── Batch pipeline ────────────────────────────────────────────────────────
 
   async _runBatch() {
     const start = Date.now();
+    this._lastBatchAt = start;
     console.debug('[PolymarketService] Running batch...');
 
     const markets = this._registry.getAll().filter(m => !m.resolved);
@@ -294,14 +330,54 @@ class PolymarketService {
       this._metrics.nts.set(snapshot.conditionId, nts);
     }
 
+    // ── Crypto intelligence layer (Phase 4) ──────────────────────────────
+    if (this._cfg.features.enableCryptoLayer) {
+      const cryptoRegMarkets = snapshots.filter(s => s.category === 'CRYPTO_REGULATION');
+      const cryptoEtfMarkets = snapshots.filter(s => s.category === 'CRYPTO_ETF');
+      const stablecoinMarkets = snapshots.filter(s => s.category === 'CRYPTO_STABLECOIN');
+
+      // Enrich snapshots with compositeWeight from registry
+      const withWeight = (markets) => markets.map(s => {
+        const reg = this._registry.getBySlug(s.slug);
+        return reg ? { ...s, compositeWeight: reg.compositeWeight, riskReducing: reg.riskReducing } : s;
+      });
+
+      if (cryptoRegMarkets.length > 0) {
+        this._metrics.crr = calculateCryptoRegulatoryRegime(withWeight(cryptoRegMarkets));
+        this._health.recordCompositeUpdate('crr');
+      }
+      if (cryptoEtfMarkets.length > 0) {
+        this._metrics.cesi = calculateCryptoETFSignal(cryptoEtfMarkets);
+        this._health.recordCompositeUpdate('cesi');
+      }
+      if (stablecoinMarkets.length > 0) {
+        this._metrics.ssi = calculateStablecoinStress(stablecoinMarkets);
+        this._health.recordCompositeUpdate('ssi');
+      }
+    }
+
     this._metrics.lastFullRecalculation = Date.now();
+    this._metrics.lastMarketCount       = snapshots.length;
+
+    // ── Health freshness tracking ─────────────────────────────────────────
+    if (this._metrics.rrc)  this._health.recordCompositeUpdate('rrc');
+    if (this._metrics.gtrp) this._health.recordCompositeUpdate('gtrp');
+    if (this._metrics.pui)  this._health.recordCompositeUpdate('pui');
+    if (this._metrics.msc)  this._health.recordCompositeUpdate('msc');
+    if (this._metrics.fds)  this._health.recordCompositeUpdate('fds');
+
+    // ── Signal audit log (Phase 4) ────────────────────────────────────────
+    if (this._cfg.features.enableSignalLog) {
+      this._signalLog.append(this._metrics);
+    }
+
     this._emitCompositeSignals();
   }
 
   // ── Signal emission ───────────────────────────────────────────────────────
 
   _emitCompositeSignals() {
-    const { rrc, gtrp, pui, msc, fds } = this._metrics;
+    const { rrc, gtrp, msc, fds } = this._metrics;
     const CONF_TO_NUM = { HIGH: 1, MEDIUM: 0.7, LOW: 0.4, INSUFFICIENT: 0 };
 
     if (rrc) {
@@ -380,6 +456,39 @@ class PolymarketService {
         });
       }
     });
+
+    // ── Crypto layer signals (Phase 4) ────────────────────────────────────
+    const { crr, ssi } = this._metrics;
+
+    if (crr && crr.confidence !== 'INSUFFICIENT') {
+      signalBus.emit({
+        type:      'CRR_UPDATE',
+        category:  'CRYPTO_REGULATION',
+        value:     crr.value,
+        confidence: CONF_TO_NUM[crr.confidence] ?? 0,
+        direction:  crr.regime === 'HIGH_RISK' || crr.regime === 'UNCERTAIN' ? 'BEARISH' : 'NEUTRAL',
+        magnitude:  crr.regime === 'HIGH_RISK' ? 'HIGH' : crr.regime === 'UNCERTAIN' ? 'MEDIUM' : 'LOW',
+        generatedAt: Date.now(),
+        sources:   [],
+        payload:   { crr },
+        narrative: crr.explanation,
+      });
+    }
+
+    if (ssi && ssi.confidence !== 'INSUFFICIENT' && ssi.value >= 0.05) {
+      signalBus.emit({
+        type:      'MSC_UPDATE', // SSI contributes to macro stress — reuse MSC channel
+        category:  'CRYPTO_STABLECOIN',
+        value:     Math.round(ssi.value * 100),
+        confidence: CONF_TO_NUM[ssi.confidence] ?? 0,
+        direction:  ssi.risk !== 'MINIMAL' ? 'BEARISH' : 'NEUTRAL',
+        magnitude:  ssi.risk === 'SEVERE' ? 'HIGH' : ssi.risk === 'ELEVATED' ? 'MEDIUM' : 'LOW',
+        generatedAt: Date.now(),
+        sources:   [],
+        payload:   { ssi },
+        narrative: ssi.explanation,
+      });
+    }
   }
 
   // ── WebSocket (Phase 3) ───────────────────────────────────────────────────
@@ -397,6 +506,7 @@ class PolymarketService {
 
       this._ws.onopen = () => {
         this._wsReconnectCount = 0;
+        this._health.recordSuccess('polymarket_ws');
         this._ws.send(JSON.stringify({
           assets_ids: tokenIds,
           type: 'market',
@@ -413,13 +523,23 @@ class PolymarketService {
         }
       };
 
-      this._ws.onerror = () => {};
+      this._ws.onerror = (err) => {
+        this._health.recordFailure('polymarket_ws', err instanceof Error ? err : new Error('WS error'));
+      };
 
       this._ws.onclose = () => {
+        if (!this._initialized) return; // Explicit shutdown — no reconnect
         if (this._wsReconnectCount < this._cfg.polling.maxWsReconnectAttempts) {
           this._wsReconnectCount++;
-          const delay = this._cfg.polling.wsReconnectDelayMs * Math.pow(1.5, this._wsReconnectCount);
+          const delay = Math.min(
+            this._cfg.polling.wsReconnectDelayMs * Math.pow(1.5, this._wsReconnectCount),
+            5 * 60 * 1000 // cap at 5 min
+          );
+          console.info(`[PolymarketService] WS reconnect #${this._wsReconnectCount} in ${(delay/1000).toFixed(0)}s`);
           setTimeout(() => this._initWebSocket(), delay);
+        } else {
+          console.warn('[PolymarketService] WS max reconnects reached — activating critical market polling fallback');
+          this._startCriticalMarketPolling();
         }
       };
 
@@ -435,13 +555,42 @@ class PolymarketService {
         if (!market) return;
         const cached = this._cache.getSnapshot(market.conditionId);
         if (cached) {
-          cached.bestBid  = parseFloat(msg.best_bid);
-          cached.bestAsk  = parseFloat(msg.best_ask);
-          cached.spread   = parseFloat(msg.spread);
-          cached.midpoint = (cached.bestBid + cached.bestAsk) / 2;
-          cached.isStale  = false;
+          const prevMidpoint = cached.midpoint ?? 0;
+          cached.bestBid   = parseFloat(msg.best_bid);
+          cached.bestAsk   = parseFloat(msg.best_ask);
+          cached.spread    = parseFloat(msg.spread ?? 0);
+          cached.midpoint  = (cached.bestBid + cached.bestAsk) / 2;
+          cached.isStale   = false;
           cached.fetchedAt = Date.now();
           this._cache.setSnapshot(market.conditionId, cached);
+
+          // Emit CV_ALERT on significant real-time price moves (>= 5pp absolute).
+          // This lets regime/narrative engines react before the next batch.
+          const delta = Math.abs(cached.midpoint - prevMidpoint);
+          if (prevMidpoint > 0 && delta >= 0.05) {
+            const dir = cached.midpoint > prevMidpoint ? 'BULLISH' : 'BEARISH';
+            signalBus.emit({
+              type:       'CV_ALERT',
+              category:   market.category,
+              value:      Math.round(cached.midpoint * 100),
+              confidence: 0.75,
+              direction:  dir,
+              magnitude:  delta >= 0.10 ? 'HIGH' : 'MEDIUM',
+              generatedAt: Date.now(),
+              sources:    [market.conditionId],
+              payload:    { slug: market.slug, prevMidpoint, newMidpoint: cached.midpoint, delta },
+              narrative:  `Repricing en ${market.slug}: ${(delta * 100).toFixed(0)}pp ${dir === 'BULLISH' ? '↑' : '↓'} (tiempo real)`,
+            });
+            // If the move is very large (>= 10pp) on a FED_POLICY or RECESSION market,
+            // trigger a partial metric recalculation immediately.
+            // Debounce: skip if a batch ran within the last 30s to avoid bursts.
+            if (delta >= 0.10 && (market.category === 'FED_POLICY' || market.category === 'RECESSION')) {
+              const now = Date.now();
+              if (now - this._lastBatchAt >= this._cfg.polling.batchDebounceMs) {
+                this._runBatch().catch(() => {});
+              }
+            }
+          }
         }
         break;
       }
@@ -487,6 +636,31 @@ class PolymarketService {
     }
   }
 
+  // ── Critical market polling fallback (when WS max reconnects exceeded) ───────
+  // Polls only REALTIME_WS markets at an elevated frequency as a WS substitute.
+  _startCriticalMarketPolling() {
+    if (this._wsFallbackTimer) return; // already running
+    const criticalMarkets = this._registry.getAll().filter(
+      m => m.refreshStrategy === 'REALTIME_WS' && !m.resolved
+    );
+    if (criticalMarkets.length === 0) return;
+
+    this._wsFallbackTimer = setInterval(async () => {
+      for (const market of criticalMarkets) {
+        const snapshot = await this._fetchAndCacheSnapshot(market);
+        if (snapshot) {
+          const history = this._cache.getPriceHistory(market.conditionId);
+          if (history) {
+            const cv = calculateConsensusVelocity(snapshot, history);
+            this._metrics.velocities.set(snapshot.conditionId, cv);
+          }
+        }
+      }
+    }, this._cfg.polling.criticalMarketPollMs);
+
+    console.info(`[PolymarketService] Critical market polling fallback active — ${criticalMarkets.map(m=>m.slug).join(', ')}`);
+  }
+
   // ── Public API (consumed by adapters) ─────────────────────────────────────
 
   getMetrics() {
@@ -515,13 +689,68 @@ class PolymarketService {
     return this._initialized;
   }
 
+  // ── Phase 4 — Public APIs ─────────────────────────────────────────────────
+
+  /**
+   * Returns a health report: circuit breaker states, composite freshness, warnings.
+   * @returns {object} { isHealthy, breakers, compositeAges, recentWarnings, reportedAt }
+   */
+  getHealth() {
+    return this._health.getHealthReport();
+  }
+
+  /**
+   * Returns the signal audit log instance for query/export.
+   * @returns {import('./validation/SignalLog.js').SignalLog}
+   */
+  getSignalLog() {
+    return this._signalLog;
+  }
+
+  /**
+   * Returns a structured explanation of the current system state.
+   * Includes: MSC drivers, modifier chain for a given instrument, data quality grade.
+   * @param {string} [instrument] - optional FX pair for modifier attribution
+   * @returns {object}
+   */
+  getExplainability(instrument) {
+    return generateSystemExplanation(this._metrics, instrument);
+  }
+
+  /**
+   * Returns crypto layer composites (CRR, CESI, SSI).
+   * Returns null for each composite when crypto layer is disabled or data is unavailable.
+   * @returns {{ crr: object|null, cesi: object|null, ssi: object|null }}
+   */
+  getCryptoMetrics() {
+    return {
+      crr:  this._metrics.crr  ?? null,
+      cesi: this._metrics.cesi ?? null,
+      ssi:  this._metrics.ssi  ?? null,
+    };
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
 
   async _fetchAndCacheSnapshot(market) {
     const cached = this._cache.getSnapshot(market.conditionId);
     if (cached && !this._filter.isStale(cached)) return cached;
 
-    const snapshot = await this._fetcher.fetchSnapshot(market);
+    // Circuit breaker: skip API call if Polymarket is currently failing
+    if (!this._health.isAvailable('polymarket_api')) {
+      console.debug(`[PolymarketService] Circuit OPEN for polymarket_api — skipping ${market.slug}`);
+      return cached ?? null;
+    }
+
+    let snapshot;
+    try {
+      snapshot = await this._fetcher.fetchSnapshot(market);
+      this._health.recordSuccess('polymarket_api');
+    } catch (err) {
+      this._health.recordFailure('polymarket_api', err);
+      return cached ?? null;
+    }
+
     if (!snapshot) return null;
 
     if (this._cfg.features.enableManipulationDetection) {
@@ -561,9 +790,41 @@ class PolymarketService {
     return dist;
   }
 
-  // Phase 1: CME not integrated. Returns null → FDS shows PM side only.
+  // Phase 3: Fetch CME-implied cut probability from /api/fed-probability.
+  // That endpoint derives the probability from 30-day Fed Funds futures (Yahoo Finance).
+  // 1-hour in-service cache to avoid redundant API calls during the same batch cycle.
   async _fetchCMEFedProbability() {
-    return null;
+    const now = Date.now();
+    if (this._fdsCache.value !== null && now - this._fdsCache.fetchedAt < this._cfg.fds.cacheTtlMs) {
+      return this._fdsCache.value;
+    }
+
+    // Circuit breaker: skip if Yahoo Finance is currently failing
+    if (!this._health.isAvailable('yahoo_finance')) {
+      console.debug('[PolymarketService] Circuit OPEN for yahoo_finance — FDS using cached value');
+      return this._fdsCache.value;
+    }
+
+    try {
+      const nextFedSlug = 'fed-rate-cut-june-2025';
+      const month       = nextFedSlug.includes('june') ? 'june' : 'july';
+      const res = await fetch(`/api/fed-probability?month=${month}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (typeof data.probability === 'number' && data.probability >= 0) {
+        this._health.recordSuccess('yahoo_finance');
+        this._fdsCache = { value: data.probability, fetchedAt: now };
+        console.debug(`[PolymarketService] FDS CME probability: ${(data.probability * 100).toFixed(1)}% (${data.source})`);
+        return data.probability;
+      }
+    } catch (err) {
+      this._health.recordFailure('yahoo_finance', err);
+      console.debug('[PolymarketService] FDS fetch failed (non-critical):', err.message);
+    }
+
+    return null; // Graceful degradation: FDS shows Polymarket side only
   }
 }
 

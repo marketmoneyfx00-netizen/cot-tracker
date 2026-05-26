@@ -95,6 +95,12 @@ export class QualityFilter {
     if (/shutdown|debt ceiling|treasury default/.test(text)) return 'FISCAL_DEBT';
     if (/unemployment|nonfarm|nfp|jobs report/.test(text)) return 'EMPLOYMENT';
 
+    // Crypto institutional / regulatory categories
+    if (/crypto regulation|digital assets|crypto bill|stablecoin.leg|fit21/.test(text)) return 'CRYPTO_REGULATION';
+    if (/bitcoin etf|eth etf|ethereum etf|spot bitcoin|etf inflow|etf staking/.test(text)) return 'CRYPTO_ETF';
+    if (/tether|usdt|usdc|stablecoin depeg|depeg/.test(text)) return 'CRYPTO_STABLECOIN';
+    if (/bitcoin strategic reserve|btc reserve/.test(text)) return 'CRYPTO_REGULATION';
+
     return null; // not macro-relevant
   }
 }

@@ -38,4 +38,13 @@ export {
   calculateNarrativeTransitionScore,
   calculateFedDivergenceSignal,
   calculateBiasModifier,
+  generateSystemExplanation,
 } from './metrics/MetricEngine.js';
+
+// Phase 4: crypto intelligence
+export {
+  calculateCryptoRegulatoryRegime,
+  calculateCryptoETFSignal,
+  calculateStablecoinStress,
+  cryptoMacroOverlay,
+} from './crypto/CryptoMetrics.js';

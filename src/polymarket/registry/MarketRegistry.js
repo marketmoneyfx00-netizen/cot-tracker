@@ -118,6 +118,23 @@ export class MarketRegistry {
     }
   }
 
+  /**
+   * Resolve and register an additional batch of market definitions.
+   * Used by PolymarketService to add crypto markets when enableCryptoLayer is true.
+   * Markets that fail to resolve are silently skipped.
+   * @param {object[]} markets - array of market definitions (same shape as INITIAL_REGISTRY)
+   */
+  async resolveAdditional(markets) {
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < markets.length; i += BATCH_SIZE) {
+      const batch = markets.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(batch.map(m => this._resolveOne(m)));
+      if (i + BATCH_SIZE < markets.length) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+  }
+
   // Temporarily add a market discovered via WebSocket new_market event
   addTemporary(market) {
     this._markets.set(market.slug, { ...market, resolved: false });
