@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react';
+import { usePolymarketContext } from '../polymarket/hooks/usePolymarketContext.js';
 
 // ─── HELPERS LOCALES (autocontenidos, no duplican App.jsx) ────────────────────
 
@@ -145,7 +146,7 @@ function getRegime(type, actual, consensus) {
         : { label: 'RECESIÓN', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', icon: '🔴',
             desc: 'Señal de desaceleración — puede aumentar expectativas de recortes' };
 
-    case 'PMI':
+    case 'PMI': {
       const v = parseVal(actual);
       if (v !== null) {
         if (v >= 55) return { label: 'EXPANSIÓN FUERTE', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: '🟢', desc: `PMI ${v}: crecimiento sólido` };
@@ -156,6 +157,7 @@ function getRegime(type, actual, consensus) {
       return good
         ? { label: 'GROWTH', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: '🟢', desc: 'PMI por encima del consenso' }
         : { label: 'CONTRACCIÓN', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', icon: '🔴', desc: 'PMI por debajo del consenso' };
+    }
 
     default:
       return good
@@ -226,7 +228,7 @@ function Sparkline({ values, color, blocked, height = 44 }) {
           cx={p.x} cy={p.y} r={8}
           fill="transparent"
           style={{ cursor: 'default' }}
-          onMouseEnter={e => setTooltip({ x: p.x, y: p.y, v: p.v, i })}
+          onMouseEnter={() => setTooltip({ x: p.x, y: p.y, v: p.v, i })}
         />
       ))}
 
@@ -297,12 +299,13 @@ function DeltaPill({ actual, previous, inverted = false }) {
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 
 export default function MacroEventCard({ event, finalDecision, darkMode, T, isMobile }) {
+  // Polymarket macro context — must be called unconditionally (rules of hooks).
+  const polyCtx = usePolymarketContext();
+
   // ── Null guard — si no hay evento publicado, no renderizar nada ─────────────
   if (!event) return null;
 
-  const isMacroBlocked  = finalDecision?.isMacroBlocked ?? false;
-  const allowExecution  = finalDecision?.allowExecution ?? true;
-  const verdict         = finalDecision?.verdict ?? 'EXECUTE';
+  const isMacroBlocked = finalDecision?.isMacroBlocked ?? false;
 
   const actualVal = event.actual ?? event.result ?? event.value;
   const estimate  = event.estimate ?? event.forecast ?? event.consensus;
@@ -311,22 +314,55 @@ export default function MacroEventCard({ event, finalDecision, darkMode, T, isMo
   const hasActual = actualVal !== null && actualVal !== undefined &&
                     String(actualVal).trim() !== '' && String(actualVal) !== 'null';
 
-  // Si no hay dato publicado — fallback visual mínimo
+  // Si no hay dato publicado — fallback visual con contexto pre-evento
   if (!hasActual) {
+    // Derive macro context badge from Polymarket composites (if available)
+    const mscVal  = polyCtx.msc?.value  ?? null;
+    const rrcVal  = polyCtx.rrc?.value  ?? null;
+    const rrcReg  = polyCtx.rrc?.regime ?? null;
+    const gtrpVal = polyCtx.gtrp?.value ?? null;
+
+    let macroLine = null;
+    if (polyCtx.isLoaded) {
+      if (typeof mscVal === 'number' && mscVal >= 65) {
+        macroLine = { text: `Estrés macro elevado (MSC ${mscVal})`, color: '#ef4444' };
+      } else if (rrcReg === 'HIGH_RISK' || rrcReg === 'SEVERE') {
+        macroLine = { text: `Riesgo de recesión en precio (RRC ${Math.round(rrcVal ?? 0)})`, color: '#f97316' };
+      } else if (typeof gtrpVal === 'number' && gtrpVal >= 0.60) {
+        macroLine = { text: `Riesgo geopolítico de cola elevado`, color: '#f59e0b' };
+      } else if (typeof mscVal === 'number' && mscVal >= 48) {
+        macroLine = { text: `Sensibilidad macro moderada`, color: '#f59e0b' };
+      }
+    }
+
     return (
       <div style={{
         background: T.card, border: `1px solid ${T.border}`,
         borderRadius: 14, padding: '20px',
-        display: 'flex', alignItems: 'center', gap: 10,
+        display: 'flex', alignItems: 'flex-start', gap: 10,
       }}>
-        <span style={{ fontSize: 20 }}>⏳</span>
-        <div>
+        <span style={{ fontSize: 20, flexShrink: 0 }}>⏳</span>
+        <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.sub }}>
             Sin datos macro publicados disponibles
           </div>
           <div style={{ fontSize: 11, color: T.sub2, marginTop: 2 }}>
             Los datos aparecerán cuando se publiquen en el calendario económico
           </div>
+          {macroLine && (
+            <div style={{
+              marginTop: 10,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 99,
+              background: macroLine.color + '14',
+              border: `1px solid ${macroLine.color}30`,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: macroLine.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: macroLine.color, letterSpacing: '0.03em' }}>
+                {macroLine.text}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     );

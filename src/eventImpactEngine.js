@@ -1,3 +1,5 @@
+import { polymarketService } from './polymarket/index.js';
+
 /**
  * eventImpactEngine.js — Dynamic Macro Event Impact Engine
  *
@@ -252,6 +254,69 @@ function computeClusterMod(ev, allEvents, catSens) {
   return { mod: 0, reasons: [] };
 }
 
+// ── MODIFIER 5: Polymarket macro stress (0–15) ────────────────────────────────
+// Amplifies policy-sensitive events when Polymarket's global composites signal
+// elevated macro stress, policy uncertainty, or geopolitical tail risk.
+// Uses always-available global metrics (MSC, PUI, GTRP, FDS) — never blocks.
+const POLYMARKET_CATS = new Set(['central_bank', 'inflation', 'employment', 'speech', 'bonds', 'geopolitical']);
+
+function computePolymarketMod(cat, catSens) {
+  if (!POLYMARKET_CATS.has(cat)) return { mod: 0, reasons: [] };
+  try {
+    if (!polymarketService.isReady()) return { mod: 0, reasons: [] };
+    const m = polymarketService.getMetrics();
+    if (!m) return { mod: 0, reasons: [] };
+
+    const mscVal  = m.msc?.value  ?? null;
+    const puiVal  = m.pui?.value  ?? null;
+    const gtrpVal = m.gtrp?.value ?? null;
+    const fds     = m.fds;
+
+    const reasons = [];
+    let rawMod = 0;
+
+    // Elevated macro stress amplifies policy-data events.
+    // When the crowd is pricing high systemic risk, each CB/inflation print
+    // carries outsized potential to reprice rate expectations.
+    if ((cat === 'central_bank' || cat === 'inflation' || cat === 'employment') && typeof mscVal === 'number') {
+      if (mscVal >= 65) {
+        rawMod += 10;
+        reasons.push(`Estrés macro sistémico elevado — mayor sensibilidad a datos de política`);
+      } else if (mscVal >= 50) {
+        rawMod += 5;
+        reasons.push(`Ambiente macro tenso — sensibilidad a publicaciones de política aumentada`);
+      }
+    }
+
+    // High policy uncertainty → each CB/speech event is a potential resolution point.
+    if ((cat === 'central_bank' || cat === 'speech') && typeof puiVal === 'number' && puiVal >= 70) {
+      rawMod += 6;
+      reasons.push(`Alta incertidumbre de política monetaria en mercados de predicción`);
+    }
+
+    // Geopolitical tail-risk amplifies geopolitical events specifically.
+    if (cat === 'geopolitical' && typeof gtrpVal === 'number' && gtrpVal >= 0.60) {
+      rawMod += 8;
+      reasons.push(`Riesgo geopolítico de cola elevado (GTRP ${(gtrpVal * 100).toFixed(0)}%)`);
+    }
+
+    // Active Fed divergence signal boosts CB events (null in Phase 1 — future hook).
+    if (cat === 'central_bank' && fds && typeof fds.divergence === 'number' && Math.abs(fds.divergence) >= 10) {
+      rawMod += 8;
+      reasons.push(`Divergencia de expectativas Fed activa`);
+    }
+
+    if (rawMod === 0) return { mod: 0, reasons: [] };
+
+    // Use catSens.policy as the category-level sensitivity weight (0–1).
+    // Consistent with how the existing policy modifier scales.
+    const mod = Math.min(15, Math.round(rawMod * catSens.policy));
+    return { mod, reasons };
+  } catch {
+    return { mod: 0, reasons: [] };
+  }
+}
+
 // ── Label + color ─────────────────────────────────────────────────────────────
 function getLabel(stars) {
   if (stars === 4) return { label: 'Institucional', color: '#a855f7' };
@@ -303,9 +368,10 @@ export function computeContextualImpact(ev, marketContext = {}) {
   const { mod: volMod, reasons: volR } = computeVolatilityMod(liveVix, cat, catSens);
   const { mod: polMod, reasons: polR } = computePolicyMod(ccy, biasArr, macroSignal, cat, catSens);
   const { mod: clsMod, reasons: clsR } = computeClusterMod(ev, allEvents, catSens);
+  const { mod: plyMod, reasons: plyR } = computePolymarketMod(cat, catSens);
 
   const finalImpactScore = Math.min(100, Math.max(0,
-    baseScore + posMod + volMod + polMod + clsMod,
+    baseScore + posMod + volMod + polMod + clsMod + plyMod,
   ));
 
   const stars = finalImpactScore >= 76 ? 4
@@ -322,7 +388,7 @@ export function computeContextualImpact(ev, marketContext = {}) {
 
   const { label, color } = getLabel(stars);
 
-  const contextualReasons = [...posR, ...volR, ...polR, ...clsR];
+  const contextualReasons = [...posR, ...volR, ...polR, ...clsR, ...plyR];
 
   // Single-line explanation: first contextual reason, or dynamic label from backend
   const explanation = contextualReasons.length > 0
@@ -332,7 +398,8 @@ export function computeContextualImpact(ev, marketContext = {}) {
   // Confidence in the contextual assessment
   const ctxSignals = (biasArr.length > 0 ? 1 : 0)
                    + (liveVix !== null ? 1 : 0)
-                   + (macroSignal !== null ? 1 : 0);
+                   + (macroSignal !== null ? 1 : 0)
+                   + (plyMod > 0 ? 1 : 0);
   const confidence = ctxSignals >= 3 ? 'high' : ctxSignals >= 1 ? 'medium' : 'low';
 
   return {
@@ -341,6 +408,7 @@ export function computeContextualImpact(ev, marketContext = {}) {
     volatilityMod:   volMod,
     policyMod:       polMod,
     clusterMod:      clsMod,
+    polymarketMod:   plyMod,
     finalImpactScore,
     stars,
     isContextualBoost,

@@ -1,3 +1,5 @@
+import { polymarketService } from './polymarket/index.js';
+
 /**
  * narrativeEngine.js — Narrative Intelligence Layer
  *
@@ -10,6 +12,44 @@
  *   - Avoids imperative "buy/sell" language — always contextual
  *   - Sounds like a macro desk, not a signal service
  */
+
+// ── Polymarket macro context reader (Phase 2) ─────────────────────────────────
+function _getPolyCtx() {
+  try {
+    if (!polymarketService.isReady()) return null;
+    const m = polymarketService.getMetrics();
+    if (!m) return null;
+    return {
+      mscValue:  m.msc?.value  ?? null,
+      rrcRegime: m.rrc?.regime ?? null,
+      gtrpValue: m.gtrp?.value ?? null,
+      puiValue:  m.pui?.value  ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Returns a one-sentence macro context suffix, or null if signals aren't significant.
+// Principle: only speak when Polymarket adds real context not visible in COT/price alone.
+function _buildMacroSuffix(ctx) {
+  if (!ctx) return null;
+  const { mscValue, rrcRegime, gtrpValue, puiValue } = ctx;
+
+  if (rrcRegime === 'SEVERE' || (typeof mscValue === 'number' && mscValue >= 70)) {
+    return 'Forward-looking market probabilities indicate severe macro stress — institutional positioning reliability may be reduced as defensive flows dominate.';
+  }
+  if (rrcRegime === 'HIGH_RISK' || (typeof mscValue === 'number' && mscValue >= 55)) {
+    return 'Prediction market pricing reflects building macro stress — monitor subsequent COT reports for early institutional de-risking signals.';
+  }
+  if (typeof gtrpValue === 'number' && gtrpValue >= 0.65) {
+    return 'Geopolitical tail-risk pricing remains elevated in crowd-derived markets — safe-haven demand may persist beyond what COT positioning alone indicates.';
+  }
+  if (typeof puiValue === 'number' && puiValue >= 75) {
+    return 'Policy path uncertainty is elevated in forward-looking markets — directional COT signals should be weighted against a wider-than-normal range of macro outcomes.';
+  }
+  return null;
+}
 
 // ── Bias descriptors ─────────────────────────────────────────────────────────
 
@@ -80,7 +120,6 @@ export function buildNarrative({
   tacState,
   conflictLevel,
   executionReadiness,
-  marketRegime,
 }) {
   const biasKey  = getBiasKey(biasScore);
   const biasDesc = BIAS_TEXT[biasKey];
@@ -167,6 +206,12 @@ export function buildNarrative({
   } else {
     invalidation = 'Neutral context — no invalidation applies until a directional thesis is established.';
   }
+
+  // ── Phase 2: Polymarket macro context suffix ──────────────────────────────────
+  // Appended to `context` when Polymarket signals are significant enough to add
+  // interpretive value not already captured by COT + tactical state.
+  const macroSuffix = _buildMacroSuffix(_getPolyCtx());
+  if (macroSuffix) context = context + ' ' + macroSuffix;
 
   return { primary, context, execution, invalidation };
 }

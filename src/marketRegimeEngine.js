@@ -1,3 +1,5 @@
+import { polymarketService } from './polymarket/index.js';
+
 /**
  * marketRegimeEngine.js — Market Regime Detection Layer
  *
@@ -9,6 +11,26 @@
  *
  * Regime is NOT a trading signal. It is interpretive context.
  */
+
+// ── Polymarket forward-looking context reader (Phase 2) ───────────────────────
+// Reads MSC, RRC, GTRP, PUI from polymarketService synchronously.
+// Returns null if service is not ready — enables graceful degradation.
+function _getPolymarketCtx() {
+  try {
+    if (!polymarketService.isReady()) return null;
+    const m = polymarketService.getMetrics();
+    if (!m) return null;
+    return {
+      mscValue:   m.msc?.value  ?? null,
+      rrcRegime:  m.rrc?.regime ?? null,
+      rrcValue:   m.rrc?.value  ?? null,
+      gtrpValue:  m.gtrp?.value ?? null,
+      puiValue:   m.pui?.value  ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const REGIME_CONFIG = {
   risk_on: {
@@ -131,6 +153,40 @@ export function computeMarketRegime(tacStateMap, biasArr, macroSignal) {
     if (strongBias >= 2) {
       regime     = 'macro_expansion';
       confidence = Math.min(78, 50 + strongBias * 8);
+    }
+  }
+
+  // ── Phase 2: Polymarket forward-looking adjustments (conservative, graceful) ──
+  const polyCtx = _getPolymarketCtx();
+  if (polyCtx) {
+    const { mscValue, rrcRegime, gtrpValue, puiValue } = polyCtx;
+    const highStress     = typeof mscValue  === 'number' && mscValue  >= 65;
+    const recessionary   = rrcRegime === 'HIGH_RISK' || rrcRegime === 'SEVERE';
+    const highGeo        = typeof gtrpValue === 'number' && gtrpValue >= 0.65;
+    const highUncertain  = typeof puiValue  === 'number' && puiValue  >= 75;
+
+    // Elevate to risk_off when Polymarket signals building stress that the
+    // tactical state map hasn't yet reflected (breakdowns not yet manifested).
+    if ((regime === 'macro_uncertainty' || regime === 'compression') && highStress && recessionary) {
+      regime     = 'risk_off';
+      confidence = Math.min(72, confidence + 18);
+    }
+
+    // Geopolitical tail-risk can sustain risk_off even when tactical states are mixed.
+    if (regime === 'macro_uncertainty' && highGeo) {
+      regime     = 'risk_off';
+      confidence = Math.min(68, confidence + 12);
+    }
+
+    // Attenuate confidence in trending/expansion regimes when crowd uncertainty is extreme.
+    // High PUI = prediction markets are split on policy path → trending label is premature.
+    if ((regime === 'trending' || regime === 'macro_expansion') && highUncertain) {
+      confidence = Math.max(30, confidence - 18);
+    }
+
+    // Confirm existing regime when Polymarket stress direction aligns (boost confidence only).
+    if (highStress && (regime === 'risk_off' || regime === 'high_volatility')) {
+      confidence = Math.min(90, confidence + 8);
     }
   }
 

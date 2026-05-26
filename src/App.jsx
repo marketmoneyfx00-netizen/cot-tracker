@@ -53,6 +53,7 @@ import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
 import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
+import { usePolymarketEventMonitor } from './polymarket/hooks/usePolymarketEventMonitor.js';
 import ExportPanel from './components/ExportPanel.jsx';
 import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
@@ -2558,6 +2559,9 @@ function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
   const [lastFetchTime, setLastFetchTime] = useState(null);
   const [emptyReason,   setEmptyReason]   = useState(null);
   const [watchdogActive, setWatchdogActive] = useState(false);
+
+  // Pre-event Polymarket monitoring: auto-activates polling for upcoming high-impact US events.
+  usePolymarketEventMonitor(events);
 
   // Enrich every event with contextual impact score — recomputes when
   // events, COT data (biasArr), macro signal, or VIX change.

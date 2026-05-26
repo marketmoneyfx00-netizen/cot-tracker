@@ -1,3 +1,5 @@
+import { polymarketService } from './polymarket/index.js';
+
 /**
  * cotBiasEngine.js — Institutional Bias Engine
  *
@@ -101,6 +103,50 @@ function scoreDealers(extreme) {
   if (v === 'short') return -1;
   if (v === 'long')  return  1;
   return 0;
+}
+
+// ─── POLYMARKET MACRO CONFIDENCE (Phase 2) ───────────────────────────────────
+// Reads MSC and RRC from polymarketService (if ready) to derive a macroConfidence
+// multiplier in [0.75, 1.0]. Conservative: never zeros the COT signal, never
+// inverts direction. Returns 1.0 (no adjustment) when Polymarket is unavailable.
+function _computePolymarketConf(pair) {
+  try {
+    if (!polymarketService.isReady()) return 1.0;
+    const m = polymarketService.getMetrics();
+    if (!m) return 1.0;
+
+    const mscVal = m.msc?.value ?? null;
+    const rrcVal = m.rrc?.value ?? null;
+    const rrcRegime = m.rrc?.regime ?? null;
+
+    let conf = 1.0;
+
+    // MSC-based attenuation: elevated macro stress reduces COT predictive weight.
+    // High-stress regimes cause institutional positioning to reflect defensive flow
+    // rather than directional conviction — COT signals become noisier.
+    if (typeof mscVal === 'number') {
+      if (mscVal >= 70)      conf = Math.max(0.75, conf - 0.20);
+      else if (mscVal >= 55) conf = Math.max(0.82, conf - 0.12);
+      else if (mscVal >= 42) conf = Math.max(0.90, conf - 0.05);
+    }
+
+    // RRC-based adjustment for risk-sensitive FX pairs (AUD, NZD, CAD).
+    // Recession risk building → their COT signals carry less structural conviction.
+    if (typeof rrcVal === 'number' && pair) {
+      const isRiskSensitive = /AUD|NZD|CAD/.test(pair);
+      if (isRiskSensitive) {
+        if (rrcRegime === 'HIGH_RISK' || rrcRegime === 'SEVERE') {
+          conf = Math.max(0.75, conf - 0.10);
+        } else if (rrcRegime === 'ELEVATED') {
+          conf = Math.max(0.82, conf - 0.05);
+        }
+      }
+    }
+
+    return parseFloat(conf.toFixed(3));
+  } catch {
+    return 1.0;
+  }
 }
 
 // ─── LABEL MAP ────────────────────────────────────────────────────────────────
@@ -280,7 +326,7 @@ export function calculateInstitutionalBiasV2(data = {}) {
         weightsApplied:   V2_WEIGHTS,
       },
     };
-  } catch (_err) {
+  } catch {
     // Any unexpected error → silent fallback to V1
     return calculateBiasScore(data);
   }
@@ -352,7 +398,7 @@ export function calculateBiasScore(data = {}) {
       return _v1();
     }
     return v2Result;
-  } catch (_err) {
+  } catch {
     return _v1();
   }
 }
@@ -465,6 +511,7 @@ export function deriveInputsFromPair(pairData, realPriceChangePct = null) {
     positionPercentile,
     assetManagersChange,
     dealersExtreme,
+    macroConfidence: _computePolymarketConf(pairData?.pair),
   };
 }
 
