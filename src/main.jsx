@@ -1,5 +1,6 @@
 import './index.css';
 import { StrictMode, Component } from 'react';
+import { polymarketService } from './polymarket/index.js';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import AuthCallback from './pages/AuthCallback.jsx';
@@ -66,3 +67,10 @@ createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
   </StrictMode>
 );
+
+// Initialize Polymarket intelligence layer in background (non-blocking, non-critical)
+if (!isCallback) {
+  polymarketService.initialize().catch(err =>
+    console.warn('[Polymarket] Init failed (non-critical):', err.message)
+  );
+}
