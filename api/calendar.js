@@ -166,6 +166,8 @@ function nn(n) {
   s = s.replace(/\bppi\b/g, 'producer price index');
   s = s.replace(/\bnfp\b/g, 'nonfarm payrolls');
   s = s.replace(/\bgdp\b/g, 'gross domestic product');
+  s = s.replace(/\bhpi\b/g, 'housing price index');
+  s = s.replace(/\bpmi\b/g, 'purchasing managers index');
   // 'CPI ex Food & Energy' and 'Core CPI' are the same concept
   s = s.replace(/consumer price index ex food.{0,14}energy/gi, 'core consumer price index');
   s = s.replace(/headline consumer price index/gi, 'consumer price index');
@@ -348,17 +350,30 @@ function normRapidAPI(ev, keepTime = false) {
 
 // ── FUENTE 3: FXStreet scrape (fallback) ─────────────────────────────────────
 async function fetchFXStreet(from, to) {
-  const fromDT = `${from}T00:00:00Z`, toDT = `${to}T23:59:59Z`;
+  const fromDT = `${from}T00:00:00.000Z`, toDT = `${to}T23:59:59.999Z`;
   const eps = [
-    { url:`https://calendar.fxstreet.com/EventDateProvider/GetEventsByDate?dateFrom=${fromDT}&dateTo=${toDT}&timezone=UTC`, hdr:{'Accept':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.fxstreet.com/economic-calendar','Origin':'https://www.fxstreet.com'} },
-    { url:`https://app-data-cache.fxstreet.com/calendar/events?dateFrom=${fromDT}&dateTo=${toDT}`,                          hdr:{'Accept':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.fxstreet.com/'} },
+    // Primary: FXStreet v2 calendar API
+    {
+      url: `https://calendar.fxstreet.com/api/v2/events?dateFrom=${fromDT}&dateTo=${toDT}&timezone=UTC&countries=US,GB,EU,JP,CA,AU,NZ,CH,CN`,
+      hdr: { 'Accept':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.fxstreet.com/economic-calendar','Origin':'https://www.fxstreet.com' },
+    },
+    // Fallback A: FXStreet CDN cache endpoint
+    {
+      url: `https://calendar.fxstreet.com/api/v1/calendar/events?dateFrom=${fromDT}&dateTo=${toDT}&timezone=UTC`,
+      hdr: { 'Accept':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.fxstreet.com/' },
+    },
+    // Fallback B: legacy endpoint (may 404 if deprecated)
+    {
+      url: `https://calendar.fxstreet.com/EventDateProvider/GetEventsByDate?dateFrom=${fromDT}&dateTo=${toDT}&timezone=UTC`,
+      hdr: { 'Accept':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.fxstreet.com/economic-calendar','Origin':'https://www.fxstreet.com' },
+    },
   ];
   for (const ep of eps) {
     try {
-      const r = await fetch(ep.url, { headers: ep.hdr, signal: AbortSignal.timeout(5000) });
-      if (!r.ok) { console.log(`[fxs] HTTP ${r.status}`); continue; }
+      const r = await fetch(ep.url, { headers: ep.hdr, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) { console.log(`[fxs] HTTP ${r.status} — ${ep.url.slice(0,80)}`); continue; }
       const raw = await r.json();
-      const arr = Array.isArray(raw) ? raw : (raw?.events || raw?.data || []);
+      const arr = Array.isArray(raw) ? raw : (raw?.events || raw?.data || raw?.Items || []);
       if (!arr.length) { console.log('[fxs] vacío'); continue; }
       const wa = arr.filter(e => normActual(e.Actual ?? e.actual) !== null).length;
       console.log(`[fxs] ✅ ${arr.length} eventos, ${wa} con actual`);
@@ -423,9 +438,11 @@ function bestMatch(ffEv, idx, getName, getCC, minScore = 0.42) {
   if (best && ffEv.country === cc) {
     const MACRO_KEYS = [
       'consumer price index', 'producer price index', 'nonfarm payrolls',
-      'gross domestic product', 'purchasing managers', 'pmi',
+      'gross domestic product', 'purchasing managers index',
       'jobless claims', 'retail sales', 'trade balance',
       'industrial production', 'durable goods',
+      'housing price index', 'home price', 'house price', 'case shiller',
+      'current account', 'consumer confidence', 'business confidence',
       // Extended — events that rely on RA enrichment and lack acronym coverage
       'empire state', 'manufacturing sales', 'wholesale sales', 'wholesale trade',
       'import price', 'export price',
@@ -550,7 +567,7 @@ function normalizeEvent(ev, nowMs, regime = {}) {
   const nonNumeric =
     ev.isSpeech ||
     ev.isReport ||
-    /auction|speech|minutes|statement|report|press.?conference|testimo|speaks|outlook|survey|bulletin|opec/i.test(eventName);
+    /auction|speech|minutes|statement|report|press.?conference|testimo|speaks|outlook|survey|bulletin|opec|bank.?holiday|holiday/i.test(eventName);
 
   // isPending: SOLO true si el evento ya pasó, no tiene actual, Y normalmente publica número
   const isPending = isPast && actual === null && !nonNumeric;
