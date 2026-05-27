@@ -57,6 +57,7 @@ import { usePolymarketEventMonitor } from './polymarket/hooks/usePolymarketEvent
 import ExportPanel from './components/ExportPanel.jsx';
 import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
+import InstitutionalDashboard from './components/institutional/InstitutionalDashboard.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4790,6 +4791,7 @@ if (!authUser || forceResetMode) {
     {id:"historico",  label:"Tabla Histórica"},
     {id:"importar",   label:"🔄 Sync"},
     {id:"exportar",   label:"Exportar"},
+    {id:"institucional", label:"Institucional"},
     {id:"recursos",   label:"Recursos"},
     {id:"cuenta",     label:"Ajustes"},
   ];
@@ -5553,6 +5555,17 @@ if (!authUser || forceResetMode) {
           isPremium={isPremium}
           onUpgrade={openBilling}
         />
+      )}
+
+      {/* ── TAB: INSTITUCIONAL ── */}
+      {mainTab==="institucional"&&(
+        <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 24px"}}>
+          <InstitutionalDashboard
+            pair={selectedPair}
+            cotBiasScore={biasArr.find(b=>b.pair===selectedPair)?.biasScore ?? null}
+            macroSignal={macroSignal}
+          />
+        </div>
       )}
 
       {/* ── TAB: RECURSOS ── */}

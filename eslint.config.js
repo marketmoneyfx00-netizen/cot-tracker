@@ -6,6 +6,13 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   globalIgnores(['dist']),
+  // Node.js globals for serverless API functions
+  {
+    files: ['api/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
   {
     files: ['**/*.{js,jsx}'],
     extends: [
