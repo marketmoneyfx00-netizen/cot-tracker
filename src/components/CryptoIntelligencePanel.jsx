@@ -25,6 +25,7 @@
 
 import { useState } from 'react';
 import { Label, Chip, SignalRow, VerdictCard } from './ui/InstitutionalMicro';
+import TooltipInfo from './TooltipInfo.jsx';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -32,29 +33,6 @@ const USD_BIAS_NUM = {
   USD_STRONG: 2, USD_LEANING_STRONG: 1,
   NEUTRAL: 0, USD_LEANING_WEAK: -1, USD_WEAK: -2,
 };
-
-function MetricCard({ label, value, sub, color, T, mono = true }) {
-  return (
-    <div style={{
-      background: color + '08',
-      border: `1px solid ${color}28`,
-      borderRadius: 8, padding: '12px 14px',
-      textAlign: 'center',
-    }}>
-      <Label T={T}>{label}</Label>
-      <div style={{
-        fontSize: 22, fontWeight: 800,
-        fontFamily: mono ? 'monospace' : 'inherit',
-        color, marginTop: 6, letterSpacing: mono ? '-0.02em' : 0,
-      }}>
-        {value}
-      </div>
-      {sub && (
-        <div style={{ fontSize: 10, color: T.sub, marginTop: 3 }}>{sub}</div>
-      )}
-    </div>
-  );
-}
 
 // ─── BTC/DXY RELATIONSHIP WIDGET ────────────────────────────────────────────
 
@@ -540,6 +518,56 @@ export default function CryptoIntelligencePanel({
         </div>
       </div>
 
+      {/* ── DECISION SUMMARY STRIP ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
+        gap: 8, marginBottom: 16,
+      }}>
+        {[
+          {
+            label: 'Macro Backdrop',
+            value: usdBiasNum <= -1 ? 'TAILWIND' : usdBiasNum >= 1 ? 'HEADWIND' : 'NEUTRAL',
+            sub: 'USD vs BTC',
+            color: usdBiasNum <= -1 ? T.green : usdBiasNum >= 1 ? T.red : T.sub,
+            tip: 'BTC has a historically strong inverse relationship with USD strength. When USD weakens, BTC typically gains. When USD strengthens, BTC faces selling pressure from reduced risk appetite.',
+          },
+          {
+            label: 'Macro Regime',
+            value: regime === 'RISK_ON' ? 'FAVORABLE' : regime === 'RISK_OFF' ? 'ADVERSE' : 'MIXED',
+            sub: regime.replace(/_/g, ' '),
+            color: regime === 'RISK_ON' ? T.green : regime === 'RISK_OFF' ? T.red : T.amber,
+            tip: 'The macro regime determines the institutional risk appetite. Risk-on = institutions allocating to risk assets including crypto. Risk-off = institutions reducing exposure. Stagflation = conflicted (BTC as inflation hedge vs. liquidity pressure).',
+          },
+          {
+            label: 'Volatility',
+            value: !vix ? 'NO DATA' : vix > 25 ? 'HIGH RISK' : vix > 18 ? 'ELEVATED' : 'CONTROLLED',
+            sub: vix ? `VIX ${vix.toFixed(1)}` : 'VIX unavailable',
+            color: !vix ? T.sub : vix > 25 ? T.red : vix > 18 ? T.amber : T.green,
+            tip: 'VIX above 25 means extreme fear — crypto typically underperforms and position sizes should be reduced. VIX below 18 means controlled volatility — more favorable for directional entries.',
+          },
+          {
+            label: 'COT Positioning',
+            value: combinedData ? 'ACTIVE' : 'MISSING',
+            sub: combinedData ? 'Institutional data loaded' : 'Upload TFF Combined',
+            color: combinedData ? T.green : T.sub,
+            tip: 'CFTC COT Combined data provides the only publicly available institutional positioning data for BTC and ETH futures. Without it, crypto positioning analysis is based on macro signals only.',
+          },
+        ].map(({ label, value, sub, color, tip }) => (
+          <div key={label} style={{
+            background: color + '08', border: `1px solid ${color}28`,
+            borderRadius: 8, padding: '10px 12px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5 }}>
+              <Label T={T}>{label}</Label>
+              <TooltipInfo text={tip} />
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 800, color, letterSpacing: '0.03em' }}>{value}</div>
+            <div style={{ fontSize: 9, color: T.sub, marginTop: 2 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
       {/* ── MAIN GRID ── */}
       <div style={{
         display: 'grid',
@@ -552,8 +580,9 @@ export default function CryptoIntelligencePanel({
             background: T.card, border: `1px solid ${T.border}`,
             borderRadius: 12, padding: '16px 18px',
           }}>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
               <Label T={T}>BTC / DXY Macro Relationship</Label>
+              <TooltipInfo text="DXY (US Dollar Index) and BTC have a historically inverse relationship. Strong dollar = capital flows into USD, away from risk assets. Weak dollar = capital seeks higher-returning assets like BTC. This is not absolute — the relationship can break during liquidity crises." />
             </div>
             <BtcDxyWidget usdBiasNum={usdBiasNum} usdBias={usdBias} T={T} />
             <p style={{ margin: '10px 0 0', fontSize: 11, color: T.sub, lineHeight: 1.6 }}>
@@ -569,8 +598,9 @@ export default function CryptoIntelligencePanel({
             background: T.card, border: `1px solid ${T.border}`,
             borderRadius: 12, padding: '16px 18px',
           }}>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
               <Label T={T}>Regime Impact Analysis</Label>
+              <TooltipInfo text="Shows how the current macro regime translates into expected crypto behavior. Risk-on supports crypto. Risk-off is negative. Stagflation is conflicted (BTC as inflation hedge vs. liquidity pressure). VIX confirms or contradicts the regime signal." />
             </div>
             <RegimeMatrix regime={regime} vix={vix} cryptoAgent={cryptoAgent} T={T} />
           </div>
@@ -582,9 +612,10 @@ export default function CryptoIntelligencePanel({
             background: T.card, border: `1px solid ${T.border}`,
             borderRadius: 12, padding: '16px 18px',
           }}>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
               <Label T={T}>Institutional COT Positioning</Label>
-              <span style={{ fontSize: 9, color: T.sub2, marginLeft: 6 }}>CFTC · Leveraged Money</span>
+              <span style={{ fontSize: 9, color: T.sub2, marginLeft: 2 }}>CFTC · Leveraged Money</span>
+              <TooltipInfo text="Leveraged Money (hedge funds) COT positioning from CFTC regulated BTC and ETH futures. Large net-long positioning by leveraged money is historically bullish. Large net-short is bearish. Data requires uploading the CFTC TFF Combined report." />
             </div>
             <CotPositioningWidget combinedData={combinedData} T={T} />
           </div>
@@ -595,8 +626,9 @@ export default function CryptoIntelligencePanel({
             borderRadius: 12, padding: '16px 18px',
             flex: 1,
           }}>
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
               <Label T={T}>Crypto Signals</Label>
+              <TooltipInfo text="Derived signals from the crypto agent — combinations of regime, USD bias, VIX, and COT positioning that produce actionable directional signals. Warnings indicate conflicting or adverse conditions." />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {signals.map((s, i) => (
@@ -624,6 +656,7 @@ export default function CryptoIntelligencePanel({
         <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Label T={T}>Institutional Assessment</Label>
           <span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.06em' }}>4 KEY QUESTIONS</span>
+          <TooltipInfo text="Four binary questions that determine whether institutional conditions support crypto positioning: (1) Is the regime aligned with crypto direction? (2) Is BTC leading or lagging macro? (3) Is the current move a continuation or a trap? (4) Is this a good time to enter? All four should broadly align before taking a position." />
         </div>
         <InstitutionalAssessment
           regime={regime}
@@ -633,49 +666,6 @@ export default function CryptoIntelligencePanel({
           isMobile={isMobile}
           T={T}
         />
-      </div>
-
-      {/* ── INSTITUTIONAL CONTEXT ── */}
-      <div style={{
-        background: T.card, border: `1px solid ${T.border}`,
-        borderRadius: 12, padding: isMobile ? '14px' : '18px 20px',
-        marginBottom: 16,
-      }}>
-        <div style={{ marginBottom: 12 }}>
-          <Label T={T}>Institutional Crypto Context</Label>
-        </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
-          gap: 8,
-        }}>
-          {[
-            {
-              label: 'BTC/USD Macro',
-              value: usdBiasNum <= -1 ? 'TAILWIND' : usdBiasNum >= 1 ? 'HEADWIND' : 'NEUTRAL',
-              color: usdBiasNum <= -1 ? T.green : usdBiasNum >= 1 ? T.red : T.sub,
-            },
-            {
-              label: 'Volatility',
-              value: !vix ? '—' : vix > 25 ? 'HIGH' : vix > 18 ? 'ELEVATED' : 'LOW',
-              color: !vix ? T.sub : vix > 25 ? T.red : vix > 18 ? T.amber : T.green,
-              sub: vix ? `VIX ${vix.toFixed(1)}` : null,
-            },
-            {
-              label: 'Risk Regime',
-              value: regime === 'RISK_ON' ? 'FAVORABLE' : regime === 'RISK_OFF' ? 'ADVERSE' : 'MIXED',
-              color: regime === 'RISK_ON' ? T.green : regime === 'RISK_OFF' ? T.red : T.amber,
-            },
-            {
-              label: 'COT Data',
-              value: combinedData ? 'ACTIVE' : 'MISSING',
-              color: combinedData ? T.green : T.sub,
-              sub: combinedData ? 'Upload verified' : 'Upload TFF Combined',
-            },
-          ].map(({ label, value, color, sub }) => (
-            <MetricCard key={label} label={label} value={value} sub={sub} color={color} T={T} mono={false} />
-          ))}
-        </div>
       </div>
 
       {/* ── METHODOLOGY NOTE ── */}

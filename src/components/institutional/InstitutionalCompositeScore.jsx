@@ -4,6 +4,7 @@
 // =============================================================================
 
 import ScoreGauge from './shared/ScoreGauge.jsx';
+import TooltipInfo from '../TooltipInfo.jsx';
 
 const S = {
   root: {
@@ -13,7 +14,7 @@ const S = {
     padding: '16px',
     fontFamily: 'ui-monospace, "SF Mono", Consolas, monospace',
   },
-  header: { fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 },
+  header: { fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 },
   divider: { height: 1, background: 'rgba(255,255,255,0.06)', margin: '10px 0' },
   componentRow: {
     display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5,
@@ -46,7 +47,10 @@ export default function InstitutionalCompositeScore({ composite }) {
   if (!composite) {
     return (
       <div style={S.root}>
-        <div style={S.header}>Institutional Composite Score</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <span style={S.header}>Institutional Composite Score</span>
+          <TooltipInfo text="Weighted blend of Macro Environment, Crypto Risk, Equity Quality, and Balance Sheet Stress. Score 65+ = tailwind. 45–65 = neutral. Below 45 = headwind." />
+        </div>
         <div style={{ color: '#475569', fontSize: 11, textAlign: 'center', padding: '16px 0' }}>Computing…</div>
       </div>
     );
@@ -58,7 +62,10 @@ export default function InstitutionalCompositeScore({ composite }) {
 
   return (
     <div style={S.root}>
-      <div style={S.header}>Institutional Composite Score</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <span style={S.header}>Institutional Composite Score</span>
+        <TooltipInfo text="Weighted blend of 4 sub-scores: Macro Environment (40%), Crypto Risk Signal (30%), Equity Quality (20%), and Balance Sheet Stress (10%). Score 65–100 = institutional tailwind (favorable for long bias). Score 45–65 = neutral (no clear edge). Score below 45 = structural headwind (favor caution or short bias). Reliable when data completeness is above 70%." />
+      </div>
 
       {/* Main score row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>

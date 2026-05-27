@@ -15,6 +15,7 @@ import EquityIntelligencePanel         from './EquityIntelligencePanel.jsx';
 import EarningsMonitor                 from './EarningsMonitor.jsx';
 import CryptoMacroPanel                from './CryptoMacroPanel.jsx';
 import BalanceSheetStressPanel         from './BalanceSheetStressPanel.jsx';
+import TooltipInfo                     from '../TooltipInfo.jsx';
 
 const S = {
   root: {
@@ -120,7 +121,7 @@ function NarrativePanel({ narrative }) {
   );
 }
 
-export default function InstitutionalDashboard({ pair, cotBiasScore, macroSignal, compact = false }) {
+export default function InstitutionalDashboard({ pair, cotBiasScore, macroSignal, compact = false, T }) {
   const { institutionalData, loading, error, lastUpdated, retry } = useInstitutionalData({
     pair,
     cotBiasScore,
@@ -138,6 +139,27 @@ export default function InstitutionalDashboard({ pair, cotBiasScore, macroSignal
 
   return (
     <div style={S.root}>
+      {/* Purpose statement */}
+      <div style={{
+        background: 'rgba(99,102,241,0.06)',
+        border: '1px solid rgba(99,102,241,0.18)',
+        borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', letterSpacing: '0.1em' }}>
+            INSTITUTIONAL PANEL
+          </span>
+          <TooltipInfo text="This panel layers equity fundamentals, earnings regime, crypto macro flows, and balance-sheet stress onto your COT analysis. It answers: are institutional actors fundamentally aligned with the current positioning bias? A high score (65+) means broad institutional tailwinds. A low score (below 45) signals structural headwinds or uncertainty." />
+        </div>
+        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', lineHeight: 1.55 }}>
+          Combines equity fundamentals, earnings regime, crypto macro flows, and balance-sheet stress to produce
+          a single institutional conviction score for the selected pair.
+          <span style={{ color: '#6366f1', marginLeft: 4 }}>
+            Score 65+ = institutional tailwind · 45–65 = neutral · below 45 = structural headwind.
+          </span>
+        </p>
+      </div>
+
       {/* Top bar */}
       <div style={S.topBar}>
         <div style={S.topBarLeft}>

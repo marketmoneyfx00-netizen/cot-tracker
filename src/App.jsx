@@ -66,6 +66,7 @@ import { computeAdaptiveRegime } from './engines/adaptiveRegimeEngine.js';
 import { computeIntermarketSignals } from './engines/intermarketEngine.js';
 import { computeSignalPriority } from './engines/signalPriorityEngine.js';
 import MarketBriefingPanel from './components/MarketBriefingPanel.jsx';
+import OverviewSummaryStrip from './components/OverviewSummaryStrip.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5018,25 +5019,15 @@ if (!authUser || forceResetMode) {
       {/* ── TAB: RESUMEN (Overview) ── */}
       {mainTab==="resumen"&&(
         <>
-          {/* Market Briefing — priority signal filter, shown first */}
-          <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0"}}>
-            <MarketBriefingPanel
-              priority={signalPriority}
-              T={_thm}
-              isMobile={isMobile}
-              darkMode={darkMode}
-            />
-          </div>
-          {/* Adaptive Regime + Intermarket */}
-          <div style={{maxWidth:1400,margin:"0 auto",padding:"12px 20px 0"}}>
-            <AdaptiveRegimePanel
-              adaptiveRegime={adaptiveRegime}
-              intermarket={intermarketSignals}
-              darkMode={darkMode}
-              T={_thm}
-              isMobile={isMobile}
-            />
-          </div>
+          {/* Compact regime + top-signal summary — full detail is in Intelligence */}
+          <OverviewSummaryStrip
+            adaptiveRegime={adaptiveRegime}
+            signalPriority={signalPriority}
+            T={_thm}
+            isMobile={isMobile}
+            darkMode={darkMode}
+            onNavigate={setMainTab}
+          />
           <ResumenTab
             T={_thm}
             darkMode={darkMode}
@@ -5709,7 +5700,22 @@ if (!authUser || forceResetMode) {
       {/* ── TAB: INTELLIGENCE (Multi-Agent System) ── */}
       {mainTab==="intelligence"&&(
         <>
-          <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0"}}>
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0 20px"}}>
+            <div style={{
+              marginBottom:12,padding:"10px 14px",
+              background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:8,
+              display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",
+            }}>
+              <div>
+                <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
+                  INTELLIGENCE — DEEP ANALYSIS
+                </span>
+                <p style={{margin:"3px 0 0",fontSize:11,color:_thm.sub,lineHeight:1.5}}>
+                  This panel combines macro regime, COT positioning, execution signals, and cross-market context
+                  into a single institutional view. Use it for your weekly market review and setup selection.
+                </p>
+              </div>
+            </div>
             <MarketBriefingPanel
               priority={signalPriority}
               T={_thm}
@@ -5756,6 +5762,7 @@ if (!authUser || forceResetMode) {
             pair={selectedPair}
             cotBiasScore={biasArr.find(b=>b.pair===selectedPair)?.biasScore ?? null}
             macroSignal={macroSignal}
+            T={_thm}
           />
         </div>
       )}
