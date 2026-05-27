@@ -51,7 +51,7 @@ async function getJwt() {
 }
 
 // ── Core fetch with retry ─────────────────────────────────────────────────────
-const BASE_URL = '/api/fd';
+const BASE_URL = '/api/macro';
 const MAX_RETRY = 3;
 
 async function fdRequest(type, params = {}, retryCount = 0) {
@@ -60,7 +60,7 @@ async function fdRequest(type, params = {}, retryCount = 0) {
   }
 
   const jwt = await getJwt();
-  const qs  = new URLSearchParams({ type, ...params }).toString();
+  const qs  = new URLSearchParams({ fd_type: type, ...params }).toString();
   const url = `${BASE_URL}?${qs}`;
 
   const controller = new AbortController();
