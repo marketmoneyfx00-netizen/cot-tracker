@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, Component } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Component, lazy, Suspense } from "react";
 import { createPortal } from 'react-dom';
 
 // Allowlist-based HTML sanitizer — only permits <strong> and <em> tags.
@@ -54,10 +54,18 @@ import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
 import { usePolymarketEventMonitor } from './polymarket/hooks/usePolymarketEventMonitor.js';
-import ExportPanel from './components/ExportPanel.jsx';
+const ExportPanel = lazy(() => import('./components/ExportPanel.jsx'));
 import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
 import InstitutionalDashboard from './components/institutional/InstitutionalDashboard.jsx';
+import InstitutionalIntelligencePanel from './components/InstitutionalIntelligencePanel.jsx';
+import CryptoIntelligencePanel from './components/CryptoIntelligencePanel.jsx';
+import AdaptiveRegimePanel from './components/AdaptiveRegimePanel.jsx';
+import { useAgentConsensus } from './hooks/useAgentConsensus.js';
+import { computeAdaptiveRegime } from './engines/adaptiveRegimeEngine.js';
+import { computeIntermarketSignals } from './engines/intermarketEngine.js';
+import { computeSignalPriority } from './engines/signalPriorityEngine.js';
+import MarketBriefingPanel from './components/MarketBriefingPanel.jsx';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,14 +215,14 @@ function generateSignal(rows) {
   }
   const extremeLong=pctL>=80,extremeShort=pctL<=20;
   const accelerating=Math.abs(trend)>Math.abs(prev2?prev.smartNet-prev2.smartNet:0);
-  if (extremeLong&&trend<0) return {signal:"sell",strength:3,reason:`Posición larga extrema (${pctL}%) con reversión — institucionales reduciendo largos`};
-  if (extremeShort&&trend>0) return {signal:"buy",strength:3,reason:`Posicionamiento corto extremo (${pctL}% largo) con inversión — Leveraged Money cubriendo posiciones cortas`};
-  if (net>0&&trend>0&&streak>=2&&assetAligned!==false) return {signal:"buy",strength:streak>=3?(accelerating?3:2):1,reason:`Sesgo Alcista ${streak>=3?"confirmado":"detectado"} — ${streak} informes CFTC consecutivos con acumulación neta positiva. Asset Managers ${assetAligned?"alineados":"divergentes"}.`};
-  if (net<0&&trend<0&&streak>=2&&assetAligned!==false) return {signal:"sell",strength:streak>=3?(accelerating?3:2):1,reason:`Sesgo Bajista ${streak>=3?"confirmado":"detectado"} — ${streak} informes CFTC consecutivos con reducción neta. Asset Managers ${assetAligned?"alineados":"divergentes"}.`};
-  if (net>0&&trend>0) return {signal:"buy",strength:1,reason:`Sesgo Alcista incipiente — acumulación neta positiva de Leveraged Money. Pendiente de confirmación en próximo informe CFTC.`};
-  if (net<0&&trend<0) return {signal:"sell",strength:1,reason:`Sesgo Bajista incipiente — reducción neta de Leveraged Money. Pendiente de confirmación en próximo informe CFTC.`};
-  if (Math.abs(net)<5000||(trend>0&&net<0)||(trend<0&&net>0)) return {signal:"indecision",strength:0,reason:`Datos divergentes entre Leveraged Money y Asset Managers — posible cambio de sesgo en curso`};
-  return {signal:"wait",strength:0,reason:`Posicionamiento neutro sin sesgo definido — aguardar confirmación en próximo informe CFTC`};
+  if (extremeLong&&trend<0) return {signal:"sell",strength:3,reason:`Extreme long positioning (${pctL}%) reversing — institutions reducing longs`};
+  if (extremeShort&&trend>0) return {signal:"buy",strength:3,reason:`Extreme short positioning (${pctL}% long) reversing — Leveraged Money covering shorts`};
+  if (net>0&&trend>0&&streak>=2&&assetAligned!==false) return {signal:"buy",strength:streak>=3?(accelerating?3:2):1,reason:`Bullish bias ${streak>=3?"confirmed":"detected"} — ${streak} consecutive CFTC reports with net accumulation. Asset Managers ${assetAligned?"aligned":"diverging"}.`};
+  if (net<0&&trend<0&&streak>=2&&assetAligned!==false) return {signal:"sell",strength:streak>=3?(accelerating?3:2):1,reason:`Bearish bias ${streak>=3?"confirmed":"detected"} — ${streak} consecutive CFTC reports with net reduction. Asset Managers ${assetAligned?"aligned":"diverging"}.`};
+  if (net>0&&trend>0) return {signal:"buy",strength:1,reason:`Nascent bullish bias — positive net accumulation by Leveraged Money. Awaiting confirmation in next CFTC report.`};
+  if (net<0&&trend<0) return {signal:"sell",strength:1,reason:`Nascent bearish bias — net reduction by Leveraged Money. Awaiting confirmation in next CFTC report.`};
+  if (Math.abs(net)<5000||(trend>0&&net<0)||(trend<0&&net>0)) return {signal:"indecision",strength:0,reason:`Divergent data between Leveraged Money and Asset Managers — possible bias shift in progress`};
+  return {signal:"wait",strength:0,reason:`Neutral positioning — no directional bias established. Await confirmation in next CFTC report`};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,39 +244,39 @@ function calcConviction(weeks,biasEntry){
   const z=biasEntry?.zscore?.zscore??biasEntry?.zScore??0;
   if(Math.abs(z)>2)score+=2;else if(Math.abs(z)>1)score+=1;
   if(latest.assetNet!=null&&latest.smartNet!==0&&Math.sign(latest.assetNet)===Math.sign(latest.smartNet))score+=0.5;
-  if(score>=5.5)return{label:"Convicción Extrema",level:4};
-  if(score>=3.5)return{label:"Alta Convicción",level:3};
-  if(score>=2)return{label:"Convicción Moderada",level:2};
-  return{label:"Baja Convicción",level:1};
+  if(score>=5.5)return{label:"Extreme Conviction",level:4};
+  if(score>=3.5)return{label:"High Conviction",level:3};
+  if(score>=2)return{label:"Moderate Conviction",level:2};
+  return{label:"Low Conviction",level:1};
 }
 function buildInstWhy(p,biasEntry){
   const{latest,weeks,signal}=p;
   if(!latest)return signal?.reason||"";
   const lines=[];
-  const dir=latest.smartNet>0?"alcista":latest.smartNet<0?"bajista":"neutral";
+  const dir=latest.smartNet>0?"bullish":latest.smartNet<0?"bearish":"neutral";
   const trend=weeks.length>1?latest.smartNet-weeks[1].smartNet:0;
   const sameDir=weeks.slice(0,6).filter(w=>Math.sign(w.smartNet)===Math.sign(latest.smartNet)).length;
   if(latest.levLong!=null&&latest.levShort!=null){
-    lines.push(`Leveraged Money ${dir}: ${fK(latest.levLong)} longs y ${fK(latest.levShort)} shorts → neto ${fK(latest.smartNet)} contratos.`);
+    lines.push(`Leveraged Money ${dir}: ${fK(latest.levLong)} longs / ${fK(latest.levShort)} shorts → net ${fK(latest.smartNet)} contracts.`);
   }else{
-    lines.push(`Posición neta Leveraged Money: ${fK(latest.smartNet)} contratos.`);
+    lines.push(`Leveraged Money net position: ${fK(latest.smartNet)} contracts.`);
   }
-  if(sameDir>=3)lines.push(`Dirección ${dir} sostenida durante ${sameDir} semanas consecutivas.`);
+  if(sameDir>=3)lines.push(`${dir.charAt(0).toUpperCase()+dir.slice(1)} direction sustained for ${sameDir} consecutive weeks.`);
   if(trend!==0&&weeks[1]?.smartNet){
     const pctChg=weeks[1].smartNet!==0?` (${((trend/Math.abs(weeks[1].smartNet))*100).toFixed(1)}% WoW)`:"";
-    lines.push(`Variación semanal: ${trend>0?"▲ +":"▼ "}${fK(Math.abs(trend))}${pctChg}.`);
+    lines.push(`Weekly change: ${trend>0?"▲ +":"▼ "}${fK(Math.abs(trend))}${pctChg}.`);
   }
   if(latest.assetNet!=null&&latest.smartNet!==0){
     if(Math.sign(latest.assetNet)===Math.sign(latest.smartNet))
-      lines.push(`Asset Managers confirman dirección institucional (${fK(latest.assetNet)} neto).`);
+      lines.push(`Asset Managers confirm institutional direction (${fK(latest.assetNet)} net).`);
     else
-      lines.push(`Asset Managers divergen del Leveraged Money (${fK(latest.assetNet)} neto) — precaución.`);
+      lines.push(`Asset Managers diverging from Leveraged Money (${fK(latest.assetNet)} net) — caution.`);
   }
   const z=biasEntry?.zscore?.zscore??biasEntry?.zScore;
   if(z!=null){
-    if(Math.abs(z)>2)lines.push(`Z-score ${z.toFixed(2)}: posición en zona EXTREMA. Riesgo de reversión elevado.`);
-    else if(Math.abs(z)>1)lines.push(`Z-score ${z.toFixed(2)}: posición elevada, fuera del rango normal.`);
-    else lines.push(`Z-score ${z.toFixed(2)}: posición en rango histórico normal.`);
+    if(Math.abs(z)>2)lines.push(`Z-score ${z.toFixed(2)}: position in EXTREME zone. Elevated mean-reversion risk.`);
+    else if(Math.abs(z)>1)lines.push(`Z-score ${z.toFixed(2)}: elevated positioning, outside normal range.`);
+    else lines.push(`Z-score ${z.toFixed(2)}: position within normal historical range.`);
   }
   return lines.join(" ");
 }
@@ -279,10 +287,10 @@ const weeksAgo=(n)=>{const d=new Date();d.setDate(d.getDate()-n*7);return d.toIS
 // SIGNAL CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const SIGNAL_CFG = {
-  buy:        {icon:"▲",label:"Sesgo Alcista", bg:"rgba(136,201,153,0.15)", border:"rgba(136,201,153,0.4)",  fg:"#2e7d4f",dot:"#88C999"},
-  sell:       {icon:"▼",label:"Sesgo Bajista", bg:"rgba(239,154,154,0.15)", border:"rgba(239,154,154,0.4)",  fg:"#b71c1c",dot:"#EF9A9A"},
-  wait:       {icon:"–",label:"Neutro",        bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#616161",dot:"#BDBDBD"},
-  indecision: {icon:"↔",label:"Divergente",    bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#757575",dot:"#9E9E9E"},
+  buy:        {icon:"▲",label:"Bullish Bias",  bg:"rgba(136,201,153,0.15)", border:"rgba(136,201,153,0.4)",  fg:"#2e7d4f",dot:"#88C999"},
+  sell:       {icon:"▼",label:"Bearish Bias",  bg:"rgba(239,154,154,0.15)", border:"rgba(239,154,154,0.4)",  fg:"#b71c1c",dot:"#EF9A9A"},
+  wait:       {icon:"–",label:"Neutral",       bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#616161",dot:"#BDBDBD"},
+  indecision: {icon:"↔",label:"Divergent",     bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#757575",dot:"#9E9E9E"},
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,7 +369,7 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
   // Breakdown items
   const rows = [
     { key: 'Leveraged Flow',    val: breakdown?.leveragedFlow  ?? 0 },
-    { key: 'Divergence',        val: breakdown?.divergence     ?? 0, tip: 'Desacople entre flujo institucional y precio. Puede anticipar reversión o continuidad. Requiere confirmación.' },
+    { key: 'Divergence',        val: breakdown?.divergence     ?? 0, tip: 'Divergence between institutional flow and price. Can precede reversal or continuation. Requires confirmation.' },
     { key: 'Historical Extreme',val: breakdown?.percentile     ?? 0 },
     { key: 'Asset Managers',    val: breakdown?.assetManagers  ?? 0 },
     { key: 'Dealers Filter',    val: breakdown?.dealers        ?? 0 },
@@ -386,10 +394,10 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
           <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:'0.08em'}}>
             INSTITUTIONAL BIAS ENGINE
           </span>
-          <TooltipInfo text="Motor de sesgo institucional basado en datos COT y flujo macro semanal." align="left"/>
+          <TooltipInfo text="Institutional bias engine based on CFTC COT data and weekly macro flow." align="left"/>
         </div>
         <span style={{fontSize:10,color:T.sub2,background:T.card2,border:`1px solid ${T.border}`,
-          padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em',flexShrink:0}}>SEMANAL · HTF</span>
+          padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em',flexShrink:0}}>WEEKLY · HTF</span>
       </div>
 
       {/* Score + Label */}
@@ -412,7 +420,7 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:5}}>
             <span style={{fontSize: isMobile ? 15 : 17, fontWeight:700, color, lineHeight:1.2}}>{label}</span>
-            <TooltipInfo text="Sesgo institucional semanal (3–10d). Marca contexto macro, NO dirección inmediata del precio. No usar como señal de entrada." align="center"/>
+            <TooltipInfo text="Weekly institutional bias (3–10d horizon). Reflects macro context, NOT immediate price direction. Do not use as an entry signal." align="center"/>
           </div>
           {/* State badge — instant readability */}
           <span style={{
@@ -546,7 +554,7 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
             }}>
               <span style={{fontSize:11,fontWeight:700,color:T.txt||T.sub,display:'flex',alignItems:'center',letterSpacing:'0.06em'}}>
                 BIAS SCORE
-                <TooltipInfo text="Sesgo institucional semanal (3–10d). Marca contexto macro, NO dirección inmediata del precio. No usar como señal de entrada." align="left"/>
+                <TooltipInfo text="Weekly institutional bias (3–10d horizon). Reflects macro context, NOT immediate price direction. Do not use as an entry signal." align="left"/>
               </span>
               <span style={{fontSize:18,fontWeight:800,color,fontVariantNumeric:'tabular-nums'}}>
                 {score > 0 ? `+${score}` : score}
@@ -578,7 +586,7 @@ function MiniSparkline({values,positive}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN SCREEN  — for returning users who already have a plan
 // ─────────────────────────────────────────────────────────────────────────────
-const PRESETS=[{label:"4 semanas",weeks:4},{label:"2 meses",weeks:8},{label:"3 meses",weeks:13}];
+const PRESETS=[{label:"4 weeks",weeks:4},{label:"2 months",weeks:8},{label:"3 months",weeks:13}];
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -706,11 +714,11 @@ function InfoTooltip({text}) {
 }
 
 const COT_TOOLTIPS = {
-  levLong:  "Contratos de compra abiertos por Hedge Funds y CTAs (Leveraged Money). Un incremento sostenido indica acumulación de posiciones largas.",
-  levShort: "Contratos de venta abiertos por Hedge Funds y CTAs (Leveraged Money). Un incremento sostenido indica distribución o posicionamiento bajista.",
-  levNet:   "Posición neta de Leveraged Money (Longs - Shorts). Es el indicador principal del Sesgo de Mercado. Positivo = sesgo alcista.",
-  assetNet: "Posicionamiento neto de Asset Managers (fondos institucionales a largo plazo). Cuando coincide con Lev. Net, confirma la tendencia.",
-  dealerNet:"Posición neta de Dealers e intermediarios financieros. Suelen actuar como contraparte; su sesgo frecuentemente es opuesto al precio.",
+  levLong:  "Open long contracts held by Hedge Funds and CTAs (Leveraged Money). A sustained increase signals accumulation.",
+  levShort: "Open short contracts held by Hedge Funds and CTAs (Leveraged Money). A sustained increase signals distribution or bearish positioning.",
+  levNet:   "Net position of Leveraged Money (Longs − Shorts). Primary market bias indicator. Positive = bullish bias.",
+  assetNet: "Net positioning of Asset Managers (long-term institutional funds). When it aligns with Lev. Net, it confirms the trend.",
+  dealerNet:"Net position of Dealers and financial intermediaries. They typically act as counterparty; their bias is often inverse to price.",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -725,10 +733,10 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
   const rows  = weeks.slice(0, 10);
 
   const ACTION = {
-    buy:        {icon:"▲", label:"SESGO ALCISTA",  color:"#2e7d4f", bg:"rgba(136,201,153,0.10)", border:"rgba(136,201,153,0.3)"},
-    sell:       {icon:"▼", label:"SESGO BAJISTA",  color:"#b71c1c", bg:"rgba(239,154,154,0.10)", border:"rgba(239,154,154,0.3)"},
-    wait:       {icon:"–", label:"NEUTRO",          color:"#616161", bg:"rgba(180,180,180,0.08)", border:"rgba(180,180,180,0.2)"},
-    indecision: {icon:"↔", label:"DIVERGENTE",      color:"#757575", bg:"rgba(180,180,180,0.08)", border:"rgba(180,180,180,0.2)"},
+    buy:        {icon:"▲", label:"BULLISH BIAS",  color:"#2e7d4f", bg:"rgba(136,201,153,0.10)", border:"rgba(136,201,153,0.3)"},
+    sell:       {icon:"▼", label:"BEARISH BIAS",  color:"#b71c1c", bg:"rgba(239,154,154,0.10)", border:"rgba(239,154,154,0.3)"},
+    wait:       {icon:"–", label:"NEUTRAL",        color:"#616161", bg:"rgba(180,180,180,0.08)", border:"rgba(180,180,180,0.2)"},
+    indecision: {icon:"↔", label:"DIVERGENT",      color:"#757575", bg:"rgba(180,180,180,0.08)", border:"rgba(180,180,180,0.2)"},
   };
   const action = ACTION[signal.signal] || ACTION.wait;
 
@@ -896,10 +904,10 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
           <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"center", marginBottom:6}}>
             <span style={{fontSize:9, fontWeight:700, color:DS.sub2, letterSpacing:"0.07em", textTransform:"uppercase"}}>Heatmap:</span>
             {[
-              {bg:"rgba(136,201,153,0.55)", label:"Acumulación fuerte (>10K)"},
-              {bg:"rgba(136,201,153,0.22)", label:"Acumulación débil (<10K)"},
-              {bg:"rgba(239,154,154,0.55)", label:"Distribución fuerte (>10K)"},
-              {bg:"rgba(239,154,154,0.22)", label:"Distribución débil (<10K)"},
+              {bg:"rgba(136,201,153,0.55)", label:"Strong accumulation (>10K)"},
+              {bg:"rgba(136,201,153,0.22)", label:"Weak accumulation (<10K)"},
+              {bg:"rgba(239,154,154,0.55)", label:"Strong distribution (>10K)"},
+              {bg:"rgba(239,154,154,0.22)", label:"Weak distribution (<10K)"},
             ].map(item=>(
               <div key={item.label} style={{display:"flex", alignItems:"center", gap:4}}>
                 <div style={{width:12, height:12, borderRadius:2, background:item.bg, border:"1px solid rgba(0,0,0,0.06)", flexShrink:0}}/>
@@ -908,7 +916,7 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
             ))}
           </div>
           <div style={{fontSize:9, color:DS.sub2, textAlign:"right"}}>
-            Posicionamiento Dinero Inteligente (CFTC) · TFF · Leveraged Money
+            Smart Money Positioning (CFTC) · TFF · Leveraged Money
           </div>
         </div>
       </div>
@@ -1023,42 +1031,42 @@ function lastSunday(year, month) {
 }
 
 // ─── BILLING / PLAN MODAL ─────────────────────────────────────────────────────
-// Acceso completo en todos los planes de pago — la diferencia es solo el descuento.
+// Full access on all paid plans — the only difference is the discount.
 const FULL_ACCESS = [
-  "Dashboard COT institucional completo",
-  "Market Decision Layer — interpretación HTF+LTF",
-  "Cross Asset Flow — FX, Índices y Bonos",
-  "Intraday Execution con desglose de factores",
-  "Bias institucional completo por activo",
-  "Calendario macro enriquecido con análisis de impacto",
-  "Comunidad privada de traders (Telegram)",
+  "Full Institutional COT Dashboard",
+  "Market Decision Layer — HTF + LTF interpretation",
+  "Cross Asset Flow — FX, Indices & Bonds",
+  "Intraday Execution with factor breakdown",
+  "Full institutional bias per asset",
+  "Enriched macro calendar with impact analysis",
+  "Private traders community (Telegram)",
 ];
 
-// Beneficios visibles del plan gratuito (corrección: Bias Engine SÍ es visible en free)
+// Free plan visible benefits
 const FREE_BENEFITS = [
-  "Institutional Bias Engine (visión base)",
-  "Dashboard COT básico (lectura)",
-  "Calendario macro público",
+  "Institutional Bias Engine (base view)",
+  "Basic COT Dashboard (read-only)",
+  "Public macro calendar",
 ];
 
-// Sección de funciones bloqueadas en free — se muestra como lista de lock
+// Features locked on free plan
 const FREE_LOCKED = [
-  "Market Decision Layer completo",
-  "Cross Asset Flow completo",
-  "Intraday Execution con desglose",
-  "Comunidad privada Telegram",
+  "Full Market Decision Layer",
+  "Full Cross Asset Flow",
+  "Intraday Execution with breakdown",
+  "Private Telegram community",
 ];
 
 const PLANS = [
   { id: "free",       label: "Free",        price: "0€",   period: "",         color: "#8e8e93", url: null,   saving: null,
     benefits: FREE_BENEFITS },
-  { id: "mensual",    label: "Mensual",     price: "24€",  period: "/mes",     color: "#0066cc", priceId: STRIPE_PRICE_IDS.mensual,   saving: null,
+  { id: "mensual",    label: "Monthly",     price: "24€",  period: "/month",   color: "#0066cc", priceId: STRIPE_PRICE_IDS.mensual,   saving: null,
     benefits: [...FULL_ACCESS] },
-  { id: "trimestral", label: "Trimestral",  price: "59€",  period: "/3 meses", color: "#5856d6", priceId: STRIPE_PRICE_IDS.trimestral, saving: "Ahorra 13€ · 18% descuento",
+  { id: "trimestral", label: "Quarterly",   price: "59€",  period: "/3 months",color: "#5856d6", priceId: STRIPE_PRICE_IDS.trimestral, saving: "Save 13€ · 18% off",
     benefits: [...FULL_ACCESS] },
-  { id: "semestral",  label: "Semestral",   price: "99€",  period: "/6 meses", color: "#34c759", priceId: STRIPE_PRICE_IDS.semestral,  saving: "Ahorra 45€ · 31% descuento",
+  { id: "semestral",  label: "Biannual",    price: "99€",  period: "/6 months",color: "#34c759", priceId: STRIPE_PRICE_IDS.semestral,  saving: "Save 45€ · 31% off",
     benefits: [...FULL_ACCESS] },
-  { id: "anual",      label: "Anual",       price: "169€", period: "/año",     color: "#ff2d55", priceId: STRIPE_PRICE_IDS.anual,      saving: "Ahorra 119€ · 41% descuento",
+  { id: "anual",      label: "Annual",      price: "169€", period: "/year",    color: "#ff2d55", priceId: STRIPE_PRICE_IDS.anual,      saving: "Save 119€ · 41% off",
     benefits: [...FULL_ACCESS] },
 ];
 
@@ -1071,8 +1079,8 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
     // HARD BLOCK: nunca iniciar checkout sin usuario autenticado identificado
     console.log('[BillingModal] handleStripeCheckout | authUserId:', authUserId, '| priceId:', priceId);
     if (!authUserId || typeof authUserId !== 'string' || authUserId.length < 10) {
-      console.error('[BillingModal] BLOCKED: authUserId inválido o ausente:', authUserId);
-      alert('Error: sesión no detectada. Por favor recarga la página e intenta de nuevo.');
+      console.error('[BillingModal] BLOCKED: authUserId invalid or missing:', authUserId);
+      alert('Error: session not detected. Please reload the page and try again.');
       return;
     }
     setCheckoutLoading(priceId);
@@ -1117,8 +1125,8 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
         {/* Header */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px" }}>
           <div>
-            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Elige tu plan</p>
-            <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Plan actual: <strong>{user?.plan || "Trial"}</strong></p>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Choose your plan</p>
+            <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Current plan: <strong>{user?.plan || "Trial"}</strong></p>
           </div>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
@@ -1135,7 +1143,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                 {isActive && (
                   <span style={{ position:"absolute",top:10,right:12,fontSize:10,fontWeight:700,
                     background:plan.color,color:"white",padding:"2px 8px",borderRadius:99 }}>
-                    ACTUAL
+                    CURRENT
                   </span>
                 )}
                 <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:plan.saving?4:8 }}>
@@ -1145,7 +1153,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                   {/* Recommended badge for trimestral */}
                   {plan.id === "trimestral" && !isActive && (
                     <span style={{ fontSize:9,fontWeight:700,background:"#5856d6",color:"white",
-                      padding:"2px 7px",borderRadius:99,marginLeft:4 }}>MÁS POPULAR</span>
+                      padding:"2px 7px",borderRadius:99,marginLeft:4 }}>MOST POPULAR</span>
                   )}
                 </div>
                 {plan.saving && (
@@ -1167,7 +1175,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       fontSize:10, fontWeight:700, color:"#ef4444",
                       letterSpacing:"0.06em", marginBottom:5, marginTop:4,
                     }}>
-                      BLOQUEADO EN PLAN GRATUITO
+                      LOCKED ON FREE PLAN
                     </div>
                     <ul style={{ margin:"0 0 10px",padding:0,listStyle:"none" }}>
                       {FREE_LOCKED.map((b,i) => (
@@ -1183,7 +1191,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       borderTop: `1px solid ${darkMode?"#1a2230":"#e2e8f0"}`,
                       paddingTop:8, marginBottom:4,
                     }}>
-                      Limitado para análisis completos y toma de decisiones
+                      Limited to basic analysis — upgrade for full institutional intelligence
                     </div>
                   </>
                 )}
@@ -1193,13 +1201,13 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       background:`linear-gradient(135deg,${plan.color},${plan.color}cc)`,
                       color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",
                       boxShadow:`0 3px 12px ${plan.color}44` }}>
-                    Elegir {plan.label} →
+                    Select {plan.label} →
                   </button>
                 ) : (
                   <div style={{ textAlign:"center",padding:"10px",borderRadius:12,
                     background:darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
                     color:"#8e8e93",fontSize:13,fontWeight:600 }}>
-                    {isActive ? "Plan activo" : "Plan gratuito"}
+                    {isActive ? "Active plan" : "Free plan"}
                   </div>
                 )}
               </div>
@@ -1225,7 +1233,7 @@ function BugReportModal({ user, darkMode, onClose }) {
       const { supabase } = await import('./lib/supabase.js');
       await supabase.from('bug_reports').insert({
         user_email:  user?.email ?? null,
-        subject:     subject.slice(0, 120) || "(sin asunto)",
+        subject:     subject.slice(0, 120) || "(no subject)",
         description: desc.slice(0, 1000),
         created_at:  new Date().toISOString(),
         device:      navigator.userAgent.slice(0, 250),
@@ -1248,7 +1256,7 @@ function BugReportModal({ user, darkMode, onClose }) {
         <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px",
           borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
-          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>🐛 Reportar un error</p>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>🐛 Report a Bug</p>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
         </div>
@@ -1256,28 +1264,28 @@ function BugReportModal({ user, darkMode, onClose }) {
           {sent ? (
             <div style={{ textAlign:"center",padding:"28px 0" }}>
               <div style={{ fontSize:44,marginBottom:14 }}>✅</div>
-              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>¡Reporte enviado!</p>
+              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Report sent!</p>
               <p style={{ margin:0,fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
-                Reporte enviado correctamente.<br/>Gracias por ayudarnos a mejorar.
+                Your report was submitted successfully.<br/>Thank you for helping us improve.
               </p>
             </div>
           ) : (
             <>
               <p style={{ margin:"0 0 14px",fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
-                Describe qué ocurrió y lo solucionaremos lo antes posible.
+                Describe what happened and we'll fix it as quickly as possible.
               </p>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
-                letterSpacing:"0.05em",textTransform:"uppercase" }}>Asunto</label>
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Subject</label>
               <input value={subject} onChange={e=>setSubject(e.target.value)}
-                placeholder="Ej: El dropdown no cierra correctamente"
+                placeholder="E.g.: Dropdown doesn't close correctly"
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
                   border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
                   fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
                   boxSizing:"border-box",fontFamily:"inherit",marginBottom:12,outline:"none" }}/>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
-                letterSpacing:"0.05em",textTransform:"uppercase" }}>Descripción</label>
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Description</label>
               <textarea value={desc} onChange={e=>setDesc(e.target.value)}
-                placeholder="Describe el problema con el mayor detalle posible…" rows={4}
+                placeholder="Describe the issue in as much detail as possible…" rows={4}
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
                   border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
                   fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
@@ -1288,7 +1296,7 @@ function BugReportModal({ user, darkMode, onClose }) {
                   cursor:sending||!desc.trim()?"not-allowed":"pointer",
                   background:sending||!desc.trim()?"#c7e0f4":"linear-gradient(135deg,#0066cc,#0077ed)",
                   color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
-                {sending ? "Enviando…" : "Enviar reporte →"}
+                {sending ? "Sending…" : "Send report →"}
               </button>
             </>
           )}
@@ -1304,7 +1312,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
   const bg = darkMode ? "#12171f" : "#ffffff";
   const txt = darkMode ? "#e8eaf0" : "#111827";
   const sub = "#8e8e93";
-  const title = isPrivacy ? "Política de Privacidad" : "Términos y Condiciones";
+  const title = isPrivacy ? "Privacy Policy" : "Terms & Conditions";
 
   return (
     <div onClick={onClose}
@@ -1319,7 +1327,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
           borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onBack}
             style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
-            ← Volver
+            ← Back
           </button>
           <span style={{ fontSize:16,fontWeight:700,color:txt,flex:1,textAlign:"center",marginRight:40 }}>{title}</span>
         </div>
@@ -1397,7 +1405,7 @@ function SettingsShell({children, onBack, title, onClose, dark}) {
           borderBottom:`1px solid ${dark?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onBack}
             style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
-            ← Volver
+            ← Back
           </button>
           <span style={{ fontSize:16,fontWeight:700,color:dark?"#e8eaf0":"#111827",flex:1,textAlign:"center",marginRight:40 }}>
             {title}
@@ -1440,7 +1448,7 @@ function SecurityModal({ darkMode, onClose }) {
     const { error: authError } = await updatePassword(pw1);
     setSaving(false);
     if (authError) {
-      setError(authError.message || "Error al guardar la contraseña");
+      setError(authError.message || "Error saving password");
       return;
     }
     setSuccess(true);
@@ -1458,7 +1466,7 @@ function SecurityModal({ darkMode, onClose }) {
         <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
           padding:"16px 20px 12px",borderBottom:`1px solid ${bd}` }}>
-          <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Contraseña</p>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Password</p>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",
               border:"none",cursor:"pointer",color:sub,fontSize:14 }}>✕</button>
@@ -1479,18 +1487,18 @@ function SecurityModal({ darkMode, onClose }) {
               <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>✅</span>
               <div>
                 <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#14532d", letterSpacing: "-0.1px" }}>
-                  Contraseña actualizada correctamente
+                  Password updated successfully
                 </p>
                 <p style={{ margin: 0, fontSize: 12, color: "#166534", lineHeight: 1.55 }}>
-                  Tu nueva contraseña ya está activa y se utilizará en tu próximo acceso.
+                  Your new password is now active and will be used on your next login.
                 </p>
               </div>
             </div>
           ) : (
             <>
               <p style={{ margin:"0 0 18px",fontSize:13,color:sub,lineHeight:1.6 }}>
-                Crea una contraseña para acceder sin necesidad de enlace por email.
-                Mínimo 8 caracteres, incluye letra y número.
+                Create a password to sign in without needing a magic link email.
+                Minimum 8 characters, include at least one letter and one number.
               </p>
               {error && (
                 <div style={{ background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.18)",
@@ -1500,12 +1508,12 @@ function SecurityModal({ darkMode, onClose }) {
               )}
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
                 marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
-                Nueva contraseña
+                New password
               </label>
               <div style={{ position:"relative",marginBottom:12 }}>
                 <input type={showPw?"text":"password"} value={pw1}
                   onChange={e=>setPw1(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="Minimum 8 characters"
                   style={{ width:"100%",padding:"11px 42px 11px 12px",borderRadius:10,
                     border:`1.5px solid ${bd}`,fontSize:14,color:txt,background:inputBg,
                     boxSizing:"border-box",fontFamily:"inherit",outline:"none" }}/>
@@ -1517,12 +1525,12 @@ function SecurityModal({ darkMode, onClose }) {
               </div>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
                 marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
-                Confirmar contraseña
+                Confirm password
               </label>
               <input type="password" value={pw2}
                 onChange={e=>setPw2(e.target.value)}
                 onKeyDown={e=>e.key==="Enter"&&handleSave()}
-                placeholder="Repite la contraseña"
+                placeholder="Repeat your password"
                 style={{ width:"100%",padding:"11px 12px",borderRadius:10,
                   border:`1.5px solid ${pw2&&pw1!==pw2?"rgba(255,59,48,0.5)":bd}`,
                   fontSize:14,color:txt,background:inputBg,
@@ -1532,7 +1540,7 @@ function SecurityModal({ darkMode, onClose }) {
                   cursor:saving?"not-allowed":"pointer",
                   background:saving?"#c7d9f4":"linear-gradient(135deg,#0055cc,#0077ed)",
                   color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
-                {saving ? "Guardando…" : "Guardar contraseña"}
+                {saving ? "Saving…" : "Save password"}
               </button>
             </>
           )}
@@ -4548,6 +4556,47 @@ function AppInner() {
     });
   }, [currentContext]);
 
+  // ── MULTI-AGENT INSTITUTIONAL CONSENSUS ──────────────────────────────────────
+  // Synthesizes COT, Macro, Liquidity, Intraday, Crypto, and Risk Manager agents.
+  // Pure computation — only reruns when underlying signals change.
+  const agentConsensus = useAgentConsensus({
+    biasArr,
+    fxPairs,
+    allBiasArr,
+    combinedData,
+    macroSignal,
+    ratesData,
+    riskRegime,
+    sharedLiveVix,
+    sentimentData,
+    allSentimentData,
+    tradeReadinessScore,
+    tacStateMap,
+    selectedPair,
+    currentContext,
+  });
+
+  // ── ADAPTIVE REGIME ENGINE ─────────────────────────────────────────────────
+  const adaptiveRegime = useMemo(
+    () => computeAdaptiveRegime({ baseRegime: riskRegime, biasArr, allBiasArr, macroSignal }),
+    [riskRegime, biasArr, allBiasArr, macroSignal],
+  );
+
+  // ── INTERMARKET CORRELATION ENGINE ─────────────────────────────────────────
+  const intermarketSignals = useMemo(
+    () => computeIntermarketSignals({ allBiasArr, combinedData, macroSignal }),
+    [allBiasArr, combinedData, macroSignal],
+  );
+
+  // ── SIGNAL PRIORITY + MARKET BRIEFING ─────────────────────────────────────
+  const signalPriority = useMemo(
+    () => computeSignalPriority({
+      agentConsensus, adaptiveRegime, intermarket: intermarketSignals,
+      biasArr, macroSignal, sharedLiveVix,
+    }),
+    [agentConsensus, adaptiveRegime, intermarketSignals, biasArr, macroSignal, sharedLiveVix],
+  );
+
   const _resetParams    = new URLSearchParams(window.location.search);
   const forceResetMode  = _resetParams.get('mode')  === 'reset-password';
   const resetLinkError  = _resetParams.get('error') ?? _resetParams.get('error_code');
@@ -4784,16 +4833,18 @@ if (!authUser || forceResetMode) {
 
   // ── DASHBOARD ──────────────────────────────────────────────────────────────
   const TABS = [
-    {id:"resumen",    label:"🌐 Resumen"},
-    {id:"calendario", label:"📅 Calendario"},
-    {id:"sesgos",     label:"Divisas COT"},
-    {id:"macro",      label:"Macro"},
-    {id:"historico",  label:"Tabla Histórica"},
-    {id:"importar",   label:"🔄 Sync"},
-    {id:"exportar",   label:"Exportar"},
-    {id:"institucional", label:"Institucional"},
-    {id:"recursos",   label:"Recursos"},
-    {id:"cuenta",     label:"Ajustes"},
+    {id:"resumen",       label:"Overview"},
+    {id:"calendario",    label:"Calendar"},
+    {id:"sesgos",        label:"COT Positioning"},
+    {id:"macro",         label:"Macro"},
+    {id:"intelligence",  label:"Intelligence"},
+    {id:"crypto",        label:"Crypto"},
+    {id:"historico",     label:"Historical"},
+    {id:"importar",      label:"Data Sync"},
+    {id:"exportar",      label:"Export"},
+    {id:"institucional", label:"Institutional"},
+    {id:"recursos",      label:"Resources"},
+    {id:"cuenta",        label:"Settings"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
   const sells=displayPairs.filter(p=>p.signal.signal==="sell").length;
@@ -4857,17 +4908,74 @@ if (!authUser || forceResetMode) {
         <div style={{maxWidth:1500,margin:"0 auto",padding:"0 20px"}}>
           {/* Top bar */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:48}}>
+            {/* Left: Logo + name */}
             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
               <img src="/logo.svg" alt="COT" style={{width:26,height:26,borderRadius:6,flexShrink:0,display:"block"}} />
               <span style={{fontSize:14,fontWeight:700,color:_thm.txt,whiteSpace:"nowrap"}}>COT Tracker</span>
-              <span style={{fontSize:10,color:_thm.sub,padding:"1px 6px",border:`1px solid ${_thm.border}`,
-                borderRadius:3,letterSpacing:"0.03em",display:"none",
-                "@media(min-width:600px)":{display:"inline"}}}>
-                CFTC · LM · TFF
-              </span>
+              {!isMobile&&<span style={{fontSize:9,color:_thm.sub,padding:"1px 6px",border:`1px solid ${_thm.border}`,
+                borderRadius:3,letterSpacing:"0.06em",fontWeight:600}}>INSTITUTIONAL</span>}
             </div>
+
+            {/* Center: Live regime + consensus chips */}
+            {!isMobile&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,position:"absolute",left:"50%",transform:"translateX(-50%)"}}>
+                {/* Regime chip */}
+                {adaptiveRegime?.meta&&(
+                  <button
+                    onClick={()=>setMainTab("resumen")}
+                    style={{
+                      display:"inline-flex",alignItems:"center",gap:5,
+                      fontSize:9,fontWeight:700,letterSpacing:"0.07em",
+                      color:adaptiveRegime.meta.color,
+                      background:adaptiveRegime.meta.color+"15",
+                      border:`1px solid ${adaptiveRegime.meta.color}44`,
+                      padding:"3px 10px",borderRadius:99,cursor:"pointer",
+                      transition:"opacity 0.15s",
+                    }}
+                  >
+                    <span style={{width:5,height:5,borderRadius:"50%",background:adaptiveRegime.meta.color,flexShrink:0,display:"inline-block"}}/>
+                    {adaptiveRegime.meta.shortLabel}
+                  </button>
+                )}
+                {/* Consensus score chip */}
+                {agentConsensus?.consensus&&(()=>{
+                  const score=agentConsensus.consensus.score;
+                  const col=score>=68?"#22c55e":score>=52?"#f59e0b":score>=36?"#f97316":"#ef4444";
+                  return(
+                    <button
+                      onClick={()=>setMainTab("intelligence")}
+                      style={{
+                        display:"inline-flex",alignItems:"center",gap:4,
+                        fontSize:9,fontWeight:700,color:col,
+                        background:col+"15",border:`1px solid ${col}44`,
+                        padding:"3px 10px",borderRadius:99,cursor:"pointer",
+                        letterSpacing:"0.06em",
+                      }}
+                    >
+                      IIS {score}
+                    </button>
+                  );
+                })()}
+                {/* VIX chip */}
+                {sharedLiveVix&&(()=>{
+                  const v=sharedLiveVix;
+                  const col=v>25?"#ef4444":v>20?"#f59e0b":"#22c55e";
+                  return(
+                    <span style={{
+                      fontSize:9,fontWeight:700,color:col,
+                      background:col+"12",border:`1px solid ${col}33`,
+                      padding:"3px 10px",borderRadius:99,letterSpacing:"0.06em",
+                    }}>
+                      VIX {v.toFixed(1)}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Right: source + avatar */}
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-              {source&&<span style={{fontSize:10,color:_thm.sub,maxWidth:100,overflow:"hidden",
+              {source&&!isMobile&&<span style={{fontSize:10,color:_thm.sub,maxWidth:100,overflow:"hidden",
                 textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{source}</span>}
               <button onClick={()=>setShowSettings(true)} style={{width:28,height:28,borderRadius:"50%",
                 background:_thm.accent,border:"none",cursor:"pointer",flexShrink:0,
@@ -4876,20 +4984,30 @@ if (!authUser || forceResetMode) {
               </button>
             </div>
           </div>
-          {/* Tabs — scroll horizontal en móvil */}
+
+          {/* Tabs */}
           <div style={{display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch",
             scrollbarWidth:"none",msOverflowStyle:"none"}}>
-            <style>{`.tab-scroll::-webkit-scrollbar{display:none}`}</style>
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setMainTab(t.id)} style={{
-                background:"none",border:"none",cursor:"pointer",flexShrink:0,
-                padding:"9px 14px",fontSize:12,fontWeight:mainTab===t.id?600:400,
-                color:mainTab===t.id?_thm.accent:_thm.sub,
-                borderBottom:mainTab===t.id?`2px solid ${_thm.accent}`:"2px solid transparent",
-                fontWeight:mainTab===t.id?700:500,
-                whiteSpace:"nowrap",transition:"all 0.15s",
-              }}>{t.label}</button>
-            ))}
+            <style>{`
+              .inst-tab:hover { color: var(--cot-text) !important; }
+              ::-webkit-scrollbar { display: none; }
+            `}</style>
+            {TABS.map(t=>{
+              const isActive=mainTab===t.id;
+              // Highlight Intelligence and Crypto tabs with subtle accent backgrounds
+              const isNew=t.id==="intelligence"||t.id==="crypto";
+              return(
+                <button key={t.id} className="inst-tab" onClick={()=>setMainTab(t.id)} style={{
+                  background:isNew&&!isActive?_thm.accent+"0a":"none",
+                  border:"none",cursor:"pointer",flexShrink:0,
+                  padding:"9px 14px",fontSize:12,
+                  fontWeight:isActive?700:500,
+                  color:isActive?_thm.accent:isNew?_thm.accent+"bb":_thm.sub,
+                  borderBottom:isActive?`2px solid ${_thm.accent}`:"2px solid transparent",
+                  whiteSpace:"nowrap",transition:"all 0.15s",
+                }}>{t.label}</button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -4897,20 +5015,41 @@ if (!authUser || forceResetMode) {
       {/* ── COT WEEKLY BANNER ── */}
       <COTWeeklyBanner darkMode={darkMode} T={_thm}/>
 
-      {/* ── TAB: RESUMEN (Sunday Macro Review) ── */}
+      {/* ── TAB: RESUMEN (Overview) ── */}
       {mainTab==="resumen"&&(
-        <ResumenTab
-          T={_thm}
-          darkMode={darkMode}
-          biasArr={biasArr}
-          sharedEvents={sharedEvents}
-          allSentimentData={allSentimentData}
-          allRiskData={allRiskData}
-          globalMarketState={globalMarketState}
-          sharedLiveVix={sharedLiveVix}
-          pairsData={pairsData}
-          onNavigate={setMainTab}
-        />
+        <>
+          {/* Market Briefing — priority signal filter, shown first */}
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0"}}>
+            <MarketBriefingPanel
+              priority={signalPriority}
+              T={_thm}
+              isMobile={isMobile}
+              darkMode={darkMode}
+            />
+          </div>
+          {/* Adaptive Regime + Intermarket */}
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"12px 20px 0"}}>
+            <AdaptiveRegimePanel
+              adaptiveRegime={adaptiveRegime}
+              intermarket={intermarketSignals}
+              darkMode={darkMode}
+              T={_thm}
+              isMobile={isMobile}
+            />
+          </div>
+          <ResumenTab
+            T={_thm}
+            darkMode={darkMode}
+            biasArr={biasArr}
+            sharedEvents={sharedEvents}
+            allSentimentData={allSentimentData}
+            allRiskData={allRiskData}
+            globalMarketState={globalMarketState}
+            sharedLiveVix={sharedLiveVix}
+            pairsData={pairsData}
+            onNavigate={setMainTab}
+          />
+        </>
       )}
 
       {/* ── TAB 1: CALENDARIO ── */}
@@ -4932,14 +5071,14 @@ if (!authUser || forceResetMode) {
       {/* ── TAB 2: DASHBOARD COT ── */}
       {mainTab==="sesgos"&&!pairsData&&!combinedData&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
-          <div style={{fontSize:40,marginBottom:16}}>📊</div>
-          <h2 style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:_thm.txt}}>Importa un archivo CSV del CFTC</h2>
-          <p style={{margin:"0 0 24px",fontSize:14,color:_thm.sub,lineHeight:1.6}}>
-            El Dashboard se activa con cualquiera de las dos fuentes CFTC.
+          <div style={{fontSize:36,marginBottom:16,opacity:0.25}}>⬡</div>
+          <h2 style={{margin:"0 0 8px",fontSize:16,fontWeight:800,color:_thm.txt,letterSpacing:"-0.3px"}}>COT Data Not Loaded</h2>
+          <p style={{margin:"0 0 24px",fontSize:13,color:_thm.sub,lineHeight:1.6,maxWidth:420,marginInline:"auto"}}>
+            Upload a CFTC-published TFF or Disaggregated file to activate institutional COT positioning analysis.
           </p>
-          <button onClick={()=>setMainTab("importar")} style={{padding:"12px 28px",borderRadius:10,border:"none",
-            cursor:"pointer",background:_thm.accent,color:"white",fontSize:14,fontWeight:700}}>
-            Ir a Importar CSV →
+          <button onClick={()=>setMainTab("importar")} style={{padding:"11px 26px",borderRadius:8,border:"none",
+            cursor:"pointer",background:_thm.accent,color:"white",fontSize:13,fontWeight:700,letterSpacing:"0.02em"}}>
+            Go to Data Sync →
           </button>
         </div>
       )}
@@ -4948,8 +5087,8 @@ if (!authUser || forceResetMode) {
         <div style={{maxWidth:1500,margin:"0 auto",padding:isMobile?"12px":"28px 32px"}}>
 
           {/* ─────────────────────────────────────────────────────────────── */}
-          {/* LAYER 1 — ALERTA OPERATIVA                                      */}
-          {/* ¿Debo operar hoy? Veredicto inmediato basado en contexto actual  */}
+          {/* LAYER 1 — EXECUTION ALERT                                        */}
+          {/* Current-session verdict based on COT + macro + intraday context  */}
           {/* ─────────────────────────────────────────────────────────────── */}
           {pairsData&&fxPairs.length>0&&currentContext&&(()=>{
             const { alertData, alertKey, intradayConstraint, intradayBlock } = currentContext;
@@ -4968,18 +5107,18 @@ if (!authUser || forceResetMode) {
           })()}
 
           {/* ─────────────────────────────────────────────────────────────── */}
-          {/* LAYER 2 — CONTEXTO INSTITUCIONAL                                */}
-          {/* ¿Qué dice el posicionamiento CFTC esta semana?                  */}
+          {/* LAYER 2 — INSTITUTIONAL COT CONTEXT                             */}
+          {/* What does CFTC positioning say this week?                        */}
           {/* ─────────────────────────────────────────────────────────────── */}
           {pairsData&&fxPairs.length>0&&(()=>{
             return (
               <div style={{marginBottom:16}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
-                    CONTEXTO INSTITUCIONAL
+                    INSTITUTIONAL COT CONTEXT
                   </span>
                   <span style={{flex:1,height:1,background:_thm.border}}/>
-                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>COT · CFTC · SEMANAL</span>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:"0.05em",fontWeight:500}}>COT · CFTC · WEEKLY</span>
                 </div>
                 <ContextSummary fxPairs={fxPairs} darkMode={darkMode} T={_thm}/>
                 <div style={{marginTop:10}}>
@@ -4990,8 +5129,8 @@ if (!authUser || forceResetMode) {
           })()}
 
           {/* ─────────────────────────────────────────────────────────────── */}
-          {/* LAYER 3 — PERMISO OPERATIVO INTRADÍA                            */}
-          {/* ¿Tienes permiso de ejecutar hoy según el contexto macro+COT?    */}
+          {/* LAYER 3 — INTRADAY EXECUTION FILTER                             */}
+          {/* Permission to execute based on macro + COT + session context    */}
           {/* ─────────────────────────────────────────────────────────────── */}
           {pairsData&&currentContext&&(()=>{
             const availablePairs = biasArr.map(r => ({
@@ -5008,10 +5147,10 @@ if (!authUser || forceResetMode) {
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                   <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
-                    PERMISO OPERATIVO INTRADÍA
+                    INTRADAY EXECUTION FILTER
                   </span>
                   <span style={{flex:1,height:1,background:_thm.border}}/>
-                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>INTRADAY EXECUTION · NO GENERA SEÑALES</span>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>INTRADAY EXECUTION · TACTICAL LAYER</span>
                 </div>
                 <IntradayExecutionCard
                   biasResult={topBias.bias}
@@ -5535,25 +5674,78 @@ if (!authUser || forceResetMode) {
         />
       )}
 
-      {/* ── TAB: EXPORTAR ── */}
+      {/* ── TAB: EXPORTAR (lazy-loaded to reduce initial bundle) ── */}
       {mainTab==="exportar"&&(
-        <ExportPanel
-          biasArr={biasArr}
-          fxPairs={fxPairs}
-          allBiasArr={allBiasArr}
-          allPairsArr={allPairsArr}
+        <Suspense fallback={
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:200,color:_thm.sub,fontSize:13}}>
+            Loading export tools…
+          </div>
+        }>
+          <ExportPanel
+            biasArr={biasArr}
+            fxPairs={fxPairs}
+            allBiasArr={allBiasArr}
+            allPairsArr={allPairsArr}
+            riskRegime={riskRegime}
+            combinedData={combinedData}
+            macroSignal={macroSignal}
+            ratesData={ratesData}
+            candleMap={candleMap}
+            livePrices={livePrices}
+            sentimentData={sentimentData}
+            riskData={riskData}
+            agentConsensus={agentConsensus}
+            adaptiveRegime={adaptiveRegime}
+            intermarket={intermarketSignals}
+            signalPriority={signalPriority}
+            darkMode={darkMode}
+            T={_thm}
+            isPremium={isPremium}
+            onUpgrade={openBilling}
+          />
+        </Suspense>
+      )}
+
+      {/* ── TAB: INTELLIGENCE (Multi-Agent System) ── */}
+      {mainTab==="intelligence"&&(
+        <>
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0"}}>
+            <MarketBriefingPanel
+              priority={signalPriority}
+              T={_thm}
+              isMobile={isMobile}
+              darkMode={darkMode}
+            />
+          </div>
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"12px 20px 0"}}>
+            <AdaptiveRegimePanel
+              adaptiveRegime={adaptiveRegime}
+              intermarket={intermarketSignals}
+              darkMode={darkMode}
+              T={_thm}
+              isMobile={isMobile}
+            />
+          </div>
+          <InstitutionalIntelligencePanel
+            consensus={agentConsensus}
+            darkMode={darkMode}
+            T={_thm}
+            isMobile={isMobile}
+          />
+        </>
+      )}
+
+      {/* ── TAB: CRYPTO INTELLIGENCE ── */}
+      {mainTab==="crypto"&&(
+        <CryptoIntelligencePanel
           riskRegime={riskRegime}
-          combinedData={combinedData}
           macroSignal={macroSignal}
-          ratesData={ratesData}
-          candleMap={candleMap}
-          livePrices={livePrices}
-          sentimentData={sentimentData}
-          riskData={riskData}
+          combinedData={combinedData}
+          sharedLiveVix={sharedLiveVix}
+          agentConsensus={agentConsensus}
           darkMode={darkMode}
           T={_thm}
-          isPremium={isPremium}
-          onUpgrade={openBilling}
+          isMobile={isMobile}
         />
       )}
 
@@ -5576,13 +5768,13 @@ if (!authUser || forceResetMode) {
       {/* ── TAB 5: AJUSTES ── */}
       {mainTab==="cuenta"&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
-          <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:4,padding:"24px"}}>
-            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:_thm.txt}}>Ajustes de Cuenta</h2>
-            <p style={{margin:"0 0 20px",fontSize:11,color:_thm.sub}}>Gestiona tu perfil, plan de suscripción y preferencias</p>
+          <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:8,padding:"24px"}}>
+            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:800,color:_thm.txt,letterSpacing:"-0.3px"}}>Account Settings</h2>
+            <p style={{margin:"0 0 20px",fontSize:11,color:_thm.sub}}>Manage your profile, subscription plan, and display preferences</p>
             <button onClick={()=>setShowSettings(true)} style={{
-              padding:"10px 20px",borderRadius:4,border:"none",cursor:"pointer",
-              background:_thm.accent,color:"white",fontSize:12,fontWeight:600,
-            }}>Abrir panel de ajustes</button>
+              padding:"10px 20px",borderRadius:7,border:"none",cursor:"pointer",
+              background:_thm.accent,color:"white",fontSize:12,fontWeight:700,letterSpacing:"0.02em",
+            }}>Open Settings Panel</button>
           </div>
         </div>
       )}

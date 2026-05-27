@@ -12,6 +12,8 @@ import {
   buildFilename,
   buildMultiPairCSV,
   buildMultiPairJSON,
+  buildIntelligenceExport,
+  buildTelegramBriefing,
 } from '../lib/exportEngine.js';
 
 // ── SCOPE DEFINITIONS ─────────────────────────────────────────────────────────
@@ -65,6 +67,18 @@ const SCOPES = [
     premium:     true,
     icon:        <VisualIcon />,
   },
+  {
+    id:          'intelligence',
+    level:       'INTELLIGENCE',
+    levelColor:  '#a78bfa',
+    title:       'Intelligence Briefing',
+    subtitle:    'Agent consensus + regime + intermarket',
+    desc:        'Institutional intelligence package: adaptive regime, multi-agent consensus, intermarket health, and priority signals. Telegram-ready text included.',
+    features:    ['Telegram-ready briefing text', 'Agent consensus JSON', 'Adaptive regime export', 'Intermarket signal health', 'Priority signal ranking'],
+    formats:     ['telegram', 'json'],
+    premium:     false,
+    icon:        <IntelligenceIcon />,
+  },
 ];
 
 // ── ICONS ─────────────────────────────────────────────────────────────────────
@@ -110,6 +124,16 @@ function VisualIcon() {
   );
 }
 
+function IntelligenceIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
+      <circle cx="9" cy="9" r="3"   fill="currentColor" opacity=".5"/>
+      <path d="M9 2.5v2M9 13.5v2M2.5 9h2M13.5 9h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -147,11 +171,12 @@ function SearchIcon() {
 // ── PRIMITIVES ────────────────────────────────────────────────────────────────
 
 const FORMAT_DESC = {
-  csv:  'Spreadsheet-ready',
-  json: 'For automation',
-  xlsx: 'Best for Excel',
-  html: 'Best for reports',
-  pdf:  'Best for sharing',
+  csv:      'Spreadsheet-ready',
+  json:     'For automation',
+  xlsx:     'Best for Excel',
+  html:     'Best for reports',
+  pdf:      'Best for sharing',
+  telegram: 'Copy & paste to Telegram',
 };
 
 function estimateExportSize(count, format) {
@@ -766,6 +791,10 @@ export default function ExportPanel({
   livePrices,
   sentimentData,
   riskData,
+  agentConsensus,
+  adaptiveRegime,
+  intermarket,
+  signalPriority,
   darkMode,
   T,
   isPremium,
@@ -777,6 +806,7 @@ export default function ExportPanel({
   const [status,          setStatus]          = useState('idle'); // idle | loading | done | error
   const [lastTime,        setLastTime]        = useState(null);
   const [lastFilename,    setLastFilename]    = useState(null);
+  const [copied,          setCopied]          = useState(false);
 
   // Prefer the cross-asset arrays when available; fall back to FX-only for backward compat.
   const effectivePairs = useMemo(
@@ -853,16 +883,21 @@ export default function ExportPanel({
 
   const exportOpts = useMemo(() => ({
     macroSignal,
-    livePrices:    livePrices ?? {},
+    livePrices:     livePrices ?? {},
     sentimentData,
     riskData,
     ratesData,
-    candleMap:     candleMap ?? {},
-    riskRegime:    riskRegime    ?? null,
-    combinedData:  combinedData  ?? null,
-    cotDate:       cotDate       ?? null,
-    snapshotDate:  new Date().toISOString().slice(0, 10),
-  }), [macroSignal, livePrices, sentimentData, riskData, ratesData, candleMap, riskRegime, combinedData, cotDate]);
+    candleMap:      candleMap     ?? {},
+    riskRegime:     riskRegime    ?? null,
+    combinedData:   combinedData  ?? null,
+    cotDate:        cotDate       ?? null,
+    snapshotDate:   new Date().toISOString().slice(0, 10),
+    agentConsensus: agentConsensus ?? null,
+    adaptiveRegime: adaptiveRegime ?? null,
+    intermarket:    intermarket    ?? null,
+    signalPriority: signalPriority ?? null,
+  }), [macroSignal, livePrices, sentimentData, riskData, ratesData, candleMap, riskRegime, combinedData, cotDate,
+       agentConsensus, adaptiveRegime, intermarket, signalPriority]);
 
   const handleExport = useCallback(() => {
     if (!hasData || status === 'loading') return;
@@ -970,6 +1005,19 @@ export default function ExportPanel({
             content  = result.data;
             filename = result.filename;
             mime     = result.mime;
+          }
+
+        // ── scope: intelligence ─────────────────────────────────────────────
+        } else if (scope === 'intelligence') {
+          if (activeFormat === 'telegram') {
+            content  = buildTelegramBriefing(exportOpts);
+            filename = buildFilename('intelligence', null, 'telegram');
+            mime     = 'text/plain;charset=utf-8';
+          } else {
+            const intel = buildIntelligenceExport(exportOpts);
+            content  = JSON.stringify(intel, null, 2);
+            filename = buildFilename('intelligence', null, 'json');
+            mime     = 'application/json';
           }
         }
 
@@ -1151,6 +1199,61 @@ export default function ExportPanel({
           </div>
         )}
       </div>
+
+      {/* ── Intelligence scope: Telegram preview note ── */}
+      {scope === 'intelligence' && (
+        <div style={{
+          padding: '14px 18px',
+          background: 'rgba(167,139,250,0.06)',
+          border: '1px solid rgba(167,139,250,0.25)',
+          borderRadius: 10,
+          marginBottom: 14,
+          display: 'flex', alignItems: 'flex-start', gap: 14,
+        }}>
+          <span style={{ fontSize: 20, flexShrink: 0 }}>📡</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', marginBottom: 4 }}>
+              Intelligence Briefing — Agent Consensus + Regime + Intermarket
+            </div>
+            <p style={{ margin: 0, fontSize: 11, color: T.sub, lineHeight: 1.55 }}>
+              {activeFormat === 'telegram'
+                ? 'Downloads a .txt file optimized for Telegram. Bold markers use Telegram MarkdownV2 syntax. Copy the file contents and paste directly into any Telegram chat or channel.'
+                : 'Downloads a structured JSON envelope with all agent scores, adaptive regime state, intermarket health, and priority signals. Use for dashboards, automations, or further analysis.'}
+            </p>
+            {!agentConsensus && (
+              <p style={{ margin: '6px 0 0', fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>
+                ⚠ Agent consensus not yet available — upload COT data and await macro signal to activate.
+              </p>
+            )}
+          </div>
+          {activeFormat === 'telegram' && agentConsensus && (
+            <button
+              onClick={() => {
+                try {
+                  const text = buildTelegramBriefing(exportOpts);
+                  navigator.clipboard.writeText(text).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2500);
+                  });
+                } catch (e) {
+                  console.error('[Clipboard]', e);
+                }
+              }}
+              style={{
+                flexShrink: 0, padding: '6px 14px',
+                background: copied ? '#22c55e22' : 'rgba(167,139,250,0.12)',
+                border: `1px solid ${copied ? '#22c55e55' : 'rgba(167,139,250,0.4)'}`,
+                borderRadius: 7, cursor: 'pointer',
+                fontSize: 10, fontWeight: 700,
+                color: copied ? '#22c55e' : '#a78bfa',
+                letterSpacing: '0.05em', whiteSpace: 'nowrap',
+              }}
+            >
+              {copied ? '✓ Copied!' : '⎘ Copy to Clipboard'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Snapshot status ── */}
       <SnapshotStatus

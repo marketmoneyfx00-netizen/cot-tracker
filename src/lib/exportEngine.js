@@ -712,11 +712,12 @@ export function downloadFile(content, filename, mimeType) {
 export function buildFilename(scope, symbol, format) {
   const d = isoDate();
   const prefix = 'COTTracker';
-  if (scope === 'pair')     return `${prefix}_${(symbol ?? 'Pair').replace('/', '')}_${d}.${format}`;
-  if (scope === 'multi')    return `${prefix}_MultiAsset_${d}.${format}`;
-  if (scope === 'snapshot') return `${prefix}_FullMarketSnapshot_${d}.${format}`;
-  if (scope === 'raw')      return `${prefix}_RawInstitutionalData_${d}.json`;
-  if (scope === 'visual')   return `${prefix}_InstitutionalReport_${d}.${format}`;
+  if (scope === 'pair')         return `${prefix}_${(symbol ?? 'Pair').replace('/', '')}_${d}.${format}`;
+  if (scope === 'multi')        return `${prefix}_MultiAsset_${d}.${format}`;
+  if (scope === 'snapshot')     return `${prefix}_FullMarketSnapshot_${d}.${format}`;
+  if (scope === 'raw')          return `${prefix}_RawInstitutionalData_${d}.json`;
+  if (scope === 'visual')       return `${prefix}_InstitutionalReport_${d}.${format}`;
+  if (scope === 'intelligence') return `${prefix}_IntelligenceBriefing_${d}.${format === 'telegram' ? 'txt' : format}`;
   return `${prefix}_Export_${d}.${format}`;
 }
 
@@ -855,4 +856,271 @@ export function buildMultiPairJSON(selectedPairs, biasArr, fxPairs, opts = {}) {
     assets_count:   assets.length,
     assets,
   };
+}
+
+// ── INTELLIGENCE EXPORTS (AGENT CONSENSUS + REGIME + INTERMARKET) ─────────────
+
+/**
+ * buildIntelligenceExport — structured JSON for the intelligence briefing scope.
+ * Pulls from agentConsensus, adaptiveRegime, intermarket, signalPriority in opts.
+ */
+export function buildIntelligenceExport(opts = {}) {
+  const {
+    agentConsensus = null,
+    adaptiveRegime = null,
+    intermarket    = null,
+    signalPriority = null,
+    macroSignal    = null,
+    riskRegime     = null,
+    cotDate        = null,
+  } = opts;
+
+  const ag = agentConsensus;
+  const ar = adaptiveRegime;
+  const im = intermarket;
+  const sp = signalPriority;
+
+  return {
+    export_type:    'intelligence_briefing',
+    export_version: EXPORT_VERSION,
+    generated_at:   isoNow(),
+    cot_week:       cotDate ?? null,
+
+    regime: ar ? {
+      adaptive:      ar.regime,
+      label:         ar.meta?.label,
+      base:          ar.base?.regime ?? riskRegime?.regime ?? null,
+      conviction:    ar.conviction,
+      momentum:      ar.momentum,
+      action_bias:   ar.meta?.actionBias,
+      bias:          ar.meta?.bias,
+      exhaustion:    ar.exhaustion ? {
+        detected:      ar.exhaustion.isExhausted,
+        extreme_pairs: ar.exhaustion.extremePairs ?? [],
+      } : null,
+      transition: ar.transition ? {
+        risk:     ar.transition.transitionRisk,
+        pending:  ar.transition.isPending,
+        signals:  ar.transition.signals ?? [],
+      } : null,
+      key_drivers: ar.adaptiveDrivers ?? [],
+    } : null,
+
+    agent_consensus: ag ? {
+      score:       ag.consensus?.score,
+      label:       ag.consensus?.label,
+      direction:   ag.consensus?.direction,
+      confidence:  ag.consensus?.confidence,
+      environment: ag.environment,
+      veto:        ag.risk?.veto ?? false,
+      veto_reason: ag.risk?.vetoReason ?? null,
+      risk_level:  ag.risk?.level,
+      probability: ag.probability,
+      summary:     ag.summary,
+      agents: {
+        cot: {
+          score:      ag.agents?.cot?.score,
+          confidence: ag.agents?.cot?.confidence,
+          direction:  ag.agents?.cot?.direction,
+          signals:    ag.agents?.cot?.signals ?? [],
+          warnings:   ag.agents?.cot?.warnings ?? [],
+        },
+        macro: {
+          score:      ag.agents?.macro?.score,
+          confidence: ag.agents?.macro?.confidence,
+          usd_bias:   ag.agents?.macro?.usdBias,
+          vix:        ag.agents?.macro?.vix,
+          signals:    ag.agents?.macro?.signals ?? [],
+        },
+        liquidity: {
+          score:     ag.agents?.liquidity?.score,
+          condition: ag.agents?.liquidity?.condition,
+          regime:    ag.agents?.liquidity?.regime,
+          signals:   ag.agents?.liquidity?.signals ?? [],
+          warnings:  ag.agents?.liquidity?.warnings ?? [],
+        },
+        intraday: {
+          score:   ag.agents?.intraday?.score,
+          quality: ag.agents?.intraday?.quality,
+          signals: ag.agents?.intraday?.signals ?? [],
+        },
+        crypto: {
+          score:          ag.agents?.cryptoFlow?.score,
+          crypto_regime:  ag.agents?.cryptoFlow?.cryptoRegime,
+          signals:        ag.agents?.cryptoFlow?.signals ?? [],
+        },
+      },
+      conditions: {
+        best:  ag.conditions?.best ?? [],
+        avoid: ag.conditions?.avoid ?? [],
+      },
+    } : null,
+
+    intermarket: im ? {
+      health_score:    im.health?.score,
+      health_label:    im.health?.label,
+      aligned_count:   im.health?.aligned ?? 0,
+      diverging_count: im.health?.diverging ?? 0,
+      breakdown_count: im.health?.breakdowns ?? 0,
+      key_divergences: im.keyDivergences ?? [],
+      signals: (im.signals ?? []).map(s => ({
+        id:          s.id,
+        description: s.description,
+        status:      s.status,
+        assetA:      s.assetA,
+        assetB:      s.assetB,
+        insight:     s.insight,
+      })),
+    } : null,
+
+    priority_signals: sp ? {
+      critical_count: sp.criticalCount ?? 0,
+      total_signals:  sp.signals?.length ?? 0,
+      briefing:       sp.briefing ?? [],
+      signals: (sp.signals ?? []).slice(0, 10).map(s => ({
+        priority: s.priority,
+        category: s.category,
+        title:    s.title,
+        detail:   s.detail,
+        action:   s.action ?? null,
+      })),
+    } : null,
+
+    macro_context: macroSignal ? {
+      bias:       macroSignal.bias,
+      confidence: macroSignal.confidence,
+      drivers:    macroSignal.drivers ?? [],
+    } : null,
+  };
+}
+
+/**
+ * buildTelegramBriefing — Telegram-optimized text briefing (UTF-8, emoji-annotated).
+ * Compact enough for a Telegram message. Returns a plain text string.
+ */
+export function buildTelegramBriefing(opts = {}) {
+  const {
+    agentConsensus = null,
+    adaptiveRegime = null,
+    intermarket    = null,
+    signalPriority = null,
+    macroSignal    = null,
+    cotDate        = null,
+  } = opts;
+
+  const lines = [];
+  const date  = isoDate();
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  lines.push('📊 *COT TRACKER — INSTITUTIONAL BRIEFING*');
+  lines.push(`📅 ${date}${cotDate ? ` | COT Week: ${cotDate}` : ''}`);
+  lines.push('');
+
+  // ── VERDICT (most important — surfaces first) ─────────────────────────────
+  if (agentConsensus) {
+    const ag       = agentConsensus;
+    const env      = ag.environment ?? 'UNKNOWN';
+    const dir      = ag.consensus?.direction ?? 'NEUTRAL';
+    const score    = ag.consensus?.score ?? 0;
+    const cont     = ag.probability?.continuation ?? '—';
+    const trap     = ag.probability?.trap ?? '—';
+    const envEmoji = { FAVORABLE: '✅', CAUTION: '⚠️', DEFENSIVE: '🛡️', DANGER: '🚨' }[env] ?? '❓';
+    const dirEmoji = dir === 'BULLISH' ? '📈' : dir === 'BEARISH' ? '📉' : '➡️';
+
+    lines.push('*━━━ OVERALL VERDICT ━━━*');
+    if (ag.risk?.veto) {
+      lines.push(`🚫 *VETO ACTIVE — STAND ASIDE*`);
+      lines.push(`Reason: ${ag.risk.vetoReason ?? 'Risk conditions not met'}`);
+    } else {
+      lines.push(`${dirEmoji} *${dir}* ${envEmoji} ${env}`);
+      lines.push(`Score: ${score}/100 | Continuation: ${cont}% | Trap Risk: ${trap}%`);
+    }
+    lines.push('');
+  }
+
+  // ── Priority signals (P1 + P2 — critical first) ───────────────────────────
+  if (signalPriority?.signals?.length) {
+    const critical = signalPriority.signals.filter(s => s.priority === 'P1');
+    const high     = signalPriority.signals.filter(s => s.priority === 'P2');
+    const toShow   = [...critical, ...high].slice(0, 5);
+
+    if (toShow.length) {
+      lines.push('*━━━ PRIORITY SIGNALS ━━━*');
+      toShow.forEach(s => {
+        const tag = s.priority === 'P1' ? '🔴' : '🟡';
+        lines.push(`${tag} *[${s.priority}]* ${s.title}`);
+        if (s.action) lines.push(`   ↳ ${s.action}`);
+      });
+      lines.push('');
+    }
+  }
+
+  // ── Institutional summary (briefing text) ────────────────────────────────
+  if (signalPriority?.briefing?.length) {
+    lines.push('*━━━ MARKET CONTEXT ━━━*');
+    signalPriority.briefing.slice(0, 3).forEach(line => lines.push(`• ${line}`));
+    lines.push('');
+  }
+
+  // ── Adaptive Regime ──────────────────────────────────────────────────────
+  if (adaptiveRegime) {
+    const ar       = adaptiveRegime;
+    const conv     = ar.conviction?.level?.toUpperCase() ?? '—';
+    const mom      = ar.momentum?.direction?.toUpperCase() ?? 'STABLE';
+    const bias     = ar.meta?.actionBias?.replace(/_/g, ' ') ?? '—';
+    const regEmoji = {
+      RISK_ON_ACCELERATION: '🚀', RISK_ON: '📈', RISK_ON_EXHAUSTION: '⚠️',
+      RISK_OFF: '📉', RISK_OFF_EXTREME: '🚨', STAGFLATION: '🔥',
+      DISINFLATION: '❄️', LIQUIDITY_STRESS: '💧', TRANSITIONAL: '🔄',
+    }[ar.regime] ?? '⬡';
+
+    lines.push(`${regEmoji} *REGIME: ${ar.meta?.label?.toUpperCase() ?? ar.regime}*`);
+    lines.push(`Conviction: ${conv} (${ar.conviction?.score ?? 0}/10) | Momentum: ${mom}`);
+    lines.push(`Action Bias: ${bias}`);
+    if (ar.transition?.isPending) {
+      lines.push(`🔄 Transition Risk: ${ar.transition.transitionRisk?.toUpperCase() ?? 'PENDING'}`);
+    }
+    if (ar.exhaustion?.isExhausted) {
+      lines.push(`⚠️ Exhaustion: ${ar.exhaustion.extremePairs?.length ?? 0} pairs at positioning extremes`);
+    }
+    lines.push('');
+  }
+
+  // ── Agent breakdown (compact) ────────────────────────────────────────────
+  if (agentConsensus?.agents) {
+    const a = agentConsensus.agents;
+    lines.push('*Agent Scores:*');
+    if (a.cot)        lines.push(`• COT ${a.cot.score}/100 (${a.cot.confidence?.toUpperCase() ?? '?'}) — ${a.cot.direction?.toUpperCase() ?? '—'}`);
+    if (a.macro)      lines.push(`• Macro ${a.macro.score}/100 — ${a.macro.usdBias?.replace(/_/g, ' ') ?? '—'}`);
+    if (a.liquidity)  lines.push(`• Liquidity ${a.liquidity.score}/100 — ${a.liquidity.condition ?? '—'}`);
+    if (a.intraday)   lines.push(`• Intraday ${a.intraday.score}/100 — ${a.intraday.quality ?? '—'}`);
+    if (a.cryptoFlow) lines.push(`• Crypto ${a.cryptoFlow.score}/100 — ${a.cryptoFlow.cryptoRegime?.replace(/_/g, '-') ?? '—'}`);
+    lines.push('');
+  }
+
+  // ── Intermarket health ───────────────────────────────────────────────────
+  if (intermarket?.health) {
+    const im = intermarket;
+    const hEmoji = (im.health.breakdowns ?? 0) > 0 ? '🔴' : (im.health.diverging ?? 0) > 0 ? '⚠️' : '✅';
+    lines.push(`${hEmoji} *INTERMARKET: ${im.health.label?.toUpperCase() ?? '—'} (${im.health.score ?? 0}/100)*`);
+    lines.push(`Aligned: ${im.health.aligned ?? 0} | Diverging: ${im.health.diverging ?? 0} | Breakdown: ${im.health.breakdowns ?? 0}`);
+    if (im.keyDivergences?.length) {
+      im.keyDivergences.slice(0, 2).forEach(d => lines.push(`• ${d}`));
+    }
+    lines.push('');
+  }
+
+  // ── Macro context ────────────────────────────────────────────────────────
+  if (macroSignal?.bias) {
+    lines.push(`🌍 *MACRO:* ${macroSignal.bias.replace(/_/g, ' ')} | Conf: ${macroSignal.confidence ?? 0}/10`);
+    if (macroSignal.drivers?.[0]) lines.push(`• ${macroSignal.drivers[0]}`);
+    lines.push('');
+  }
+
+  // ── Footer ───────────────────────────────────────────────────────────────
+  lines.push('─────────────────────');
+  lines.push('_COT Tracker — Institutional Intelligence_');
+  lines.push('_Not financial advice. Institutional context only._');
+
+  return lines.join('\n');
 }
