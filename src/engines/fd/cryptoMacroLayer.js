@@ -117,11 +117,11 @@ function computeInstitutionalDemand(cryptoBundle) {
   const score = items.length ? Math.round(weightedAvg(items)) : null;
 
   let label, color;
-  if (score == null)  { label = 'Unknown';   color = '#6b7280'; }
-  else if (score > 65){ label = 'Growing';   color = '#22c55e'; }
-  else if (score > 50){ label = 'Positive';  color = '#4ade80'; }
-  else if (score > 35){ label = 'Neutral';   color = '#fbbf24'; }
-  else                { label = 'Declining'; color = '#ef4444'; }
+  if (score == null)  { label = 'Desconocido'; color = '#6b7280'; }
+  else if (score > 65){ label = 'Creciendo';  color = '#22c55e'; }
+  else if (score > 50){ label = 'Positivo';   color = '#4ade80'; }
+  else if (score > 35){ label = 'Neutral';    color = '#fbbf24'; }
+  else                { label = 'Declinando'; color = '#ef4444'; }
 
   return { score, label, color };
 }

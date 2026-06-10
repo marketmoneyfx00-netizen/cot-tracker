@@ -6,12 +6,11 @@
 //
 // Components:
 //   1. COT Positioning (existing engine)     — 25%
-//   2. Macro Context (existing engines)      — 20%
-//   3. Equity Intelligence (new FD)          — 20%
-//   4. Earnings Regime (new FD)              — 15%
+//   2. Macro Context (existing engines)      — 22%
+//   3. Equity Intelligence (new FD)          — 22%
+//   4. Earnings Regime (new FD)              — 16%
 //   5. Financial Stress (new FD)             — 10% (inverted — high stress = lower score)
-//   6. Crypto Risk Signal (existing + FD)    — 5%
-//   7. Intermarket Stability (existing)      — 5%
+//   6. Intermarket Stability (existing)      — 5%
 // =============================================================================
 
 import { clamp, scoreLabel, directionLabel, convictionLabel }
@@ -21,11 +20,10 @@ import { clamp, scoreLabel, directionLabel, convictionLabel }
 
 const WEIGHTS = {
   cot:         0.25,
-  macro:       0.20,
-  equity:      0.20,
-  earnings:    0.15,
+  macro:       0.22,
+  equity:      0.22,
+  earnings:    0.16,
   stress:      0.10, // inverted
-  crypto:      0.05,
   intermarket: 0.05,
 };
 
@@ -69,13 +67,6 @@ function normalizeStressScore(stressEngine) {
   return clamp(100 - stressEngine.stressScore, 0, 100);
 }
 
-// ── Crypto score ──────────────────────────────────────────────────────────────
-
-function normalizeCryptoScore(cryptoLayer) {
-  if (!cryptoLayer) return null;
-  return clamp(cryptoLayer.riskSignal?.score ?? 50, 0, 100);
-}
-
 // ── Intermarket score ─────────────────────────────────────────────────────────
 
 function normalizeIntermarketScore(intermarketStability) {
@@ -89,13 +80,13 @@ function normalizeIntermarketScore(intermarketStability) {
 // ── Regime classification ─────────────────────────────────────────────────────
 
 const REGIMES = [
-  { min: 80, label: 'INSTITUTIONAL_BULL',    color: '#16a34a', description: 'Full institutional confluence — strong directional conviction' },
-  { min: 65, label: 'CONSTRUCTIVE',          color: '#22c55e', description: 'Majority signals aligned — moderate-high conviction' },
-  { min: 55, label: 'CAUTIOUSLY_BULLISH',    color: '#86efac', description: 'Leaning bullish with notable headwinds' },
-  { min: 45, label: 'NEUTRAL',               color: '#fbbf24', description: 'Mixed signals — wait for confirmation' },
-  { min: 35, label: 'CAUTIOUSLY_BEARISH',    color: '#f97316', description: 'Leaning bearish with pockets of support' },
-  { min: 20, label: 'RISK_ELEVATED',         color: '#ef4444', description: 'Multiple stress signals active — defensive bias' },
-  { min: 0,  label: 'INSTITUTIONAL_BEAR',    color: '#dc2626', description: 'Full institutional confluence to downside' },
+  { min: 80, label: 'ALCISTA INSTITUCIONAL', color: '#16a34a', description: 'Confluencia institucional total — convicción direccional fuerte' },
+  { min: 65, label: 'CONSTRUCTIVO',          color: '#22c55e', description: 'Mayoría de señales alineadas — convicción moderada-alta' },
+  { min: 55, label: 'LEVEMENTE ALCISTA',     color: '#86efac', description: 'Tendencia alcista con resistencias notables' },
+  { min: 45, label: 'NEUTRAL',               color: '#fbbf24', description: 'Señales mixtas — esperar confirmación' },
+  { min: 35, label: 'LEVEMENTE BAJISTA',     color: '#f97316', description: 'Tendencia bajista con zonas de soporte' },
+  { min: 20, label: 'RIESGO ELEVADO',        color: '#ef4444', description: 'Múltiples señales de estrés activas — sesgo defensivo' },
+  { min: 0,  label: 'BAJISTA INSTITUCIONAL', color: '#dc2626', description: 'Confluencia institucional total a la baja' },
 ];
 
 function classifyRegime(score) {
@@ -113,13 +104,12 @@ function buildComponentBreakdown(normalizedScores) {
     .map(([key, score]) => ({
       key,
       label: {
-        cot:         'COT Positioning',
-        macro:       'Macro Environment',
-        equity:      'Equity Intelligence',
-        earnings:    'Earnings Regime',
-        stress:      'Financial Health',
-        crypto:      'Crypto Risk Signal',
-        intermarket: 'Intermarket Stability',
+        cot:         'Posicionamiento COT',
+        macro:       'Entorno Macro',
+        equity:      'Renta Variable',
+        earnings:    'Régimen de Ganancias',
+        stress:      'Salud Financiera',
+        intermarket: 'Estabilidad Intermercado',
       }[key] ?? key,
       score:  Math.round(score),
       weight: WEIGHTS[key] ?? 0,
@@ -138,7 +128,6 @@ function buildComponentBreakdown(normalizedScores) {
  *   .equityIntel          {object}  — from computeEquityIntelligence
  *   .earningsRegime       {object}  — from computeEarningsRegime
  *   .stressEngine         {object}  — from computeBalanceSheetStress
- *   .cryptoLayer          {object}  — from computeCryptoMacroLayer
  *   .intermarketStability {object}  — from intermarketStabilityEngine (existing)
  * @returns {object} InstitutionalCompositeResult
  */
@@ -149,7 +138,6 @@ export function computeInstitutionalComposite(inputs) {
     equityIntel,
     earningsRegime,
     stressEngine,
-    cryptoLayer,
     intermarketStability,
   } = inputs ?? {};
 
@@ -159,7 +147,6 @@ export function computeInstitutionalComposite(inputs) {
     equity:      equityIntel?.compositeScore ?? null,
     earnings:    normalizeEarningsScore(earningsRegime),
     stress:      normalizeStressScore(stressEngine),
-    crypto:      normalizeCryptoScore(cryptoLayer),
     intermarket: normalizeIntermarketScore(intermarketStability),
   };
 

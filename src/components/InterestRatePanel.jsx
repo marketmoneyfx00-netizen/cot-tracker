@@ -954,7 +954,7 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
           }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: T.txt }}>
-                Interest Rate Differentials
+                Diferenciales de Tipo de Interés
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: T.sub }}>
                 Carry direction por par — diferencial de tasas base vs quote (pb)
@@ -1047,8 +1047,8 @@ export default function InterestRatePanel({ darkMode, T, isMobile }) {
                     }}/>
                   </div>
                   <span style={{ fontSize: 9, color: T.sub2, whiteSpace: 'nowrap', minWidth: 70 }}>
-                    {p.carry_direction === 'long_base'  ? `Long ${p.base_currency}`  :
-                     p.carry_direction === 'long_quote' ? `Long ${p.quote_currency}` : 'Neutral'}
+                    {p.carry_direction === 'long_base'  ? `Largo ${p.base_currency}`  :
+                     p.carry_direction === 'long_quote' ? `Largo ${p.quote_currency}` : 'Neutral'}
                   </span>
                 </div>
 

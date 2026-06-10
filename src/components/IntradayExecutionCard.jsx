@@ -187,7 +187,7 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: permission.color, boxShadow: `0 0 6px ${permission.color}`, flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 700, color: sub2, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-            INTRADAY EXECUTION LAYER
+            CAPA DE EJECUCIÓN INTRADÍA
           </span>
         </div>
         {availablePairs?.length > 0 && (
@@ -254,7 +254,7 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
           {/* Descriptor */}
           <div style={{ fontSize: isMobile ? 11 : 12, color: T.sub, lineHeight: 1.55, marginBottom: 3 }}>
             Busca setups solo cuando el permiso sea{' '}
-            <span style={{ color: '#22c55e', fontWeight: 700 }}>HIGH</span>
+            <span style={{ color: '#22c55e', fontWeight: 700 }}>ALTO</span>
           </div>
           {/* Context line */}
           <div style={{ fontSize: 9, color: sub2, letterSpacing: '0.05em', fontWeight: 500 }}>
@@ -267,7 +267,7 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
           <span style={{ fontSize: 9, color: sub2, fontWeight: 700, letterSpacing: '0.07em', display: 'flex', alignItems: 'center', gap: 3 }}>
-            CONFIDENCE SCORE
+            PUNTUACIÓN DE CONFIANZA
             <TooltipInfo text="Permiso operativo intradía. Mide si el contexto actual favorece buscar setups. No genera señales por sí solo." align="left"/>
           </span>
           <span style={{ fontSize: 9, color: sub2, letterSpacing: '0.04em' }}>0 ── 100</span>
@@ -300,9 +300,9 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
 
       {/* ── STAT PILLS ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        <StatPill label="BIAS" value={biasAlignment.label} color={biasAlignment.color} bg={`${biasAlignment.color}14`} border={`${biasAlignment.color}30`} isMobile={isMobile} />
-        <StatPill label="MACRO RISK" tooltip="Riesgo por eventos macro y calendario. Si es alto, reduce la confianza operativa." value={macroRisk.label} color={macroRisk.color} bg={`${macroRisk.color}14`} border={`${macroRisk.color}30`} isMobile={isMobile} />
-        <StatPill label="VOLATILITY" value={volatilityState.label} color={volatilityState.color} bg={`${volatilityState.color}14`} border={`${volatilityState.color}30`} isMobile={isMobile} />
+        <StatPill label="SESGO" value={biasAlignment.label} color={biasAlignment.color} bg={`${biasAlignment.color}14`} border={`${biasAlignment.color}30`} isMobile={isMobile} />
+        <StatPill label="RIESGO MACRO" tooltip="Riesgo por eventos macro y calendario. Si es alto, reduce la confianza operativa." value={macroRisk.label} color={macroRisk.color} bg={`${macroRisk.color}14`} border={`${macroRisk.color}30`} isMobile={isMobile} />
+        <StatPill label="VOLATILIDAD" value={volatilityState.label} color={volatilityState.color} bg={`${volatilityState.color}14`} border={`${volatilityState.color}30`} isMobile={isMobile} />
       </div>
 
       {/* ── BREAKDOWN TOGGLE ── */}
@@ -355,15 +355,15 @@ export default function IntradayExecutionCard({ biasResult, sentimentData, riskD
             background: darkMode ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.015)',
             border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 14px',
           }}>
-            <FactorBar label="HTF Bias Strength"  tooltip="Fuerza del sesgo HTF dentro del score. Cuanto mayor sea, más peso tiene el contexto semanal."     points={breakdown.htfBias.points}      max={breakdown.htfBias.max}      weight={breakdown.htfBias.weight}      darkMode={darkMode} T={T} />
-            <FactorBar label="Macro Event Risk"   tooltip="Riesgo por eventos macro y calendario. Si es alto, reduce la confianza operativa."                  points={breakdown.macroRisk.points}    max={breakdown.macroRisk.max}    weight={breakdown.macroRisk.weight}    darkMode={darkMode} T={T} />
-            <FactorBar label="Fear / Greed"       points={breakdown.fearGreed.points}    max={breakdown.fearGreed.max}    weight={breakdown.fearGreed.weight}    darkMode={darkMode} T={T} />
-            <FactorBar label="Volatility State"   points={breakdown.volatility.points}   max={breakdown.volatility.max}   weight={breakdown.volatility.weight}   darkMode={darkMode} T={T} />
-            <FactorBar label="Calendar Sentiment" points={breakdown.calSentiment.points} max={breakdown.calSentiment.max} weight={breakdown.calSentiment.weight} darkMode={darkMode} T={T} />
+            <FactorBar label="Fuerza del Sesgo HTF"     tooltip="Fuerza del sesgo HTF dentro del score. Cuanto mayor sea, más peso tiene el contexto semanal."     points={breakdown.htfBias.points}      max={breakdown.htfBias.max}      weight={breakdown.htfBias.weight}      darkMode={darkMode} T={T} />
+            <FactorBar label="Riesgo de Evento Macro"   tooltip="Riesgo por eventos macro y calendario. Si es alto, reduce la confianza operativa."                  points={breakdown.macroRisk.points}    max={breakdown.macroRisk.max}    weight={breakdown.macroRisk.weight}    darkMode={darkMode} T={T} />
+            <FactorBar label="Miedo / Codicia"          points={breakdown.fearGreed.points}    max={breakdown.fearGreed.max}    weight={breakdown.fearGreed.weight}    darkMode={darkMode} T={T} />
+            <FactorBar label="Estado de Volatilidad"    points={breakdown.volatility.points}   max={breakdown.volatility.max}   weight={breakdown.volatility.weight}   darkMode={darkMode} T={T} />
+            <FactorBar label="Sentimiento de Calendario" points={breakdown.calSentiment.points} max={breakdown.calSentiment.max} weight={breakdown.calSentiment.weight} darkMode={darkMode} T={T} />
             {/* Total */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: T.txt ?? T.sub, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 3 }}>
-                CONFIDENCE SCORE
+                PUNTUACIÓN DE CONFIANZA
                 <TooltipInfo text="Permiso operativo intradía. Mide si el contexto actual favorece buscar setups. No genera señales por sí solo." align="left"/>
               </span>
               <span style={{ fontSize: 22, fontWeight: 800, color: permission.color, fontVariantNumeric: 'tabular-nums' }}>{score}/100</span>

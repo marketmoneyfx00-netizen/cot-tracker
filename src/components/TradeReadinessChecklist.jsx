@@ -273,7 +273,7 @@ function evalDirección(pairsData, pair, dxyEntry) {
 
   return {
     available:true, score:rawScore,
-    label: dxyDivergence ? `${bias.label} — DXY divergent` : bias.label,
+    label: dxyDivergence ? `${bias.label} — DXY divergente` : bias.label,
     status, conf,
     detail: bias.recommendation,
     warning: dxyWarning,
@@ -310,7 +310,7 @@ function candleVolatilidad(candles) {
 // ── Candle price location: where is price relative to recent highs/lows? ──
 // Returns { locationAdj, locationLabel, nearHigh, nearLow, isBreakout }
 function candlePriceLocation(candles) {
-  if (!candles || candles.length < 4) return { locationAdj:0, locationLabel:'Unknown', nearHigh:false, nearLow:false, isBreakout:false };
+  if (!candles || candles.length < 4) return { locationAdj:0, locationLabel:'Desconocido', nearHigh:false, nearLow:false, isBreakout:false };
 
   const lookback = candles.slice(-8);                    // ~8 candles for recent range
   const high     = Math.max(...lookback.map(c => c.high));
@@ -339,7 +339,7 @@ function candlePriceLocation(candles) {
   if (isBreakout) {
     // Fresh breakout = expansion_early opportunity
     locationAdj   = isBreakoutUp ? +8 : +8;   // both directions favorable for momentum
-    locationLabel = `Breakout ${isBreakoutUp ? 'above highs' : 'below lows'}`;
+    locationLabel = `Ruptura ${isBreakoutUp ? 'por encima de máximos' : 'por debajo de mínimos'}`;
   } else if (nearHigh) {
     // Near recent high: good for longs continuing, poor for new longs
     locationAdj   = -6;
@@ -364,7 +364,7 @@ function candlePriceLocation(candles) {
 
 function getPricePosition(entry, candles) {
   if (!entry?.weeks?.length) {
-    return { adj:0, label:'Unknown', rangeZone:'equilibrium', moveState:'accumulation', detail:'No COT data for position analysis' };
+    return { adj:0, label:'Desconocido', rangeZone:'equilibrium', moveState:'accumulation', detail:'Sin datos COT para análisis de posición' };
   }
 
   const weeks   = entry.weeks;
@@ -433,7 +433,7 @@ function getPricePosition(entry, candles) {
     accumulation:    'Fase de acumulación',
     expansion_early: 'Expansión — etapa temprana',
     expansion_late:  'Expansión — etapa tardía',
-    distribution:    'Fase de distribution',
+    distribution:    'Fase de distribución',
   };
   const ZONE_LABELS = { premium:'Zona premium', equilibrium:'Equilibrio', discount:'Zona de descuento' };
 
@@ -553,14 +553,14 @@ function computeMarketClaridad(ctx, exp, dir, tim) {
   const biasAbs = Math.abs(dir.biasPuntuación ?? 0);
   if (biasAbs >= 2 && volReg === 'low' && tim.moveState === 'accumulation') {
     conflicts.push({ type:'TIMING_VOL_MISMATCH', severity:'medium',
-      detail:'Strong COT bias but precio comprimiendo — sin confirmación de expansión' });
+      detail:'Sesgo COT fuerte pero precio comprimiendo — sin confirmación de expansión' });
   }
 
   // 3. Macro vs expectation conflict
   // Riesgo macro alto (ctx low) + strong expectation surprise = conflicting signals
   if ((ctx.score ?? 100) < 40 && (exp.score ?? 50) >= 70) {
     conflicts.push({ type:'MACRO_EXP_CONFLICT', severity:'medium',
-      detail:'Strong data surprise but macro environment too volatile for clean execution' });
+      detail:'Sorpresa de datos fuerte pero entorno macro demasiado volátil para ejecución limpia' });
   }
 
   // 4. Estado del movimiento vs context
@@ -756,7 +756,7 @@ function computeConfidence(hasCOT, hasDXY, hasCalendar, timAvail) {
 // ═══════════════════════════════════════════════════════════════════════════
 function computeMarketMode(dir, tim, ctx) {
   if (!dir.available) {
-    return { mode:'UNKNOWN', color:'#5a6070', volRegime:'normal', detail:'Carga el archivo COT para el análisis del modo de mercado' };
+    return { mode:'DESCONOCIDO', color:'#5a6070', volRegime:'normal', detail:'Carga el archivo COT para el análisis del modo de mercado' };
   }
 
   const biasAbs   = Math.abs(dir.biasPuntuación ?? 0);
@@ -774,7 +774,7 @@ function computeMarketMode(dir, tim, ctx) {
   // ── TRANSITION: distribution or DXY conflict ──────────────────────────
   if (moveState === 'distribution' || dir.dxyDivergence) {
     return { mode:'TRANSITION', color:'#f59e0b', volRegime,
-      detail: dir.dxyDivergence ? 'DXY divergence — instituciones reposicionándose' : `Fase de distribution en ${rangeZone}${volFavoresTrend ? ' · alta volatilidad' : ''}` };
+      detail: dir.dxyDivergence ? 'DXY divergente — instituciones reposicionándose' : `Fase de distribución en ${rangeZone}${volFavoresTrend ? ' · alta volatilidad' : ''}` };
   }
 
   // ── RANGE: compression detected ───────────────────────────────────────
@@ -789,7 +789,7 @@ function computeMarketMode(dir, tim, ctx) {
     const volNote = volFavoresTrend ? ' · vol. en expansión' : volFavoresRange ? ' · vol. descendente' : '';
     const qualifier = moveState === 'expansion_early' ? 'etapa temprana' : 'etapa tardía — precaución';
     return { mode:'TREND', color:'#22c55e', volRegime,
-      detail:`${dir.biasDir === 'bullish' ? 'Bullish' : 'Bearish'} trend (${qualifier})${volNote} · ${rangeZone}` };
+      detail:`Tendencia ${dir.biasDir === 'bullish' ? 'alcista' : 'bajista'} (${qualifier})${volNote} · ${rangeZone}` };
   }
 
   // ── TRANSITION: bias building but no expansion ────────────────────────
@@ -822,32 +822,32 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
   // ── HARD STOP narratives: short and decisive ──────────────────────────
   if (decision.verdict === 'INSUFFICIENT DATA') {
     return N(
-      `No institutional data for ${pair}`,
+      `Sin datos institucionales para ${pair}`,
       'Carga el archivo CFTC desde la pestaña "Sesgos" para activar el análisis completo'
     );
   }
 
   if (decision.verdict === 'NO TRADE' && decision.stopped === 'direction') {
-    if (!dir.available) return N(`COT data unavailable for ${pair}`, 'Carga el archivo CFTC para determinar el flujo institucional');
+    if (!dir.available) return N(`Datos COT no disponibles para ${pair}`, 'Carga el archivo CFTC para determinar el flujo institucional');
     if (dir.dxyDivergence) return N(
-      `${biasUp} COT signal on ${pair} — DXY diverges`,
+      `Señal COT ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} — DXY divergente`,
       'Flujo institucional contradictorio detectado. No abras posiciones hasta que la divergencia se resuelva'
     );
     return N(
-      `Institutional edge absent on ${pair} (bias ${biasStr.toFixed(1)}/5)`,
-      'Espera next CFTC report to show stronger directional commitment before trading'
+      `Ventaja institucional ausente en ${pair} (sesgo ${biasStr.toFixed(1)}/5)`,
+      'Espera el próximo informe CFTC con mayor compromiso direccional antes de operar'
     );
   }
 
   if (decision.verdict === 'NO TRADE' && decision.stopped === 'timing') {
     const timPuntuación = tim.score ?? 0;
     if (move === 'distribution') return N(
-      `${biasUp} COT bias on ${pair} but institutions are unwinding`,
-      `Timing score ${timPuntuación}/100 — espera a que el reposicionamiento se complete antes de considerar la entrada`
+      `Sesgo COT ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} pero institucionales están deshaciendo posiciones`,
+      `Temporización ${timPuntuación}/100 — espera a que el reposicionamiento se complete antes de considerar la entrada`
     );
     return N(
-      `${biasUp} bias present (${biasStr.toFixed(1)}/5) but execution conditions not met`,
-      `Timing score ${timPuntuación}/100 — el entorno macro o de volatilidad impide la entrada en ${pair}`
+      `Sesgo ${biasD === 'bullish' ? 'alcista' : 'bajista'} presente (${biasStr.toFixed(1)}/5) pero condiciones de ejecución no cumplidas`,
+      `Temporización ${timPuntuación}/100 — el entorno macro o de volatilidad impide la entrada en ${pair}`
     );
   }
 
@@ -855,18 +855,18 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
   if (decision.verdict === 'UNFAVORABLE CONDITIONS') {
     const topEv = ctx.topEvents?.[0];
     return N(
-      `${biasUp} setup on ${pair} valid — macro risk too elevated for new positions`,
-      `Espera ${topEv ? `${topEv.name} (${topEv.impact}) ` : 'macro event '}absorción antes de considerar la entrada`
+      `Setup ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} válido — riesgo macro demasiado elevado para nuevas posiciones`,
+      `Espera la absorción de ${topEv ? `${topEv.name} ` : 'evento macro '}antes de considerar la entrada`
     );
   }
 
   // ── OPERAR ───────────────────────────────────────────────────────
   if (decision.verdict === 'VALID TRADE') {
     const candleLoc = tim.candleLoc;
-    const expNote   = exp.score >= 70 ? 'confirmado por sorpresa de datos' : exp.score <= 50 ? 'setup técnico — sin catalizador macro' : 'moderate data soporte';
-    const modeNote  = move === 'expansion_early' ? 'expansion_early' : move === 'expansion_late' ? 'expansion_late' : 'accumulation';
+    const expNote   = exp.score >= 70 ? 'confirmado por sorpresa de datos' : exp.score <= 50 ? 'setup técnico — sin catalizador macro' : 'soporte de datos moderado';
+    const modeNote  = move === 'expansion_early' ? 'expansión temprana' : move === 'expansion_late' ? 'expansión tardía' : 'acumulación';
     const conflictNote = decision.clarity?.penalty > 0 ? ` · ${decision.clarity.clarityLabel}` : '';
-    const summary = `${biasUp} institutional flow on ${pair} (${biasStr.toFixed(1)}/5) · ${modeNote} · ${expNote}${conflictNote}`;
+    const summary = `Flujo institucional ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} (${biasStr.toFixed(1)}/5) · ${modeNote} · ${expNote}${conflictNote}`;
 
     let action;
     if (candleLoc?.isBreakout) {
@@ -874,25 +874,24 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
         ? `Ruptura sobre máximos recientes — sigue la entrada larga sobre la vela de ruptura, stop bajo el nivel de ruptura`
         : `Ruptura bajo mínimos recientes — sigue la entrada corta bajo la vela de ruptura, stop sobre el nivel de ruptura`;
     } else if (candleLoc?.nearLow && biasD === 'bullish') {
-      action = `Precio cerca de mínimos recientes en ${zone} zone — busca confirmación de vela alcista antes de entrar largo`;
+      action = `Precio cerca de mínimos recientes en zona ${zone === 'discount' ? 'de descuento' : zone === 'premium' ? 'premium' : 'de equilibrio'} — busca confirmación de vela alcista antes de entrar largo`;
     } else if (candleLoc?.nearHigh && biasD === 'bearish') {
       action = `Precio cerca de máximos recientes — espera una vela de rechazo bajista antes de entrar corto`;
     } else if (move === 'expansion_early') {
-      action = `Entra en el primer retroceso hacia ${zone === 'discount' ? 'zona de descuento' : zone === 'premium' ? 'área de valor' : 'nivel estructural más cercano'} — mantén el stop más allá del ${biasD === 'bullish' ? 'low' : 'high'}`;
+      action = `Entra en el primer retroceso hacia ${zone === 'discount' ? 'zona de descuento' : zone === 'premium' ? 'área de valor' : 'nivel estructural más cercano'} — mantén el stop más allá del ${biasD === 'bullish' ? 'mínimo' : 'máximo'}`;
     } else if (move === 'expansion_late') {
       action = `No persigas el precio — espera compresión y una entrada de menor riesgo antes del siguiente tramo`;
     } else {
-      action = `Espera price to reach structural ${biasD === 'bullish' ? 'soporte' : 'resistencia'} antes de considerar la entrada`;
+      action = `Espera a que el precio llegue al ${biasD === 'bullish' ? 'soporte' : 'resistencia'} estructural antes de considerar la entrada`;
     }
-    // Invalidation: where does the thesis break?
     let invalidation = null;
     if (biasD === 'bullish') {
       invalidation = tim.candleLoc?.nearestLow
-        ? `Tesis invalidada si el precio cierra por debajo de ${tim.candleLoc.nearestLow?.toFixed?.(5) ?? 'recent low'}`
+        ? `Tesis invalidada si el precio cierra por debajo de ${tim.candleLoc.nearestLow?.toFixed?.(5) ?? 'mínimo reciente'}`
         : `Tesis invalidada si la posición neta COT se vuelve bajista en el próximo informe`;
     } else if (biasD === 'bearish') {
       invalidation = tim.candleLoc?.nearestHigh
-        ? `Tesis invalidada si el precio cierra por encima de ${tim.candleLoc.nearestHigh?.toFixed?.(5) ?? 'recent high'}`
+        ? `Tesis invalidada si el precio cierra por encima de ${tim.candleLoc.nearestHigh?.toFixed?.(5) ?? 'máximo reciente'}`
         : `Tesis invalidada si la posición neta COT se vuelve alcista en el próximo informe`;
     }
 
@@ -906,23 +905,23 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
     const candleLoc = tim.candleLoc;
 
     if (weakDir) return N(
-      `${biasUp} lean on ${pair} — institutional conviction insufficient (${biasStr.toFixed(1)}/5)`,
-      'Espera next CFTC report showing stronger directional commitment before committing capital'
+      `Inclinación ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} — convicción institucional insuficiente (${biasStr.toFixed(1)}/5)`,
+      'Espera el próximo informe CFTC con mayor compromiso direccional antes de comprometer capital'
     );
     if (weakTim) {
       const timNote = move === 'accumulation' ? 'precio comprimiendo — sin confirmación de expansión' : 'las condiciones macro reducen la calidad de ejecución';
       return N(
-        `${biasUp} institutional setup on ${pair} — ${timNote}`,
+        `Setup institucional ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} — ${timNote}`,
         `Vigila ${candleLoc?.isBreakout ? 'continuación de la ruptura' : 'cierre decisivo de vela más allá de estructura clave'} antes de entrar`
       );
     }
     const topEv = ctx.topEvents?.[0];
     if ((ctx.score ?? 100) < 60) return N(
-      `${biasUp} setup on ${pair} technically valid — macro event creates timing risk`,
-      `Espera ${topEv ? `${topEv.name} absorption` : 'event volatility'} para resolverse y luego reevalúa la entrada`
+      `Setup ${biasD === 'bullish' ? 'alcista' : 'bajista'} en ${pair} técnicamente válido — evento macro crea riesgo de temporización`,
+      `Espera la absorción de ${topEv ? `${topEv.name}` : 'la volatilidad del evento'} y luego reevalúa la entrada`
     );
     return N(
-      `Partial ${biasD} setup on ${pair} — one confirming factor pending`,
+      `Setup ${biasD === 'bullish' ? 'alcista' : 'bajista'} parcial en ${pair} — un factor confirmador pendiente`,
       'Reduce el tamaño. Coloca órdenes solo en niveles estructurales clave con stop-loss definido'
     );
   }
@@ -931,14 +930,14 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
   if (decision.verdict === 'WATCH') {
     const volReg = tim.volRegime ?? 'normal';
     return N(
-      `${biasUp} sesgo en construcción en ${pair} (${biasStr.toFixed(1)}/5) — no entry confirmation`,
+      `Sesgo ${biasD === 'bullish' ? 'alcista' : 'bajista'} en construcción en ${pair} (${biasStr.toFixed(1)}/5) — sin confirmación de entrada`,
       volReg === 'high'
-        ? `Vigila ${biasD} cierre de vela más allá de la estructura reciente para activar la entrada`
+        ? `Vigila el cierre de vela ${biasD === 'bullish' ? 'alcista' : 'bajista'} más allá de la estructura reciente para activar la entrada`
         : `Mercado comprimiendo — activa alerta para la primera vela fuerte con cuerpo/rango > 70%`
     );
   }
 
-  return N(`Sin setup claro en ${pair}`, 'Espera institutional positioning to clarify');
+  return N(`Sin setup claro en ${pair}`, 'Espera a que el posicionamiento institucional se defina');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -949,7 +948,7 @@ function buildNarrative(ctx, exp, dir, tim, decision, mktMode, pair) {
 // C:  no trade
 // ═══════════════════════════════════════════════════════════════════════════
 function computeQuality(decision, tim, dir, exp) {
-  if (decision.verdict === 'INSUFFICIENT DATA') return { tag:'—',   color:'#5a6070', detail:'No data' };
+  if (decision.verdict === 'INSUFFICIENT DATA') return { tag:'—',   color:'#5a6070', detail:'Sin datos' };
   if (decision.verdict === 'NO TRADE')           return { tag:'C',   color:'#ef4444', detail:'Sin ventaja institucional ni de timing' };
   if (decision.verdict === 'UNFAVORABLE CONDITIONS') return { tag:'C', color:'#ef4444', detail:'El entorno macro impide una ejecución segura' };
   if (decision.verdict === 'WATCH')               return { tag:'B-', color:'#8b90a0', detail:'Setup en construcción — no está listo' };
@@ -1025,9 +1024,9 @@ const CC = { 'Datos completos':'#22c55e', 'Datos parciales':'#f59e0b', 'Datos in
 
 const BLOCKS = [
   { key:'context',     label:'1 · Contexto',     icon:'📅', tip:'Paso 1: ¿Qué está pasando fuera del gráfico? Bancos centrales, eventos macro, recencia.' },
-  { key:'expectation', label:'2 · Expectation', icon:'🎯', tip:'Paso 2: El mercado se mueve por sorpresas. Deviation = |actual - estimate| / |estimate|.' },
-  { key:'direction',   label:'3 · Dirección',   icon:'🧭', tip:'Paso 3: Sesgo institucional COT. Mismo motor que Institutional Bias Engine.' },
-  { key:'timing',      label:'4 · Timing',      icon:'⏱',  tip:'Paso 4: Permiso de ejecución. Fuerza del sesgo + macro + volatility + price position.' },
+  { key:'expectation', label:'2 · Expectativa',    icon:'🎯', tip:'Paso 2: El mercado se mueve por sorpresas. Desviación = |actual - estimado| / |estimado|.' },
+  { key:'direction',   label:'3 · Dirección',     icon:'🧭', tip:'Paso 3: Sesgo institucional COT. Mismo motor que el Motor de Sesgo Institucional.' },
+  { key:'timing',      label:'4 · Temporización', icon:'⏱',  tip:'Paso 4: Permiso de ejecución. Fuerza del sesgo + macro + volatilidad + posición de precio.' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1093,32 +1092,47 @@ export default function TradeReadinessChecklist({ events=[], pairsData=null, can
 
   return (
     <>
-      {/* FAB */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        title="Trade Readiness — Decision Engine"
-        style={{
-          position:'fixed', bottom:24, right:24, zIndex:1000,
-          width:52, height:52, borderRadius:16,
-          border:`1px solid ${T.border}`, cursor:'pointer',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontSize:22, transition:'all 0.2s ease', ...glass,
-          boxShadow: open ? `0 0 0 2px ${dec.color}50,0 8px 32px ${dec.color}20` : '0 4px 20px rgba(0,0,0,0.3)',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform='scale(1.08)'; }}
-        onMouseLeave={e => { e.currentTarget.style.transform='scale(1)'; }}
-      >
-        {open ? '✕' : '🧠'}
-        <span style={{
-          position:'absolute', top:-7, right:-7,
-          background: dec.score != null ? dec.color : '#5a6070',
-          color:'#fff', fontSize:9, fontWeight:800, lineHeight:1,
-          padding:'3px 5px', borderRadius:8, minWidth:22, textAlign:'center',
-          boxShadow:`0 2px 8px ${dec.color}60`,
-        }}>
-          {dec.score ?? '—'}
-        </span>
-      </button>
+      {/* FAB wrapper — button + pair label */}
+      <div style={{ position:'fixed', bottom:24, right:24, zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          title={`Preparación para Operar — ${pair}`}
+          style={{
+            width:52, height:52, borderRadius:16,
+            border:`1px solid ${open ? dec.color + '60' : T.border}`, cursor:'pointer',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:22, transition:'all 0.2s ease', ...glass,
+            boxShadow: open ? `0 0 0 2px ${dec.color}50,0 8px 32px ${dec.color}20` : '0 4px 20px rgba(0,0,0,0.3)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform='scale(1.08)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform='scale(1)'; }}
+        >
+          {open ? '✕' : '🧠'}
+          <span style={{
+            position:'absolute', top:-7, right:-7,
+            background: dec.score != null ? dec.color : '#5a6070',
+            color:'#fff', fontSize:9, fontWeight:800, lineHeight:1,
+            padding:'3px 5px', borderRadius:8, minWidth:22, textAlign:'center',
+            boxShadow:`0 2px 8px ${dec.color}60`,
+          }}>
+            {dec.score ?? '—'}
+          </span>
+        </button>
+        {/* Active pair chip — always visible below the FAB */}
+        {!open && (
+          <div style={{
+            background: glass.background, backdropFilter: glass.backdropFilter,
+            border: `1px solid ${dec.color}40`,
+            borderRadius: 8, padding: '2px 8px',
+            fontSize: 10, fontWeight: 700, color: dec.color,
+            letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            boxShadow: `0 2px 8px ${dec.color}20`,
+            cursor: 'pointer',
+          }} onClick={() => setOpen(true)}>
+            {pair}
+          </div>
+        )}
+      </div>
 
       {/* PANEL */}
       <div style={{
@@ -1136,7 +1150,7 @@ export default function TradeReadinessChecklist({ events=[], pairsData=null, can
         <div style={{ padding:'12px 14px 10px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
             <div>
-              <div style={{ fontSize:12, fontWeight:700, color:T.txt, letterSpacing:'-0.2px' }}>Trade Readiness</div>
+              <div style={{ fontSize:12, fontWeight:700, color:T.txt, letterSpacing:'-0.2px' }}>Preparación para Operar</div>
               <div style={{ fontSize:10, color:T.sub2 }}>Motor de decisión · No es una señal</div>
             </div>
             {/* Confidence badge + readiness score */}
@@ -1161,45 +1175,16 @@ export default function TradeReadinessChecklist({ events=[], pairsData=null, can
             </div>
           </div>
 
-          {/* Pair selector */}
-          <div style={{ position:'relative' }}>
-            <select
-              value={pair}
-              onChange={e => { setPair(e.target.value); setExpanded(null); }}
-              style={{
-                width:'100%',
-                padding:'8px 32px 8px 12px',
-                borderRadius:10,
-                border:`1px solid ${T.border}`,
-                background: T.inputBg || T.card2,
-                color: T.txt,
-                fontSize:13,
-                fontWeight:600,
-                cursor:'pointer',
-                outline:'none',
-                appearance:'none',
-                WebkitAppearance:'none',
-                MozAppearance:'none',
-                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b90a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                backgroundRepeat:'no-repeat',
-                backgroundPosition:'right 10px center',
-                transition:'border-color 0.15s, box-shadow 0.15s',
-              }}
-              onFocus={e => {
-                e.target.style.borderColor = T.accent || '#0055cc';
-                e.target.style.boxShadow = `0 0 0 3px ${(T.accent || '#0055cc')}20`;
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = T.border;
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              {availablePairs.map(p => (
-                <option key={p} value={p} style={{ background: T.card2, color: T.txt }}>
-                  {p}
-                </option>
-              ))}
-            </select>
+          {/* Active pair — driven by global Asset Selector */}
+          <div style={{
+            display:'flex', alignItems:'center', gap:6,
+            padding:'6px 10px', borderRadius:8,
+            background: (T.accent||'#0055cc')+'0f',
+            border:`1px solid ${(T.accent||'#0055cc')}25`,
+          }}>
+            <span style={{ fontSize:10, color:T.sub2, fontWeight:600, letterSpacing:'0.05em' }}>ACTIVO</span>
+            <span style={{ fontSize:13, fontWeight:700, color:T.txt, letterSpacing:'-0.2px' }}>{pair}</span>
+            <span style={{ marginLeft:'auto', fontSize:9, color:T.sub2 }}>via selector global</span>
           </div>
 
           {/* Data warnings */}
@@ -1539,7 +1524,7 @@ export default function TradeReadinessChecklist({ events=[], pairsData=null, can
                                 {result.pricePos.adj>=0?'+':''}{result.pricePos.adj} pts
                               </span>
                             </div>
-                            {result.candleLoc && result.candleLoc.locationLabel !== 'Unknown' && (
+                            {result.candleLoc && result.candleLoc.locationLabel !== 'Desconocido' && (
                               <div style={{ marginTop:3, padding:'4px 8px', borderRadius:7,
                                 background: result.candleLoc.isBreakout ? 'rgba(34,197,94,0.08)' : T.card3,
                                 border: result.candleLoc.isBreakout ? '1px solid rgba(34,197,94,0.2)' : 'none',

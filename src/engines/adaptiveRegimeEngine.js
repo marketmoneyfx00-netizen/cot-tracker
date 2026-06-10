@@ -29,85 +29,85 @@ import { REGIME_LABELS, REGIME_COLORS } from '../lib/riskRegimeEngine.js';
 
 export const ADAPTIVE_REGIME_META = {
   RISK_ON_ACCELERATION: {
-    label:       'Risk-On Acceleration',
+    label:       'Aceleración Risk-On',
     shortLabel:  'RISK-ON ↑',
     color:       '#22c55e',
     intensity:   'high',
     bias:        'bullish',
     actionBias:  'AGGRESSIVE_LONG',
-    desc:        'Institutional flows building conviction. Trend likely early-to-mid stage — favorable for momentum entries.',
+    desc:        'Flujos institucionales construyendo convicción. Tendencia en fase temprana-media — favorable para entradas de momentum.',
   },
   RISK_ON: {
-    label:       'Risk-On Expansion',
+    label:       'Expansión Risk-On',
     shortLabel:  'RISK-ON',
     color:       '#4ade80',
     intensity:   'medium',
     bias:        'bullish',
     actionBias:  'LONG',
-    desc:        'Established risk-on positioning. Equities bid, bonds sold, USD soft. Trend entries remain valid.',
+    desc:        'Posicionamiento risk-on consolidado. Renta variable comprada, bonos vendidos, USD débil. Entradas tendenciales válidas.',
   },
   RISK_ON_EXHAUSTION: {
-    label:       'Risk-On Exhaustion',
+    label:       'Agotamiento Risk-On',
     shortLabel:  'RISK-ON ⚠',
     color:       '#f59e0b',
     intensity:   'high',
     bias:        'cautious',
     actionBias:  'REDUCE_LONGS',
-    desc:        'Risk-on but positioning at historical extremes. Smart money may be distributing. Reversal risk elevated.',
+    desc:        'Risk-on con posicionamiento en extremos históricos. El dinero inteligente puede estar distribuyendo. Riesgo de reversión elevado.',
   },
   RISK_OFF: {
-    label:       'Risk-Off / Defensive',
+    label:       'Risk-Off / Defensivo',
     shortLabel:  'RISK-OFF',
     color:       '#ef4444',
     intensity:   'medium',
     bias:        'bearish',
     actionBias:  'SHORT_OR_FLAT',
-    desc:        'Institutional defensive posture. Equities sold, bonds bid, gold accumulation. Reduce risk exposure.',
+    desc:        'Postura institucional defensiva. Renta variable vendida, bonos comprados, acumulación de oro. Reducir exposición al riesgo.',
   },
   RISK_OFF_EXTREME: {
-    label:       'Risk-Off Extreme / Capitulation',
+    label:       'Risk-Off Extremo / Capitulación',
     shortLabel:  'RISK-OFF !!',
     color:       '#dc2626',
     intensity:   'extreme',
     bias:        'bearish',
     actionBias:  'DEFENSIVE',
-    desc:        'Extreme defensive positioning. Potential capitulation event. High volatility — capital preservation priority.',
+    desc:        'Posicionamiento defensivo extremo. Posible evento de capitulación. Alta volatilidad — prioridad preservación de capital.',
   },
   STAGFLATION: {
-    label:       'Stagflationary Pressure',
-    shortLabel:  'STAGFLATION',
+    label:       'Presión Estanflacionaria',
+    shortLabel:  'ESTANFLACIÓN',
     color:       '#f97316',
     intensity:   'high',
     bias:        'mixed',
     actionBias:  'COMMODITIES_LONG',
-    desc:        'Inflation + growth deterioration. Bonds sold, gold/oil bid, equities pressured. Commodity longs favored.',
+    desc:        'Inflación + deterioro del crecimiento. Bonos vendidos, oro/petróleo comprados, renta variable presionada. Largos en materias primas favorecidos.',
   },
   DISINFLATION: {
-    label:       'Disinflationary Repricing',
-    shortLabel:  'DISINFLATION',
+    label:       'Reajuste Desinflacionario',
+    shortLabel:  'DESINFLACIÓN',
     color:       '#60a5fa',
     intensity:   'medium',
     bias:        'neutral',
     actionBias:  'BONDS_LONG',
-    desc:        'Inflation expectations declining. Bond bid, energy soft, gold neutral. Duration longs may outperform.',
+    desc:        'Expectativas de inflación en descenso. Bonos comprados, energía débil, oro neutral. Largos en duración pueden superar al mercado.',
   },
   LIQUIDITY_STRESS: {
-    label:       'Liquidity Stress',
-    shortLabel:  'LIQ STRESS',
+    label:       'Estrés de Liquidez',
+    shortLabel:  'ESTRÉS LIQ.',
     color:       '#dc2626',
     intensity:   'extreme',
     bias:        'bearish',
     actionBias:  'CASH',
-    desc:        'Systemic funding pressure. Cross-asset de-risking. USD squeeze. Cash is the position.',
+    desc:        'Presión sistémica de financiación. Reducción de riesgo en todos los activos. Squeeze del USD. El efectivo es la posición.',
   },
   TRANSITIONAL: {
-    label:       'Transitional / Mixed',
-    shortLabel:  'TRANSITIONAL',
+    label:       'Transición / Mixto',
+    shortLabel:  'TRANSICIÓN',
     color:       '#8491a8',
     intensity:   'low',
     bias:        'neutral',
     actionBias:  'WAIT',
-    desc:        'Mixed or insufficient signals. No dominant regime established. Await directional convergence.',
+    desc:        'Señales mixtas o insuficientes. No hay régimen dominante establecido. Esperar convergencia direccional.',
   },
 };
 
@@ -207,24 +207,24 @@ function detectTransitionSignal(baseRegime, positioningMomentum, exhaustion, mac
 
   if (exhaustion.isExhausted) {
     transitionRisk = 'elevated';
-    signals.push(`${exhaustion.extremePairs.length} pairs at historical positioning extremes — distribution risk`);
+    signals.push(`${exhaustion.extremePairs.length} pares en extremos históricos de posicionamiento — riesgo de distribución`);
   }
 
   if (positioningMomentum.direction === 'decelerating' &&
       (baseRegime === 'RISK_ON' || baseRegime === 'RISK_ON_ACCELERATION')) {
     transitionRisk = 'elevated';
-    signals.push('Institutional accumulation pace slowing — risk-on momentum fading');
+    signals.push('Ritmo de acumulación institucional desacelerando — momentum risk-on debilitándose');
   }
 
   if (positioningMomentum.direction === 'accelerating' &&
       (baseRegime === 'RISK_OFF' || baseRegime === 'TRANSITIONAL')) {
-    signals.push('Institutional flows building in defensive assets — risk-off building');
+    signals.push('Flujos institucionales acumulándose en activos defensivos — risk-off en construcción');
   }
 
   const usdBias = macroSignal?.bias;
   if (baseRegime === 'RISK_ON' && (usdBias === 'USD_STRONG' || usdBias === 'USD_LEANING_STRONG')) {
     transitionRisk = transitionRisk === 'elevated' ? 'high' : 'elevated';
-    signals.push('USD strengthening conflicts with risk-on positioning — regime coherence weakening');
+    signals.push('Fortaleza del USD en conflicto con posicionamiento risk-on — coherencia de régimen debilitándose');
   }
 
   return {
@@ -266,23 +266,23 @@ function buildAdaptiveDrivers(extRegime, positioningMomentum, exhaustion, transi
 
   // Momentum context
   if (positioningMomentum.direction === 'accelerating') {
-    drivers.push(`Institutional positioning accelerating — ${positioningMomentum.acceleratingCount} pairs in expansion/building state`);
+    drivers.push(`Posicionamiento institucional acelerando — ${positioningMomentum.acceleratingCount} pares en estado de expansión/acumulación`);
   } else if (positioningMomentum.direction === 'decelerating') {
-    drivers.push(`Institutional positioning decelerating — ${positioningMomentum.deceleratingCount} pairs in distribution/compression state`);
+    drivers.push(`Posicionamiento institucional desacelerando — ${positioningMomentum.deceleratingCount} pares en estado de distribución/compresión`);
   }
 
   // Exhaustion
   if (exhaustion.isExhausted) {
     const extremeLabels = exhaustion.extremePairs.slice(0, 2).map(p =>
-      `${p.pair} (${p.direction}, ${p.percentile?.toFixed(0)}th pct)`
+      `${p.pair} (${p.direction === 'overbought' ? 'sobrecomprado' : 'sobrevendido'}, pct ${p.percentile?.toFixed(0)})`
     ).join(', ');
-    drivers.push(`Extreme positioning detected: ${extremeLabels}`);
+    drivers.push(`Posicionamiento extremo detectado: ${extremeLabels}`);
   }
 
   // Action bias
   const meta = ADAPTIVE_REGIME_META[extRegime];
   if (meta) {
-    drivers.push(`Recommended posture: ${meta.actionBias.replace(/_/g, ' ')}`);
+    drivers.push(`Postura recomendada: ${meta.actionBias.replace(/_/g, ' ')}`);
   }
 
   // Transition warning
@@ -326,7 +326,7 @@ export function computeAdaptiveRegime({ baseRegime, biasArr = [], allBiasArr = [
       momentum:        { direction: 'neutral', strength: 0 },
       exhaustion:      { isExhausted: false, extremePairs: [] },
       transition:      { transitionRisk: 'low', signals: [], isPending: false },
-      adaptiveDrivers: ['Awaiting COT data and macro signal'],
+      adaptiveDrivers: ['Esperando datos COT y señal macro'],
     };
   }
 

@@ -182,29 +182,29 @@ function scoreCalendarSentiment(highCount, midCount) {
 // ─── LABELS (unchanged) ───────────────────────────────────────────────────────
 export function getPermissionLevel(score) {
   if (score >= 70) return { label: 'FAVORABLE',  color: '#22c55e', bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)' };
-  if (score >= 45) return { label: 'IMPROVING',  color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',   border: 'rgba(245,158,11,0.3)' };
-  return                  { label: 'RESTRICTED', color: '#ef4444', bg: 'rgba(239,68,68,0.10)',    border: 'rgba(239,68,68,0.25)' };
+  if (score >= 45) return { label: 'EN MEJORA',  color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',   border: 'rgba(245,158,11,0.3)' };
+  return                  { label: 'RESTRINGIDO', color: '#ef4444', bg: 'rgba(239,68,68,0.10)',    border: 'rgba(239,68,68,0.25)' };
 }
 
 export function getMacroRiskLabel(riskScore) {
-  if (typeof riskScore !== 'number') return { label: 'Unknown', color: '#94a3b8' };
-  if (riskScore < 10)  return { label: 'Low',      color: '#22c55e' };
-  if (riskScore < 30)  return { label: 'Moderate', color: '#f59e0b' };
-  return                      { label: 'High',     color: '#ef4444' };
+  if (typeof riskScore !== 'number') return { label: 'Desconocido', color: '#94a3b8' };
+  if (riskScore < 10)  return { label: 'Bajo',      color: '#22c55e' };
+  if (riskScore < 30)  return { label: 'Moderado',  color: '#f59e0b' };
+  return                      { label: 'Alto',      color: '#ef4444' };
 }
 
 export function getVolatilityState(vix) {
   const v = parseFloat(vix);
-  if (isNaN(v))  return { label: 'Unknown',     color: '#94a3b8' };
-  if (v < 15)    return { label: 'Compression', color: '#94a3b8' };
-  if (v < 25)    return { label: 'Normal',      color: '#22c55e' };
-  if (v < 30)    return { label: 'Elevated',    color: '#f59e0b' };
-  return                { label: 'Expansion',   color: '#ef4444' };
+  if (isNaN(v))  return { label: 'Desconocido',  color: '#94a3b8' };
+  if (v < 15)    return { label: 'Compresión',   color: '#94a3b8' };
+  if (v < 25)    return { label: 'Normal',       color: '#22c55e' };
+  if (v < 30)    return { label: 'Elevado',      color: '#f59e0b' };
+  return                { label: 'Expansión',    color: '#ef4444' };
 }
 
 export function getBiasAlignment(biasDirection) {
-  if (biasDirection === 'bullish') return { label: 'Bullish', color: '#22c55e' };
-  if (biasDirection === 'bearish') return { label: 'Bearish', color: '#ef4444' };
+  if (biasDirection === 'bullish') return { label: 'Alcista', color: '#22c55e' };
+  if (biasDirection === 'bearish') return { label: 'Bajista', color: '#ef4444' };
   return                                  { label: 'Neutral', color: '#94a3b8' };
 }
 

@@ -298,29 +298,29 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
   let r = sb.addRow([strCell('A1', 'COT TRACKER — INSTITUTIONAL MARKET SNAPSHOT', S.NAV_HEADER)], 36);
   sb.merge(0, r, COLS - 1, r);
 
-  r = sb.addRow([strCell('A2', `Snapshot Date: ${snapshotDate ?? '—'}  ·  CFTC Report: ${cotDate ?? '—'}  ·  Export v2.0`, S.META)], 20);
+  r = sb.addRow([strCell('A2', `Fecha Snapshot: ${snapshotDate ?? '—'}  ·  Informe CFTC: ${cotDate ?? '—'}  ·  Export v2.0`, S.META)], 20);
   sb.merge(0, r, COLS - 1, r);
 
   sb.addEmptyRow(8);
 
-  // ── Market Overview ──
+  // ── Resumen de Mercado ──
   const bull = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bullish').length;
   const bear = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bearish').length;
   const neut = biasArr.length - bull - bear;
   const regime = generateMarketRegimeLabel(biasArr, macroSignal, riskRegime);
 
-  r = sb.addRow([strCell('A4', 'MARKET OVERVIEW', S.SECTION)], 24);
+  r = sb.addRow([strCell('A4', 'RESUMEN DE MERCADO', S.SECTION)], 24);
   sb.merge(0, r, COLS - 1, r);
 
   r = sb.addRow([
-    strCell(cellRef(0, r + 1), 'Total Pairs',    S.LABEL),
-    strCell(cellRef(1, r + 1), 'Bullish',         S.LABEL),
-    strCell(cellRef(2, r + 1), 'Bearish',         S.LABEL),
+    strCell(cellRef(0, r + 1), 'Total Pares',    S.LABEL),
+    strCell(cellRef(1, r + 1), 'Alcistas',        S.LABEL),
+    strCell(cellRef(2, r + 1), 'Bajistas',        S.LABEL),
     strCell(cellRef(3, r + 1), 'Neutral',         S.LABEL),
-    strCell(cellRef(4, r + 1), 'Market Regime',   S.LABEL),
-    strCell(cellRef(5, r + 1), 'Macro Bias',      S.LABEL),
-    strCell(cellRef(6, r + 1), 'CFTC Report',     S.LABEL),
-    strCell(cellRef(7, r + 1), 'Snapshot Date',   S.LABEL),
+    strCell(cellRef(4, r + 1), 'Régimen de Mercado', S.LABEL),
+    strCell(cellRef(5, r + 1), 'Sesgo Macro',     S.LABEL),
+    strCell(cellRef(6, r + 1), 'Informe CFTC',    S.LABEL),
+    strCell(cellRef(7, r + 1), 'Fecha Snapshot',  S.LABEL),
   ], 16);
 
   r = sb.addRow([
@@ -337,7 +337,7 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
   sb.addEmptyRow(10);
 
   // ── Executive commentary ──
-  r = sb.addRow([strCell('A8', 'EXECUTIVE COMMENTARY', S.SECTION)], 24);
+  r = sb.addRow([strCell('A8', 'COMENTARIO EJECUTIVO', S.SECTION)], 24);
   sb.merge(0, r, COLS - 1, r);
 
   const crossAssetCtx = riskRegime
@@ -363,10 +363,10 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
   if (riskRegime?.regime) {
     sb.addEmptyRow(8);
     const regimeNarrative = generateMacroRegimeNarrative(riskRegime, crossAssetCtx);
-    r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'MACRO REGIME CONTEXT', S.SECTION)], 24);
+    r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'CONTEXTO DE RÉGIMEN MACRO', S.SECTION)], 24);
     sb.merge(0, r, COLS - 1, r);
 
-    r = sb.addRow([strCell('A' + (r + 1), `Regime: ${regimeNarrative.headline}`, S.DATA_BOLD)], 20);
+    r = sb.addRow([strCell('A' + (r + 1), `Régimen: ${regimeNarrative.headline}`, S.DATA_BOLD)], 20);
     sb.merge(0, r, COLS - 1, r);
 
     // Regime description wrapped to rows
@@ -385,7 +385,7 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
     // Key drivers
     if (regimeNarrative.keyDrivers?.length) {
       sb.addEmptyRow(6);
-      r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'KEY CROSS-ASSET DRIVERS', S.LABEL)], 18);
+      r = sb.addRow([strCell('A' + (sb.rows.length + 1), 'FACTORES CLAVE ENTRE ACTIVOS', S.LABEL)], 18);
       sb.merge(0, r, COLS - 1, r);
       regimeNarrative.keyDrivers.forEach(d => {
         r = sb.addRow([strCell('A' + (r + 1), `· ${d}`, S.DATA)], 16);
@@ -398,10 +398,10 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
 
   // ── Quick signal table ──
   const nextR = sb.rows.length + 1;
-  r = sb.addRow([strCell('A' + nextR, 'PAIR SIGNAL SUMMARY', S.SECTION)], 24);
+  r = sb.addRow([strCell('A' + nextR, 'RESUMEN DE SEÑALES POR PAR', S.SECTION)], 24);
   sb.merge(0, r, COLS - 1, r);
 
-  const hdrs = ['Pair', 'Bias Score', 'Bias Label', 'Execution', 'Divergence', 'Z-Score', 'Confluence', 'Trend State'];
+  const hdrs = ['Par', 'Puntuación Sesgo', 'Etiqueta Sesgo', 'Ejecución', 'Divergencia', 'Z-Score', 'Confluencia', 'Estado Tendencia'];
   r = sb.addRow(hdrs.map((h, i) => strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
 
   biasArr.forEach(b => {
@@ -414,9 +414,9 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
     const normScore = bias.score != null ? Math.round(((bias.score + 5) / 10) * 100) : null;
     const confScore = conf.confluenceScore ?? conf.score ?? null;
 
-    const trendState = b.signal?.signal === 'buy'  ? (b.signal?.strength >= 3 ? 'Strong Bullish' : 'Bullish')
-                     : b.signal?.signal === 'sell' ? (b.signal?.strength >= 3 ? 'Strong Bearish' : 'Bearish')
-                     : b.signal?.signal === 'indecision' ? 'Transitional' : 'Neutral';
+    const trendState = b.signal?.signal === 'buy'  ? (b.signal?.strength >= 3 ? 'Alcista Fuerte' : 'Alcista')
+                     : b.signal?.signal === 'sell' ? (b.signal?.strength >= 3 ? 'Bajista Fuerte' : 'Bajista')
+                     : b.signal?.signal === 'indecision' ? 'Transición' : 'Neutral';
 
     r = sb.addRow([
       strCell(cellRef(0, r + 1), b.pair,                              S.DATA_BOLD),
@@ -433,7 +433,7 @@ function buildSummarySheet(biasArr, macroSignal, cotDate, snapshotDate, execMap,
   // Footer
   sb.addEmptyRow(10);
   const footerR = sb.rows.length + 1;
-  r = sb.addRow([strCell('A' + footerR, 'COT Tracker · Institutional Data Export · Not financial advice. Source: CFTC Traders in Financial Futures.', S.META)], 16);
+  r = sb.addRow([strCell('A' + footerR, 'COT Tracker · Exportación de Datos Institucionales · No es asesoramiento financiero. Fuente: CFTC Traders in Financial Futures.', S.META)], 16);
   sb.merge(0, r, COLS - 1, r);
 
   return sb;
@@ -521,16 +521,16 @@ function buildAssetClassSheet(biasArr, pairsArr, cat, execMap, opts = {}) {
   sb.setColWidth(16, 16); // Regime Trend
 
   const CAT_TITLES = {
-    fx:          'FX — Currency Pairs',
-    index:       'EQUITY INDICES',
-    bonds:       'FIXED INCOME — Bond Futures',
-    commodities: 'COMMODITIES',
+    fx:          'FX — Pares de Divisas',
+    index:       'ÍNDICES DE RENTA VARIABLE',
+    bonds:       'RENTA FIJA — Futuros de Bonos',
+    commodities: 'MATERIAS PRIMAS',
   };
   const CAT_READING_HEADER = {
-    fx:          'Carry / Regime Context',
-    index:       'Risk Appetite Signal',
-    bonds:       'Rate Expectation Signal',
-    commodities: 'Commodity Thesis',
+    fx:          'Carry / Contexto de Régimen',
+    index:       'Señal de Apetito de Riesgo',
+    bonds:       'Señal de Expectativa de Tasas',
+    commodities: 'Tesis de Materia Prima',
   };
 
   const title = CAT_TITLES[cat] ?? cat.toUpperCase();
@@ -541,17 +541,17 @@ function buildAssetClassSheet(biasArr, pairsArr, cat, execMap, opts = {}) {
   sb.merge(0, r, COLS - 1, r);
 
   if (!filtered.length) {
-    r = sb.addRow([strCell('A2', `No ${cat} data available in this upload.`, S.DATA)], 20);
+    r = sb.addRow([strCell('A2', `Sin datos de ${cat} disponibles en esta carga.`, S.DATA)], 20);
     sb.merge(0, r, COLS - 1, r);
     return sb;
   }
 
   const hdrs = [
-    'Symbol', 'Description', 'Bias Score', 'Bias Label',
-    'Lev Net', 'Wk Change', '% Long', 'Z-Score', 'Percentile',
-    'Divergence', readingHeader,
-    'Conviction', 'Swing View', 'Macro View',
-    'Flow State', 'Exhaustion %', 'Regime Trend',
+    'Símbolo', 'Descripción', 'Punt. Sesgo', 'Etiqueta Sesgo',
+    'Neto Lev', 'Cambio Sem', '% Largo', 'Z-Score', 'Percentil',
+    'Divergencia', readingHeader,
+    'Convicción', 'Vista Swing', 'Vista Macro',
+    'Estado Flujo', 'Agotamiento %', 'Tendencia Régimen',
   ];
   r = sb.addRow(hdrs.map((h, i) => strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 22);
 
@@ -613,37 +613,37 @@ function buildAssetClassReading(cat, direction, biasEntry) {
   const dir = direction ?? 'neutral';
   switch (cat) {
     case 'index':
-      if (dir === 'bullish') return 'Risk-On — equity risk appetite expanding';
-      if (dir === 'bearish') return 'Risk-Off — institutional de-risking in equity futures';
-      return 'Neutral — no dominant equity directional signal';
+      if (dir === 'bullish') return 'Apetito por Riesgo — demanda institucional de renta variable en expansión';
+      if (dir === 'bearish') return 'Defensivo — desapalancamiento institucional en futuros de renta variable';
+      return 'Neutral — sin señal direccional dominante en renta variable';
 
     case 'bonds':
-      if (dir === 'bullish') return 'Rate-decline expectation — duration accumulation';
-      if (dir === 'bearish') return 'Rate-rise expectation — bond selling / inflation premium';
-      return 'Neutral — no dominant rate expectation signal';
+      if (dir === 'bullish') return 'Expectativa de bajada de tipos — acumulación de duración';
+      if (dir === 'bearish') return 'Expectativa de subida de tipos — venta de bonos / prima de inflación';
+      return 'Neutral — sin señal dominante de expectativa de tipos';
 
     case 'commodities': {
       const asset = biasEntry.pair ?? '';
       if (asset === 'GOLD' || asset === 'SILVER') {
-        if (dir === 'bullish') return 'Haven / Inflation hedge — precious metals bid';
-        if (dir === 'bearish') return 'Risk appetite / Disinflation — metals selling pressure';
-        return 'Neutral — no dominant precious metals signal';
+        if (dir === 'bullish') return 'Refugio / Cobertura inflación — demanda institucional en metales preciosos';
+        if (dir === 'bearish') return 'Apetito de riesgo / Desinflación — presión vendedora en metales';
+        return 'Neutral — sin señal dominante en metales preciosos';
       }
       if (asset === 'WTI') {
-        if (dir === 'bullish') return 'Energy demand / Supply pressure — growth or supply-shock bid';
-        if (dir === 'bearish') return 'Demand destruction / Disinflation — oil selling';
-        return 'Neutral — no dominant energy signal';
+        if (dir === 'bullish') return 'Demanda energética / Presión oferta — compra por crecimiento o shock de oferta';
+        if (dir === 'bearish') return 'Destrucción de demanda / Desinflación — venta de petróleo';
+        return 'Neutral — sin señal energética dominante';
       }
-      return dir === 'bullish' ? 'Bullish institutional commodity positioning'
-           : dir === 'bearish' ? 'Bearish institutional commodity positioning'
+      return dir === 'bullish' ? 'Posicionamiento institucional alcista en materias primas'
+           : dir === 'bearish' ? 'Posicionamiento institucional bajista en materias primas'
            : 'Neutral';
     }
 
     case 'fx':
     default:
-      if (dir === 'bullish') return 'Long base currency — COT institutional bias bullish';
-      if (dir === 'bearish') return 'Short base currency — COT institutional bias bearish';
-      return 'Neutral — no dominant FX directional bias';
+      if (dir === 'bullish') return 'Largo en divisa base — sesgo institucional COT alcista';
+      if (dir === 'bearish') return 'Corto en divisa base — sesgo institucional COT bajista';
+      return 'Neutral — sin sesgo direccional FX dominante';
   }
 }
 
@@ -662,19 +662,19 @@ function buildMacroRatesSheet(macroSignal, riskRegime, ratesData, cotDate) {
   sb.setColWidth(6, 14);
   sb.setColWidth(7, 28);
 
-  let r = sb.addRow([strCell('A1', 'MACRO / RATES — Central Bank & Yield Signal Layer', S.NAV_HEADER)], 30);
+  let r = sb.addRow([strCell('A1', 'MACRO / TASAS — Capa de Señales de Bancos Centrales y Rendimientos', S.NAV_HEADER)], 30);
   sb.merge(0, r, COLS - 1, r);
 
-  // ── Macro Signal block ──
+  // ── Bloque Señal Macro ──
   if (macroSignal) {
     sb.addEmptyRow(8);
-    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'USD MACRO SIGNAL', S.SECTION)], 22);
+    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'SEÑAL MACRO USD', S.SECTION)], 22);
     sb.merge(0, r, COLS - 1, r);
 
     r = sb.addRow([
-      strCell(cellRef(0, r + 1), 'USD Bias',    S.LABEL),
-      strCell(cellRef(1, r + 1), 'Confidence',  S.LABEL),
-      strCell(cellRef(2, r + 1), 'CFTC Date',   S.LABEL),
+      strCell(cellRef(0, r + 1), 'Sesgo USD',    S.LABEL),
+      strCell(cellRef(1, r + 1), 'Confianza',    S.LABEL),
+      strCell(cellRef(2, r + 1), 'Fecha CFTC',   S.LABEL),
     ], 16);
 
     r = sb.addRow([
@@ -686,7 +686,7 @@ function buildMacroRatesSheet(macroSignal, riskRegime, ratesData, cotDate) {
     // Drivers
     if (macroSignal.drivers?.length) {
       sb.addEmptyRow(4);
-      r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'YIELD SPREAD DRIVERS', S.LABEL)], 16);
+      r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'FACTORES DE DIFERENCIALES DE RENDIMIENTO', S.LABEL)], 16);
       sb.merge(0, r, COLS - 1, r);
       macroSignal.drivers.forEach(d => {
         r = sb.addRow([strCell(`A${r + 1}`, `  · ${d}`, S.DATA)], 16);
@@ -697,7 +697,7 @@ function buildMacroRatesSheet(macroSignal, riskRegime, ratesData, cotDate) {
     // Implication
     if (macroSignal.implication) {
       sb.addEmptyRow(4);
-      r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'MACRO IMPLICATION', S.LABEL)], 16);
+      r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'IMPLICACIÓN MACRO', S.LABEL)], 16);
       sb.merge(0, r, COLS - 1, r);
       r = sb.addRow([strCell(`A${r + 1}`, macroSignal.implication, S.DATA)], 16);
       sb.merge(0, r, COLS - 1, r);
@@ -707,13 +707,13 @@ function buildMacroRatesSheet(macroSignal, riskRegime, ratesData, cotDate) {
   // ── Risk Regime block ──
   if (riskRegime?.regime) {
     sb.addEmptyRow(10);
-    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'MACRO RISK REGIME', S.SECTION)], 22);
+    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'RÉGIMEN DE RIESGO MACRO', S.SECTION)], 22);
     sb.merge(0, r, COLS - 1, r);
 
     r = sb.addRow([
-      strCell(cellRef(0, r + 1), 'Regime',      S.LABEL),
-      strCell(cellRef(1, r + 1), 'Confidence',  S.LABEL),
-      strCell(cellRef(2, r + 1), 'Signals',     S.LABEL),
+      strCell(cellRef(0, r + 1), 'Régimen',     S.LABEL),
+      strCell(cellRef(1, r + 1), 'Confianza',   S.LABEL),
+      strCell(cellRef(2, r + 1), 'Señales',     S.LABEL),
     ], 16);
 
     const sigs = riskRegime.signals ?? {};
@@ -773,10 +773,10 @@ function buildMacroRatesSheet(macroSignal, riskRegime, ratesData, cotDate) {
   const banks = ratesData?.banks;
   if (banks && Object.keys(banks).length) {
     sb.addEmptyRow(10);
-    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'CENTRAL BANK STANCE SUMMARY', S.SECTION)], 22);
+    r = sb.addRow([strCell(`A${sb.rows.length + 1}`, 'RESUMEN DE POSTURA DE BANCOS CENTRALES', S.SECTION)], 22);
     sb.merge(0, r, COLS - 1, r);
 
-    const hdrs2 = ['Bank', 'Current Rate', 'Prev Rate', 'Change (bps)', 'Stance Score', 'Stance Label', 'Signal', 'Last Decision'];
+    const hdrs2 = ['Banco', 'Tasa Actual', 'Tasa Anterior', 'Cambio (pbs)', 'Punt. Postura', 'Etiqueta Postura', 'Señal', 'Última Decisión'];
     r = sb.addRow(hdrs2.map((h, i) => strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
 
     Object.entries(banks).forEach(([bankId, bk], idx) => {
@@ -863,7 +863,7 @@ function buildTopSetupsSheet(prioritization, snap) {
     sb.merge(0, r, COLS - 1, r);
   };
 
-  const colHdrs = ['ASSET', 'DIRECTION', 'SCORE', 'CONVICTION', 'SWING VIEW', 'MACRO VIEW', 'TIER', 'KEY CONFIRMING FACTORS'];
+  const colHdrs = ['ACTIVO', 'DIRECCIÓN', 'PUNT.', 'CONVICCIÓN', 'VISTA SWING', 'VISTA MACRO', 'NIVEL', 'FACTORES CONFIRMADORES CLAVE'];
   const addColHdrs = () => {
     r = sb.addRow(colHdrs.map((h, i) => strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
   };
@@ -887,29 +887,29 @@ function buildTopSetupsSheet(prioritization, snap) {
 
   // Top Opportunities
   if (prioritization?.top_opportunities?.length) {
-    sectionHdr('TOP OPPORTUNITIES — High Conviction + Favorable Execution');
+    sectionHdr('MEJORES OPORTUNIDADES — Alta Convicción + Ejecución Favorable');
     addColHdrs();
     prioritization.top_opportunities.forEach((a, i) => addRow(a, i));
   }
 
   // Most Aligned
   if (prioritization?.most_aligned?.length) {
-    sectionHdr('MOST ALIGNED — Maximum Confirming Signals (5+ factors)');
+    sectionHdr('MÁXIMA ALINEACIÓN — Señales Confirmadoras Máximas (5+ factores)');
     addColHdrs();
     prioritization.most_aligned.forEach((a, i) => addRow(a, i));
   }
 
   // Regime Leaders
   if (prioritization?.regime_leaders?.length) {
-    sectionHdr('REGIME LEADERS — Macro Regime Confirmed');
+    sectionHdr('LÍDERES DE RÉGIMEN — Régimen Macro Confirmado');
     addColHdrs();
     prioritization.regime_leaders.forEach((a, i) => addRow(a, i));
   }
 
   // Crowded Trades
   if (prioritization?.crowded_trades?.length) {
-    sectionHdr('CROWDED / FADE RISK — Extreme Positioning + Weak Conviction');
-    r = sb.addRow(['ASSET','DIRECTION','Z-SCORE','CONVICTION','','','','WARNING'].map((h, i) =>
+    sectionHdr('POSICIÓN SATURADA / RIESGO DE FADE — Posicionamiento Extremo + Baja Convicción');
+    r = sb.addRow(['ACTIVO','DIRECCIÓN','Z-SCORE','CONVICCIÓN','','','','ADVERTENCIA'].map((h, i) =>
       strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
     prioritization.crowded_trades.forEach((a, idx) => {
       const altStyle = idx % 2 === 1 ? S.ALT_ROW : S.DATA;
@@ -929,8 +929,8 @@ function buildTopSetupsSheet(prioritization, snap) {
 
   // Contrarian Extremes
   if (prioritization?.contrarian_extremes?.length) {
-    sectionHdr('CONTRARIAN EXTREMES — Extreme Positioning Opposite to Bias');
-    r = sb.addRow(['ASSET','DIRECTION','Z-SCORE','PERCENTILE','','','','SIGNAL'].map((h, i) =>
+    sectionHdr('EXTREMOS CONTRARIOS — Posicionamiento Extremo Opuesto al Sesgo');
+    r = sb.addRow(['ACTIVO','DIRECCIÓN','Z-SCORE','PERCENTIL','','','','SEÑAL'].map((h, i) =>
       strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
     prioritization.contrarian_extremes.forEach((a, idx) => {
       const altStyle = idx % 2 === 1 ? S.ALT_ROW : S.DATA;
@@ -960,23 +960,23 @@ function buildFlowRegimeSheet(biasArr, pairsArr, regimeTransition, intermarketSt
   sb.setColWidth(3, 14); sb.setColWidth(4, 16); sb.setColWidth(5, 16);
   sb.setColWidth(6, 14); sb.setColWidth(7, 18); sb.setColWidth(8, 16);
 
-  let r = sb.addRow([strCell('A1', 'FLOW PERSISTENCE & REGIME DYNAMICS', S.NAV_HEADER)], 30);
+  let r = sb.addRow([strCell('A1', 'PERSISTENCIA DE FLUJO Y DINÁMICA DE RÉGIMEN', S.NAV_HEADER)], 30);
   sb.merge(0, r, COLS - 1, r);
 
-  // ── Regime Transition Summary ──────────────────────────────────────────────
+  // ── Resumen de Transición de Régimen ──────────────────────────────────────────────
   if (regimeTransition) {
-    r = sb.addRow([strCell(cellRef(0, r + 1), 'REGIME TRANSITION ANALYSIS', S.SECTION)], 22);
+    r = sb.addRow([strCell(cellRef(0, r + 1), 'ANÁLISIS DE TRANSICIÓN DE RÉGIMEN', S.SECTION)], 22);
     sb.merge(0, r, COLS - 1, r);
 
     r = sb.addRow([
-      strCell(cellRef(0, r + 1), 'Transition Type',   S.DATA_BOLD),
+      strCell(cellRef(0, r + 1), 'Tipo Transición',   S.DATA_BOLD),
       strCell(cellRef(1, r + 1), regimeTransition.transition_label ?? '—', S.DATA),
-      strCell(cellRef(2, r + 1), 'Velocity',          S.DATA_BOLD),
+      strCell(cellRef(2, r + 1), 'Velocidad',          S.DATA_BOLD),
       strCell(cellRef(3, r + 1), regimeTransition.velocity ?? '—', S.DATA),
-      strCell(cellRef(4, r + 1), 'Stability',         S.DATA_BOLD),
+      strCell(cellRef(4, r + 1), 'Estabilidad',        S.DATA_BOLD),
       numCell(cellRef(5, r + 1), regimeTransition.stability ?? null,
         (regimeTransition.stability ?? 0) >= 65 ? S.BULLISH : (regimeTransition.stability ?? 0) >= 40 ? S.NEUTRAL : S.BEARISH),
-      strCell(cellRef(6, r + 1), 'Confidence Trend',  S.DATA_BOLD),
+      strCell(cellRef(6, r + 1), 'Tendencia Confianza', S.DATA_BOLD),
       strCell(cellRef(7, r + 1), regimeTransition.confidence_trend ?? '—',
         regimeTransition.confidence_trend === 'IMPROVING' ? S.BULLISH
         : regimeTransition.confidence_trend === 'DETERIORATING' ? S.BEARISH : S.DATA),
@@ -985,16 +985,16 @@ function buildFlowRegimeSheet(biasArr, pairsArr, regimeTransition, intermarketSt
 
     if (regimeTransition.emerging_regime) {
       r = sb.addRow([
-        strCell(cellRef(0, r + 1), 'Emerging Regime', S.DATA_BOLD),
+        strCell(cellRef(0, r + 1), 'Régimen Emergente', S.DATA_BOLD),
         strCell(cellRef(1, r + 1), regimeTransition.emerging_regime, S.NEUTRAL),
-        strCell(cellRef(2, r + 1), 'Key Watch',       S.DATA_BOLD),
+        strCell(cellRef(2, r + 1), 'A Vigilar',          S.DATA_BOLD),
         strCell(cellRef(3, r + 1), regimeTransition.regime_timeline?.key_watch ?? '—', S.DATA),
       ], 20);
       sb.merge(3, r, COLS - 1, r);
     }
 
     if (regimeTransition.confirmation_signals?.length) {
-      r = sb.addRow([strCell(cellRef(0, r + 1), 'Confirmation Signals', S.ACCENT_HDR)], 18);
+      r = sb.addRow([strCell(cellRef(0, r + 1), 'Señales de Confirmación', S.ACCENT_HDR)], 18);
       sb.merge(0, r, COLS - 1, r);
       regimeTransition.confirmation_signals.forEach(s => {
         r = sb.addRow([strCell(cellRef(0, r + 1), `▶  ${s}`, S.DATA)], 18);
@@ -1006,26 +1006,26 @@ function buildFlowRegimeSheet(biasArr, pairsArr, regimeTransition, intermarketSt
   // ── Intermarket Stability Summary ──────────────────────────────────────────
   if (intermarketStability) {
     r = sb.addRow([strCell(cellRef(0, r + 1), '', S.DEFAULT)], 10);
-    r = sb.addRow([strCell(cellRef(0, r + 1), 'INTERMARKET STABILITY', S.SECTION)], 22);
+    r = sb.addRow([strCell(cellRef(0, r + 1), 'ESTABILIDAD INTERMERCADO', S.SECTION)], 22);
     sb.merge(0, r, COLS - 1, r);
 
     r = sb.addRow([
-      strCell(cellRef(0, r + 1), 'Stability Score',  S.DATA_BOLD),
+      strCell(cellRef(0, r + 1), 'Punt. Estabilidad', S.DATA_BOLD),
       numCell(cellRef(1, r + 1), intermarketStability.stability_score ?? null,
         (intermarketStability.stability_score ?? 0) >= 65 ? S.BULLISH : (intermarketStability.stability_score ?? 0) >= 40 ? S.NEUTRAL : S.BEARISH),
-      strCell(cellRef(2, r + 1), 'Regime Coherence',    S.DATA_BOLD),
+      strCell(cellRef(2, r + 1), 'Coherencia Régimen',   S.DATA_BOLD),
       strCell(cellRef(3, r + 1), intermarketStability.regime_coherence ?? '—', S.DATA),
-      strCell(cellRef(4, r + 1), 'Structural Integrity', S.DATA_BOLD),
+      strCell(cellRef(4, r + 1), 'Integridad Estructural', S.DATA_BOLD),
       numCell(cellRef(5, r + 1), intermarketStability.structural_integrity ?? null, S.DATA),
-      strCell(cellRef(6, r + 1), 'Anomalies',           S.DATA_BOLD),
+      strCell(cellRef(6, r + 1), 'Anomalías',            S.DATA_BOLD),
       numCell(cellRef(7, r + 1), intermarketStability.breakdowns?.length ?? 0,
         (intermarketStability.breakdowns?.length ?? 0) > 0 ? S.BEARISH : S.BULLISH),
     ], 22);
 
     if (intermarketStability.breakdowns?.length) {
-      r = sb.addRow([strCell(cellRef(0, r + 1), 'ANOMALY DETECTIONS', S.ACCENT_HDR)], 18);
+      r = sb.addRow([strCell(cellRef(0, r + 1), 'ANOMALÍAS DETECTADAS', S.ACCENT_HDR)], 18);
       sb.merge(0, r, COLS - 1, r);
-      const bkHdrs = ['Severity', 'Type', 'Assets', 'Interpretation'];
+      const bkHdrs = ['Severidad', 'Tipo', 'Activos', 'Interpretación'];
       r = sb.addRow(bkHdrs.map((h, i) => strCell(cellRef(i, r + 1), h, S.SECTION)), 20);
       sb.merge(3, r, COLS - 1, r);
       intermarketStability.breakdowns.forEach(b => {
@@ -1042,10 +1042,10 @@ function buildFlowRegimeSheet(biasArr, pairsArr, regimeTransition, intermarketSt
 
   // ── Per-Asset Flow Persistence Table ──────────────────────────────────────
   r = sb.addRow([strCell(cellRef(0, r + 1), '', S.DEFAULT)], 10);
-  r = sb.addRow([strCell(cellRef(0, r + 1), 'PER-ASSET FLOW PERSISTENCE & POSITIONING MOMENTUM', S.SECTION)], 22);
+  r = sb.addRow([strCell(cellRef(0, r + 1), 'PERSISTENCIA DE FLUJO Y MOMENTUM DE POSICIONAMIENTO POR ACTIVO', S.SECTION)], 22);
   sb.merge(0, r, COLS - 1, r);
 
-  const fpHdrs = ['Symbol', 'Cat', 'Flow State', 'Velocity', 'Acceleration', 'Exhaust%', 'Conv. Trend', 'Str. Strength', 'Regime Trend'];
+  const fpHdrs = ['Símbolo', 'Cat', 'Estado Flujo', 'Velocidad', 'Aceleración', 'Agotamiento%', 'Tend. Conv.', 'F. Estructural', 'Tend. Régimen'];
   r = sb.addRow(fpHdrs.map((h, i) => strCell(cellRef(i, r + 1), h, S.ACCENT_HDR)), 20);
 
   (biasArr ?? []).forEach((b, idx) => {

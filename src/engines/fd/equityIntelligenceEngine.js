@@ -159,24 +159,24 @@ function extractDrivers(bundle, scores, bench) {
   if (scores.profitability != null) {
     const m = income?.ratios?.netMargin;
     if (m != null) {
-      if (m > bench.netMargin * 1.5) drivers.push({ label: 'Margin expansion', signal: 'positive', value: fmtPct(m) });
-      else if (m < bench.netMargin * 0.5) drivers.push({ label: 'Margin compression', signal: 'negative', value: fmtPct(m) });
+      if (m > bench.netMargin * 1.5) drivers.push({ label: 'Expansión de márgenes', signal: 'positive', value: fmtPct(m) });
+      else if (m < bench.netMargin * 0.5) drivers.push({ label: 'Compresión de márgenes', signal: 'negative', value: fmtPct(m) });
     }
   }
 
   if (scores.growth != null) {
     const g = income?.ratios?.revenueGrowthYoY;
     if (g != null) {
-      if (g > bench.revGrowth * 1.5) drivers.push({ label: 'Accelerating revenue', signal: 'positive', value: fmtPct(g) });
-      else if (g < 0) drivers.push({ label: 'Revenue decline', signal: 'negative', value: fmtPct(g) });
+      if (g > bench.revGrowth * 1.5) drivers.push({ label: 'Ingresos acelerando', signal: 'positive', value: fmtPct(g) });
+      else if (g < 0) drivers.push({ label: 'Caída de ingresos', signal: 'negative', value: fmtPct(g) });
     }
   }
 
   if (scores.financialHealth != null) {
     const de = balance?.ratios?.debtToEquity;
-    if (de != null && de > 2) drivers.push({ label: 'High leverage', signal: 'negative', value: `${de.toFixed(1)}x` });
+    if (de != null && de > 2) drivers.push({ label: 'Apalancamiento elevado', signal: 'negative', value: `${de.toFixed(1)}x` });
     const cr = balance?.ratios?.currentRatio;
-    if (cr != null && cr < 1) drivers.push({ label: 'Liquidity stress', signal: 'negative', value: `${cr.toFixed(2)}x` });
+    if (cr != null && cr < 1) drivers.push({ label: 'Estrés de liquidez', signal: 'negative', value: `${cr.toFixed(2)}x` });
   }
 
   if (snapshot?.changePercent != null && Math.abs(snapshot.changePercent) > 3) {
@@ -227,16 +227,16 @@ export function computeEquityIntelligence(bundle, sector = null) {
     ticker:          bundle.ticker,
     compositeScore,
     direction:       compositeScore != null ? directionLabel(compositeScore) : 'neutral',
-    conviction:      compositeScore != null ? convictionLabel(compositeScore) : 'LOW',
-    label:           compositeScore != null ? scoreLabel(compositeScore) : 'Insufficient Data',
+    conviction:      compositeScore != null ? convictionLabel(compositeScore) : 'BAJA',
+    label:           compositeScore != null ? scoreLabel(compositeScore) : 'Datos no disponibles',
     scores:          rawScores,
     drivers,
     snapshot: snapshot ? {
       price:     snapshot.price,
       change:    fmtPct(snapshot.changePercent),
       marketCap: fmtLarge(snapshot.marketCap),
-      pe:        snapshot.pe?.toFixed(1) ?? 'N/A',
-      forwardPe: snapshot.forwardPe?.toFixed(1) ?? 'N/A',
+      pe:        snapshot.pe?.toFixed(1) ?? 'N/D',
+      forwardPe: snapshot.forwardPe?.toFixed(1) ?? 'N/D',
     } : null,
     fundamentals: {
       netMargin:        income?.ratios?.netMargin,

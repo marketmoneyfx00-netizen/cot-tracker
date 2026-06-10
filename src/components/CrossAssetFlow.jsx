@@ -102,10 +102,10 @@ function CAFAssetCard({ asset, darkMode, T, isMobile, isExp, onToggle }) {
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
             {[
-              { label:"Lev Long",   val:fK(latest?.levLong),   color:"#22c55e" },
-              { label:"Lev Short",  val:fK(latest?.levShort),  color:"#ef4444" },
-              { label:"Asset Net",  val:fK(latest?.assetNet),  color:(latest?.assetNet??0)>=0?"#22c55e":"#ef4444" },
-              { label:"Dealer Net", val:fK(latest?.dealerNet), color:(latest?.dealerNet??0)>=0?"#22c55e":"#ef4444" },
+              { label:"Largo Apalancado",  val:fK(latest?.levLong),   color:"#22c55e" },
+              { label:"Corto Apalancado", val:fK(latest?.levShort),  color:"#ef4444" },
+              { label:"Neto Activos",     val:fK(latest?.assetNet),  color:(latest?.assetNet??0)>=0?"#22c55e":"#ef4444" },
+              { label:"Neto Dealer",      val:fK(latest?.dealerNet), color:(latest?.dealerNet??0)>=0?"#22c55e":"#ef4444" },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ background:detailBg, borderRadius:6, padding:"6px 8px" }}>
                 <div style={{ fontSize:8, color:T.sub2, marginBottom:2, letterSpacing:"0.05em" }}>{label}</div>
@@ -204,14 +204,14 @@ function CrossAssetFlow({ combinedData, darkMode, T, isMobile, isPremium = true,
               align="left"
             />
             <div style={{flex:1}}/>
-            <span style={{fontSize:9,fontWeight:700,color:"#ef4444",opacity:0.7,letterSpacing:"0.04em"}}>Risk Off</span>
+            <span style={{fontSize:9,fontWeight:700,color:"#ef4444",opacity:0.7,letterSpacing:"0.04em"}}>Risk-Off</span>
             <div style={{width:120,height:5,background:T.border,borderRadius:99,overflow:"hidden",position:"relative"}}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${flowBias}%`,
                 background:`linear-gradient(90deg,#ef4444 0%,${flowColor} 50%,#22c55e 100%)`,
                 borderRadius:99,transition:"width 0.7s ease"}}/>
               <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:T.sub2,opacity:0.3}}/>
             </div>
-            <span style={{fontSize:9,fontWeight:700,color:"#22c55e",opacity:0.7,letterSpacing:"0.04em"}}>Risk On</span>
+            <span style={{fontSize:9,fontWeight:700,color:"#22c55e",opacity:0.7,letterSpacing:"0.04em"}}>Risk-On</span>
             <span style={{fontSize:16,fontWeight:900,color:flowColor,minWidth:42,textAlign:"right",
               fontFamily:"monospace",letterSpacing:"-0.5px"}}>{flowBias}%</span>
           </div>

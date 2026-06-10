@@ -6,7 +6,7 @@ export default function ScoreGauge({ score, label, color, size = 80, showLabel =
   if (score == null) {
     return (
       <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-muted, #6b7280)', fontSize: 11 }}>N/A</div>
+        <div style={{ color: 'var(--text-muted, #6b7280)', fontSize: 9, textAlign: 'center' }}>Sin datos</div>
       </div>
     );
   }

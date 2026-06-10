@@ -496,7 +496,7 @@ function CountryComparisonCard({ yields, spreads, direction, tm }) {
   const dir      = direction[opt.spreadKey];
   const usdFav   = dir === 'up';
   const usdWeak  = dir === 'down';
-  const sigLabel = usdFav ? 'USD Favorable' : usdWeak ? 'USD Debilitándose' : 'Neutral';
+  const sigLabel = usdFav ? 'USD Fortalecido' : usdWeak ? 'USD Debilitándose' : 'Neutral';
   const sigCol   = usdFav ? '#16a34a' : usdWeak ? '#dc2626' : '#d97706';
 
   return (

@@ -103,7 +103,7 @@ export default function AlertBanner({ alert, alertKey, intradayConstraint, intra
         <button onClick={() => setDismissed(true)} aria-label="Cerrar" style={{
           background: 'transparent', border: 'none', color: T.sub2,
           cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, opacity: 0.35,
-        }}>✕</button>
+        }}>&times;</button>
       </div>
 
       {/* ── Row 2: verdict title ───────────────────────────────────────────── */}

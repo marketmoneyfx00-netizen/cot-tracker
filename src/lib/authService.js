@@ -60,7 +60,7 @@ export async function loginWithEmail(email) {
   const { error } = await supabase.auth.signInWithOtp({
     email: emailClean,
     options: {
-      emailRedirectTo: 'https://app.cot-tracker.com/auth/callback',
+      emailRedirectTo: `${import.meta.env.VITE_APP_URL ?? 'https://app.cot-tracker.com'}/auth/callback`,
       shouldCreateUser: true,  // ← CRÍTICO: permite nuevos usuarios
     },
   });

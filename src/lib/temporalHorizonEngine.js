@@ -49,17 +49,17 @@ export const HORIZON_COLORS = {
 
 // Short labels for compact rendering (XLSX columns, HTML badges)
 export const HORIZON_SHORT = {
-  STRONG_BULLISH: '↑↑ Strong',
-  BULLISH:        '↑ Bull',
-  LEAN_BULLISH:   '↗ Lean Bull',
+  STRONG_BULLISH: '↑↑ Fuerte',
+  BULLISH:        '↑ Alcista',
+  LEAN_BULLISH:   '↗ Leve Alcista',
   NEUTRAL:        '→ Neutral',
-  LEAN_BEARISH:   '↘ Lean Bear',
-  BEARISH:        '↓ Bear',
-  STRONG_BEARISH: '↓↓ Strong',
-  AVOID:          '✕ Avoid',
-  TRANSITIONAL:   '~ Transit',
-  EARLY_SIGNAL:   '◌ Early',
-  STRUCTURAL:     '⬛ Structural',
+  LEAN_BEARISH:   '↘ Leve Bajista',
+  BEARISH:        '↓ Bajista',
+  STRONG_BEARISH: '↓↓ Fuerte',
+  AVOID:          '✕ Evitar',
+  TRANSITIONAL:   '~ Transición',
+  EARLY_SIGNAL:   '◌ Señal Temprana',
+  STRUCTURAL:     '⬛ Estructural',
 };
 
 // ── TACTICAL HORIZON (1-5 days) ───────────────────────────────────────────────
@@ -72,15 +72,15 @@ function buildTacticalView(biasEntry, exec, direction) {
 
   // Exhaustion overrides everything — tactical AVOID regardless of execution
   if (divState === 'EXHAUSTION') {
-    basis.push('Exhaustion signal active — positioning at extreme, reversal risk elevated');
-    basis.push('No tactical entry recommended until positioning resets (Z below ±1.5)');
+    basis.push('Señal de agotamiento activa — posicionamiento en extremo, riesgo de reversión elevado');
+    basis.push('No se recomienda entrada táctica hasta que el posicionamiento se normalice (Z por debajo de ±1.5)');
     return {
       view:           'AVOID',
       short_label:    HORIZON_SHORT.AVOID,
       strength:       0,
       basis,
       cot_applicable: false,
-      note:           'COT is a weekly structural signal. Do not use for tactical entries.',
+      note:           'El COT es una señal estructural semanal. No usar para entradas tácticas.',
     };
   }
 
@@ -89,12 +89,12 @@ function buildTacticalView(biasEntry, exec, direction) {
   if (execLabel === 'FAVORABLE' || execScore >= 70) {
     if (direction === 'bullish') view = 'LEAN_BULLISH';
     else if (direction === 'bearish') view = 'LEAN_BEARISH';
-    basis.push(`Execution conditions favorable (score: ${execScore}) — directional bias can be considered for tactical entries`);
+    basis.push(`Condiciones de ejecución favorables (puntuación: ${execScore}) — el sesgo direccional puede considerarse para entradas tácticas`);
   } else if (execScore < 45 || execLabel === 'RESTRICTED') {
     view = 'AVOID';
-    basis.push(`Execution conditions restricted (score: ${execScore}) — wait for volatility/macro window`);
+    basis.push(`Condiciones de ejecución restringidas (puntuación: ${execScore}) — esperar ventana de volatilidad/macro`);
   } else {
-    basis.push(`Execution conditions neutral (score: ${execScore}) — no strong tactical edge`);
+    basis.push(`Condiciones de ejecución neutras (puntuación: ${execScore}) — sin ventaja táctica clara`);
   }
 
   // Z-score extreme aligned with bias = crowding warning even tactically
@@ -102,7 +102,7 @@ function buildTacticalView(biasEntry, exec, direction) {
   if (z != null && Math.abs(z) >= 2.5) {
     const zAligned = (z > 0 && direction === 'bullish') || (z < 0 && direction === 'bearish');
     if (zAligned) {
-      basis.push(`Positioning extreme (Z: ${z?.toFixed(2)}) — entry at current levels carries crowding risk`);
+      basis.push(`Posicionamiento extremo (Z: ${z?.toFixed(2)}) — entrada en niveles actuales conlleva riesgo de saturación`);
       if (view !== 'AVOID') view = 'NEUTRAL'; // downgrade from lean
     }
   }
@@ -113,7 +113,7 @@ function buildTacticalView(biasEntry, exec, direction) {
     strength:       Math.round(execScore),
     basis,
     cot_applicable: false,
-    note:           'COT data is weekly — used as directional context only at tactical horizon.',
+    note:           'Datos COT son semanales — usados solo como contexto direccional en el horizonte táctico.',
   };
 }
 
@@ -132,7 +132,7 @@ function buildSwingView(biasEntry, pairRow) {
       view:           'NEUTRAL',
       short_label:    HORIZON_SHORT.NEUTRAL,
       strength:       0,
-      basis:          ['Institutional positioning neutral — no dominant swing directional thesis'],
+      basis:          ['Posicionamiento institucional neutral — sin tesis direccional de swing dominante'],
       cot_applicable: true,
     };
   }
@@ -145,19 +145,19 @@ function buildSwingView(biasEntry, pairRow) {
   else                      view = 'NEUTRAL';  // score too low for swing conviction
 
   basis.push(
-    `COT bias score ${biasScore > 0 ? '+' : ''}${biasScore?.toFixed(1)} — Leveraged Money net ${direction}`,
+    `Puntuación de sesgo COT ${biasScore > 0 ? '+' : ''}${biasScore?.toFixed(1)} — Leveraged Money neto ${direction === 'bullish' ? 'largo' : 'corto'}`,
   );
 
   // Streak modifier
   if (streak >= 4) {
-    basis.push(`${streak}-report consecutive streak — high institutional persistence, thesis structurally anchored`);
+    basis.push(`Racha consecutiva de ${streak} informes — alta persistencia institucional, tesis anclada estructuralmente`);
     // Upgrade view one level if not already at max
     if (view === 'LEAN_BULLISH') view = 'BULLISH';
     else if (view === 'LEAN_BEARISH') view = 'BEARISH';
   } else if (streak >= 2) {
-    basis.push(`${streak}-report streak — directional persistence confirmed`);
+    basis.push(`Racha de ${streak} informes — persistencia direccional confirmada`);
   } else if (streak === 1) {
-    basis.push('Single-report signal — insufficient streak for high-conviction swing entry');
+    basis.push('Señal de un solo informe — racha insuficiente para entrada swing de alta convicción');
   }
 
   // Divergence modifier
@@ -167,12 +167,12 @@ function buildSwingView(biasEntry, pairRow) {
   const divConflict = (bullDiv && direction === 'bearish') || (bearDiv && direction === 'bullish');
 
   if (divState === 'EXHAUSTION') {
-    basis.push('Exhaustion signal — positioning at unsustainable extreme, swing reversal risk elevated');
+    basis.push('Señal de agotamiento — posicionamiento en extremo insostenible, riesgo de reversión swing elevado');
     view = 'AVOID';
   } else if (divAligned) {
-    basis.push(`${bullDiv ? 'Bullish' : 'Bearish'} divergence confirms swing direction — smart-money accumulation into price weakness`);
+    basis.push(`Divergencia ${bullDiv ? 'alcista' : 'bajista'} confirma dirección swing — acumulación de smart money en debilidad de precio`);
   } else if (divConflict) {
-    basis.push(`Divergence conflicts with swing direction — institutional distribution signal warrants caution`);
+    basis.push('Divergencia en conflicto con dirección swing — señal de distribución institucional, proceder con cautela');
     if (view === 'STRONG_BULLISH' || view === 'STRONG_BEARISH') {
       view = view.replace('STRONG_', '');
     }
@@ -185,10 +185,10 @@ function buildSwingView(biasEntry, pairRow) {
     ? latest.smartNet - prev.smartNet : null);
   if (chgNet != null) {
     const flowK = Math.round(Math.abs(chgNet) / 1000);
-    const flowDir = chgNet > 0 ? 'accumulation' : 'distribution';
+    const flowDir = chgNet > 0 ? 'acumulación' : 'distribución';
     const flowAligned = (chgNet > 0 && direction === 'bullish') || (chgNet < 0 && direction === 'bearish');
     basis.push(
-      `Weekly flow: ${flowDir} of ${flowK}K contracts — ${flowAligned ? 'confirms' : 'diverges from'} swing thesis`,
+      `Flujo semanal: ${flowDir} de ${flowK}K contratos — ${flowAligned ? 'confirma' : 'diverge de'} la tesis swing`,
     );
   }
 
@@ -214,9 +214,9 @@ function buildMacroView(biasEntry, pairRow, opts) {
       view:           'NEUTRAL',
       short_label:    HORIZON_SHORT.NEUTRAL,
       strength:       0,
-      basis:          ['No institutional directional bias — macro thesis undefined'],
+      basis:          ['Sin sesgo direccional institucional — tesis macro indefinida'],
       cot_applicable: true,
-      note:           'Macro thesis requires ≥3 consecutive CFTC confirmations.',
+      note:           'La tesis macro requiere ≥3 confirmaciones CFTC consecutivas.',
     };
   }
 
@@ -227,11 +227,11 @@ function buildMacroView(biasEntry, pairRow, opts) {
       short_label:    HORIZON_SHORT.EARLY_SIGNAL,
       strength:       Math.round(Math.abs(biasEntry?.bias?.score ?? 0) / 5 * 30),
       basis:          [
-        `Only ${streak} CFTC report(s) confirm this direction — insufficient for macro thesis`,
-        'Macro positioning requires minimum 2-3 consecutive weekly confirmations',
+        `Solo ${streak} informe(s) CFTC confirman esta dirección — insuficiente para tesis macro`,
+        'El posicionamiento macro requiere mínimo 2-3 confirmaciones semanales consecutivas',
       ],
       cot_applicable: true,
-      note:           'Macro thesis requires ≥3 consecutive CFTC confirmations.',
+      note:           'La tesis macro requiere ≥3 confirmaciones CFTC consecutivas.',
     };
   }
 
@@ -251,27 +251,27 @@ function buildMacroView(biasEntry, pairRow, opts) {
   if (macroAligned && carryAligned && streak >= 3) {
     view = direction === 'bullish' ? 'BULLISH' : 'BEARISH';
     if (streak >= 5) view = direction === 'bullish' ? 'STRONG_BULLISH' : 'STRONG_BEARISH';
-    basis.push('Macro regime and policy cycle both aligned — structural thesis well-supported');
+    basis.push('Régimen macro y ciclo de política alineados — tesis estructural bien soportada');
   } else if (macroAligned || carryAligned) {
     view = direction === 'bullish' ? 'LEAN_BULLISH' : 'LEAN_BEARISH';
     basis.push(
       macroAligned
-        ? 'Macro regime confirms direction; policy cycle neutral or mixed'
-        : 'Policy cycle supports direction; macro regime mixed',
+        ? 'Régimen macro confirma dirección; ciclo de política neutral o mixto'
+        : 'Ciclo de política soporta dirección; régimen macro mixto',
     );
   } else if (macroConflict) {
     view = 'TRANSITIONAL';
-    basis.push('Macro regime creates structural headwinds — COT signal not macro-confirmed');
+    basis.push('El régimen macro genera vientos en contra estructurales — señal COT no confirmada por macro');
     macroStrength = 20;
   } else {
     view = 'TRANSITIONAL';
-    basis.push('Macro environment transitional — regime confirmation pending');
+    basis.push('Entorno macro en transición — confirmación de régimen pendiente');
   }
 
   // Add regime detail
   if (riskRegime?.regime && riskRegime.regime !== 'TRANSITIONAL') {
     basis.push(
-      `${riskRegime.label ?? riskRegime.regime} macro regime (${riskRegime.confidence ?? '?'}% confidence)`,
+      `Régimen macro ${riskRegime.label ?? riskRegime.regime} (confianza: ${riskRegime.confidence ?? '?'}%)`,
     );
   }
 
@@ -280,21 +280,21 @@ function buildMacroView(biasEntry, pairRow, opts) {
     const fedCycle = cycleProfiles?.['FED'];
     if (fedCycle) {
       basis.push(
-        `FED cycle: ${fedCycle.cycleLabel} — ${fedCycle.maturityLabel} ` +
-        `(cumulative ${fedCycle.cumBps > 0 ? '+' : ''}${fedCycle.cumBps} bps)`,
+        `Ciclo FED: ${fedCycle.cycleLabel} — ${fedCycle.maturityLabel} ` +
+        `(acumulado ${fedCycle.cumBps > 0 ? '+' : ''}${fedCycle.cumBps} bps)`,
       );
     }
   }
 
   // Streak context
   if (streak >= 4) {
-    basis.push(`${streak}-report directional streak — institutional macro commitment sustained`);
+    basis.push(`Racha direccional de ${streak} informes — compromiso macro institucional sostenido`);
   }
 
   // Check for structural signal: very long streak + regime alignment
   if (streak >= 6 && macroAligned) {
     view = direction === 'bullish' ? 'STRUCTURAL' : 'STRUCTURAL';
-    basis.push('Extended streak with macro alignment — institutional structural positioning thesis active');
+    basis.push('Racha extensa con alineación macro — tesis de posicionamiento estructural institucional activa');
   }
 
   return {
@@ -303,7 +303,7 @@ function buildMacroView(biasEntry, pairRow, opts) {
     strength:       Math.min(100, Math.max(0, macroStrength)),
     basis,
     cot_applicable: true,
-    note:           streak < 3 ? 'Macro thesis requires ≥3 consecutive CFTC confirmations.' : null,
+    note:           streak < 3 ? 'La tesis macro requiere ≥3 confirmaciones CFTC consecutivas.' : null,
   };
 }
 
@@ -361,21 +361,21 @@ export function buildTemporalHorizon(biasEntry, pairRow, opts = {}) {
 
 function buildHorizonSummary(dominant, direction, swing, macro) {
   if (dominant === 'AVOID') {
-    return 'Multiple time horizon signals advise against directional exposure at current levels.';
+    return 'Múltiples señales de horizonte temporal aconsejan evitar exposición direccional en los niveles actuales.';
   }
   if (dominant === 'BULLISH_ACROSS_ALL') {
-    return `Bullish bias confirmed at tactical, swing, and macro horizons — highest-quality setup configuration.`;
+    return 'Sesgo alcista confirmado en horizontes táctico, swing y macro — configuración de máxima calidad.';
   }
   if (dominant === 'BEARISH_ACROSS_ALL') {
-    return `Bearish bias confirmed at tactical, swing, and macro horizons — highest-quality short configuration.`;
+    return 'Sesgo bajista confirmado en horizontes táctico, swing y macro — configuración corta de máxima calidad.';
   }
   if (dominant === 'PREDOMINANTLY_BULLISH') {
-    return `Bullish at ${swing.view.includes('BULL') ? 'swing' : 'macro'} and ${macro.view.includes('BULL') ? 'macro' : 'tactical'} — tactical timing may vary.`;
+    return `Alcista en ${swing.view.includes('BULL') ? 'swing' : 'macro'} y ${macro.view.includes('BULL') ? 'macro' : 'táctico'} — el timing táctico puede variar.`;
   }
   if (dominant === 'PREDOMINANTLY_BEARISH') {
-    return `Bearish at multiple horizons — ${macro.view.includes('BEAR') ? 'macro' : 'swing'} thesis reinforced. Execution conditions may restrict tactical entry.`;
+    return `Bajista en múltiples horizontes — tesis ${macro.view.includes('BEAR') ? 'macro' : 'swing'} reforzada. Las condiciones de ejecución pueden restringir la entrada táctica.`;
   }
-  return `Mixed horizon signals for ${direction} thesis — swing and macro not fully aligned.`;
+  return `Señales de horizonte mixtas para tesis ${direction === 'bullish' ? 'alcista' : 'bajista'} — swing y macro no totalmente alineados.`;
 }
 
 // ── VIEW HELPERS (for export rendering) ───────────────────────────────────────

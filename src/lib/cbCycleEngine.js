@@ -153,9 +153,9 @@ function buildCycleImpact(bankId, cycleType, maturity, cumBps, currentRate) {
     fx.duration_signal = 'neutral';
     fx.regime_weight   = 'neutral';
     if (currentRate != null && currentRate >= 4.0) {
-      fx.notes.push(`${bankId} holding at elevated rate (${currentRate.toFixed(2)}%) — carry structurally supportive while pause holds`);
+      fx.notes.push(`${bankId} manteniendo tipos elevados (${currentRate.toFixed(2)}%) — carry estructuralmente positivo mientras persista la pausa`);
     } else if (currentRate != null && currentRate <= 0.5) {
-      fx.notes.push(`${bankId} near zero-bound — limited conventional ammunition for further easing`);
+      fx.notes.push(`${bankId} cerca del límite cero — munición convencional limitada para mayor relajación`);
     }
   }
 
@@ -165,17 +165,17 @@ function buildCycleImpact(bankId, cycleType, maturity, cumBps, currentRate) {
 // ── CYCLE LABELS ──────────────────────────────────────────────────────────────
 
 const CYCLE_LABELS = {
-  HIKING:   'Hiking Cycle',
-  CUTTING:  'Cutting Cycle',
-  PAUSED:   'On Hold',
-  UNKNOWN:  'Insufficient History',
+  HIKING:   'Ciclo Restrictivo',
+  CUTTING:  'Ciclo Expansivo',
+  PAUSED:   'En Pausa',
+  UNKNOWN:  'Historial Insuficiente',
 };
 
 const MATURITY_LABELS = {
-  EARLY:    'Early Stage',
-  MID:      'Mid Cycle',
-  LATE:     'Late Stage',
-  EXTENDED: 'Extended / Mature',
+  EARLY:    'Fase Inicial',
+  MID:      'Ciclo Medio',
+  LATE:     'Fase Tardía',
+  EXTENDED: 'Extendido / Maduro',
   UNKNOWN:  '—',
 };
 

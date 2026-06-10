@@ -113,11 +113,19 @@ export function injectCSSVars(darkMode) {
   const root = document.documentElement;
   root.style.setProperty("--cot-bg",      p.bg);
   root.style.setProperty("--cot-card",    p.card);
+  root.style.setProperty("--cot-card2",   p.card2);
   root.style.setProperty("--cot-border",  p.border);
   root.style.setProperty("--cot-text",    p.text);
   root.style.setProperty("--cot-sub",     p.sub);
+  root.style.setProperty("--cot-sub2",    p.sub2);
   root.style.setProperty("--cot-accent",  SEMANTIC.accent);
   root.style.setProperty("--cot-purple",  SEMANTIC.purple);
   root.style.setProperty("--cot-green",   SEMANTIC.green);
   root.style.setProperty("--cot-red",     SEMANTIC.red);
+  // For components using raw CSS vars (HeatmapGrid, ScoreGauge)
+  root.style.setProperty("--text",        p.text);
+  root.style.setProperty("--text-muted",  p.sub);
+  root.style.setProperty("--bg-card",     p.card);
+  root.style.setProperty("--bg-card2",    p.card2);
+  root.style.setProperty("--border-clr",  p.border);
 }

@@ -23,45 +23,45 @@ function macroSentence(macroSignal, regime) {
   if (regime?.regime && regime.regime !== 'TRANSITIONAL' && (regime.confidence ?? 0) >= 45) {
     const regimeMap = {
       RISK_ON:
-        'Cross-asset positioning reflects a risk-on institutional posture, with growth-sensitive ' +
-        'allocations increasing and defensive exposure declining.',
+        'El posicionamiento entre activos refleja una postura institucional de apetito por riesgo, ' +
+        'con asignaciones sensibles al crecimiento en expansión y exposición defensiva en declive.',
       RISK_OFF:
-        'Multi-asset flows indicate a defensive institutional posture, with safe-haven ' +
-        'positioning elevated across fixed income and gold.',
+        'Los flujos entre activos indican una postura institucional defensiva, con posicionamiento ' +
+        'en activos refugio elevado en renta fija y oro.',
       STAGFLATION:
-        'Positioning is consistent with stagflationary pressure: inflation hedges are bid, ' +
-        'duration is under selling pressure, and growth-sensitive assets are under stress.',
+        'El posicionamiento es coherente con presión estanflacionaria: las coberturas de inflación ' +
+        'están demandadas, la duración bajo presión vendedora y los activos sensibles al crecimiento bajo estrés.',
       DISINFLATION:
-        'Institutional flows reflect disinflationary repricing: fixed income accumulation ' +
-        'dominates while energy and commodity positioning retreats.',
+        'Los flujos institucionales reflejan una repricing desinflacionaria: la acumulación de renta fija ' +
+        'domina mientras el posicionamiento en energía y materias primas retrocede.',
       LIQUIDITY_STRESS:
-        'Cross-asset patterns signal potential liquidity stress — dollar demand elevated ' +
-        'alongside broad institutional de-risking.',
+        'Los patrones entre activos señalan estrés potencial de liquidez — la demanda de dólares está ' +
+        'elevada junto con un desapalancamiento institucional generalizado.',
     };
-    return regimeMap[regime.regime] ?? 'Macro backdrop shows transitional signals across asset classes.';
+    return regimeMap[regime.regime] ?? 'El entorno macro muestra señales de transición entre clases de activos.';
   }
 
   // Fall back to USD yield-spread signal (backward compat)
   if (!macroSignal?.bias || macroSignal.bias === 'NEUTRAL') {
-    return 'The macro backdrop remains neutral, with no dominant directional signal from monitored yield spreads.';
+    return 'El entorno macro permanece neutral, sin señal direccional dominante desde los diferenciales de tipos monitorizados.';
   }
   const conf      = macroSignal.confidence ?? 5;
-  const confLabel = conf >= 8 ? 'strong' : conf >= 5 ? 'moderate' : 'tentative';
+  const confLabel = conf >= 8 ? 'sólida' : conf >= 5 ? 'moderada' : 'tentativa';
   const map = {
     USD_STRONG:
-      `The macro environment reflects ${confLabel} USD strength, driven by favorable yield ` +
-      `spread dynamics — a headwind for risk-sensitive and USD-funded positions.`,
+      `El entorno macro refleja una fortaleza ${confLabel} del USD, impulsada por dinámicas favorables de ` +
+      `diferenciales de tipos — un viento en contra para posiciones sensibles al riesgo y financiadas en USD.`,
     USD_LEANING_STRONG:
-      `USD is showing a ${confLabel} bullish tilt in the macro layer, though conviction ` +
-      `remains below definitive threshold.`,
+      `El USD muestra una inclinación alcista ${confLabel} en la capa macro, aunque la convicción ` +
+      `permanece por debajo del umbral definitivo.`,
     USD_WEAK:
-      `Macro conditions reflect ${confLabel} USD weakness across monitored yield spreads — ` +
-      `generally supportive for risk assets and non-dollar positioning.`,
+      `Las condiciones macro reflejan debilidad ${confLabel} del USD en los diferenciales de tipos monitorizados — ` +
+      `generalmente favorable para activos de riesgo y posicionamiento en divisas no-dólar.`,
     USD_LEANING_WEAK:
-      `A tentative USD softening is visible in the macro layer, though spread-based signals ` +
-      `have not yet reached full conviction.`,
+      `Un debilitamiento tentativo del USD es visible en la capa macro, aunque las señales basadas en diferenciales ` +
+      `aún no han alcanzado convicción plena.`,
   };
-  return map[macroSignal.bias] ?? 'Macro backdrop shows mixed signals across major yield spreads.';
+  return map[macroSignal.bias] ?? 'El entorno macro muestra señales mixtas en los principales diferenciales de tipos.';
 }
 
 // ── DIVERGENCE COMMENTARY ─────────────────────────────────────────────────────
@@ -75,64 +75,64 @@ function divergenceSentence(biasArr) {
 
   if (exhausted.length) {
     parts.push(
-      `Positioning exhaustion is active in ${exhausted.map(b => b.pair).join(' and ')}, ` +
-      `where extreme z-scores coincide with aligned trend direction — an elevated reversal risk environment.`
+      `El agotamiento del posicionamiento está activo en ${exhausted.map(b => b.pair).join(' y ')}, ` +
+      `donde los z-scores extremos coinciden con la dirección de tendencia alineada — un entorno de riesgo de reversión elevado.`
     );
   }
   if (bullDiv.length) {
     parts.push(
-      `${bullDiv.map(b => b.pair).join(' and ')} show institutional accumulation against declining ` +
-      `price — a classic smart money divergence setup pointing toward potential recovery.`
+      `${bullDiv.map(b => b.pair).join(' y ')} muestran acumulación institucional ante caída de precio — ` +
+      `una configuración clásica de divergencia de smart money apuntando a una posible recuperación.`
     );
   }
   if (bearDiv.length) {
     parts.push(
-      `${bearDiv.map(b => b.pair).join(' and ')} display distribution patterns, ` +
-      `with Leveraged Money reducing long exposure while price advances — a bearish divergence signal.`
+      `${bearDiv.map(b => b.pair).join(' y ')} exhiben patrones de distribución, ` +
+      `con Leveraged Money reduciendo exposición larga mientras el precio avanza — señal de divergencia bajista.`
     );
   }
 
-  return parts.join(' ') || 'No significant price-positioning divergence detected across monitored assets.';
+  return parts.join(' ') || 'No se detectaron divergencias significativas de precio-posicionamiento en los activos monitorizados.';
 }
 
 // ── ASSET-CLASS OPENING SENTENCES ─────────────────────────────────────────────
 
 const ASSET_CLASS_OPENERS = {
   fx: {
-    strong_bull:  (pair) => `${pair} exhibits strong bullish institutional conviction, with Leveraged Money maintaining significant net long positioning.`,
-    mod_bull:     (pair) => `${pair} shows moderate bullish institutional bias, supported by net long Leveraged Money positioning.`,
-    weak_bull:    (pair) => `${pair} carries a mild bullish lean from institutional accounts, though conviction remains limited.`,
-    neutral:      (pair) => `${pair} remains in a neutral institutional state, with no dominant directional bias from Leveraged Money.`,
-    weak_bear:    (pair) => `${pair} has a mild bearish lean institutionally, though net short positioning lacks strong conviction.`,
-    mod_bear:     (pair) => `${pair} shows moderate bearish institutional bias, with net short positioning from speculative accounts.`,
-    strong_bear:  (pair) => `${pair} reflects strong bearish institutional pressure, with Leveraged Money accumulating net short exposure.`,
+    strong_bull:  (pair) => `${pair} exhibe convicción institucional alcista fuerte, con Leveraged Money manteniendo posición neta larga significativa.`,
+    mod_bull:     (pair) => `${pair} muestra sesgo institucional alcista moderado, respaldado por posicionamiento neto largo de Leveraged Money.`,
+    weak_bull:    (pair) => `${pair} tiene una inclinación alcista leve desde cuentas institucionales, aunque la convicción sigue siendo limitada.`,
+    neutral:      (pair) => `${pair} permanece en estado institucional neutral, sin sesgo direccional dominante de Leveraged Money.`,
+    weak_bear:    (pair) => `${pair} tiene una inclinación bajista leve institucionalmente, aunque el posicionamiento neto corto carece de convicción sólida.`,
+    mod_bear:     (pair) => `${pair} muestra sesgo institucional bajista moderado, con posicionamiento neto corto desde cuentas especulativas.`,
+    strong_bear:  (pair) => `${pair} refleja presión institucional bajista fuerte, con Leveraged Money acumulando exposición neta corta.`,
   },
   index: {
-    strong_bull:  (pair) => `${pair} reflects strong institutional equity risk appetite, with Leveraged Money maintaining significant net long exposure in index futures.`,
-    mod_bull:     (pair) => `${pair} shows moderate bullish bias in equity futures, with net long Leveraged Money positioning.`,
-    weak_bull:    (pair) => `${pair} carries a mild bullish lean in index futures, though institutional conviction remains limited.`,
-    neutral:      (pair) => `${pair} index futures positioning is neutral — no dominant directional institutional bias is established.`,
-    weak_bear:    (pair) => `${pair} index futures show a mild bearish lean, though net short positioning lacks strong conviction.`,
-    mod_bear:     (pair) => `${pair} reflects moderate bearish institutional bias in equity futures, with declining net long exposure.`,
-    strong_bear:  (pair) => `${pair} equity futures are under strong institutional selling pressure, with Leveraged Money accumulating net short exposure.`,
+    strong_bull:  (pair) => `${pair} refleja fuerte apetito institucional por renta variable, con Leveraged Money manteniendo exposición neta larga significativa en futuros de índice.`,
+    mod_bull:     (pair) => `${pair} muestra sesgo alcista moderado en futuros de renta variable, con posicionamiento neto largo de Leveraged Money.`,
+    weak_bull:    (pair) => `${pair} tiene una inclinación alcista leve en futuros de índice, aunque la convicción institucional sigue siendo limitada.`,
+    neutral:      (pair) => `El posicionamiento en futuros de ${pair} es neutral — no se establece sesgo direccional institucional dominante.`,
+    weak_bear:    (pair) => `Los futuros de ${pair} muestran una inclinación bajista leve, aunque el posicionamiento neto corto carece de convicción sólida.`,
+    mod_bear:     (pair) => `${pair} refleja sesgo institucional bajista moderado en futuros de renta variable, con exposición neta larga en declive.`,
+    strong_bear:  (pair) => `Los futuros de ${pair} están bajo fuerte presión vendedora institucional, con Leveraged Money acumulando exposición neta corta.`,
   },
   commodities: {
-    strong_bull:  (pair) => `${pair} exhibits strong institutional accumulation, with Leveraged Money holding significant net long exposure — consistent with demand-side or inflation-hedge positioning.`,
-    mod_bull:     (pair) => `${pair} shows moderate bullish institutional positioning, with net long Leveraged Money exposure.`,
-    weak_bull:    (pair) => `${pair} carries a mild bullish lean from institutional accounts.`,
-    neutral:      (pair) => `${pair} positioning is neutral, with no dominant directional institutional bias.`,
-    weak_bear:    (pair) => `${pair} has a mild bearish lean institutionally, with modest net short positioning.`,
-    mod_bear:     (pair) => `${pair} shows moderate bearish institutional bias — Leveraged Money is reducing exposure.`,
-    strong_bear:  (pair) => `${pair} reflects strong institutional selling pressure, with Leveraged Money holding significant net short exposure.`,
+    strong_bull:  (pair) => `${pair} exhibe fuerte acumulación institucional, con Leveraged Money manteniendo exposición neta larga significativa — coherente con posicionamiento de demanda o cobertura de inflación.`,
+    mod_bull:     (pair) => `${pair} muestra posicionamiento institucional alcista moderado, con exposición neta larga de Leveraged Money.`,
+    weak_bull:    (pair) => `${pair} tiene una inclinación alcista leve desde cuentas institucionales.`,
+    neutral:      (pair) => `El posicionamiento en ${pair} es neutral, sin sesgo direccional institucional dominante.`,
+    weak_bear:    (pair) => `${pair} tiene una inclinación bajista leve institucionalmente, con posicionamiento neto corto modesto.`,
+    mod_bear:     (pair) => `${pair} muestra sesgo institucional bajista moderado — Leveraged Money está reduciendo exposición.`,
+    strong_bear:  (pair) => `${pair} refleja fuerte presión vendedora institucional, con Leveraged Money manteniendo exposición neta corta significativa.`,
   },
   bonds: {
-    strong_bull:  (pair) => `${pair} reflects strong institutional fixed income accumulation — Leveraged Money maintaining significant net long duration exposure, consistent with rate-decline expectations.`,
-    mod_bull:     (pair) => `${pair} shows moderate institutional demand for fixed income, with net long positioning in the rate complex.`,
-    weak_bull:    (pair) => `${pair} carries a mild bullish lean in fixed income positioning, though duration conviction remains limited.`,
-    neutral:      (pair) => `${pair} fixed income positioning is neutral, with no dominant rate expectation bias established.`,
-    weak_bear:    (pair) => `${pair} shows a mild bearish lean in fixed income — modest net short positioning implies limited inflation premium expectations.`,
-    mod_bear:     (pair) => `${pair} reflects moderate institutional fixed income selling, consistent with rising yield expectations.`,
-    strong_bear:  (pair) => `${pair} fixed income is under strong institutional selling pressure — net short duration positioning implies elevated inflation premium expectations.`,
+    strong_bull:  (pair) => `${pair} refleja fuerte acumulación institucional de renta fija — Leveraged Money manteniendo exposición neta larga de duración significativa, coherente con expectativas de bajada de tipos.`,
+    mod_bull:     (pair) => `${pair} muestra demanda institucional moderada de renta fija, con posicionamiento neto largo en el complejo de tipos.`,
+    weak_bull:    (pair) => `${pair} tiene una inclinación alcista leve en posicionamiento de renta fija, aunque la convicción de duración sigue siendo limitada.`,
+    neutral:      (pair) => `El posicionamiento de renta fija en ${pair} es neutral, sin sesgo de expectativa de tipos dominante establecido.`,
+    weak_bear:    (pair) => `${pair} muestra una inclinación bajista leve en renta fija — el posicionamiento neto corto modesto implica expectativas limitadas de prima de inflación.`,
+    mod_bear:     (pair) => `${pair} refleja ventas institucionales moderadas de renta fija, coherente con expectativas de subida de tipos.`,
+    strong_bear:  (pair) => `La renta fija de ${pair} está bajo fuerte presión vendedora institucional — el posicionamiento neto corto de duración implica expectativas de prima de inflación elevadas.`,
   },
 };
 
@@ -170,8 +170,8 @@ export function generatePairNarrative(pairRow, biasEntry, exec) {
   // Streak context (generic across all asset classes)
   if (streak >= 3 && direction !== 'neutral') {
     sentences.push(
-      `The ${direction} bias has persisted for ${streak} consecutive CFTC reports, ` +
-      `reinforcing the medium-term directional thesis.`
+      `El sesgo ${direction === 'bullish' ? 'alcista' : 'bajista'} ha persistido durante ${streak} informes CFTC consecutivos, ` +
+      `reforzando la tesis direccional de mediano plazo.`
     );
   }
 
@@ -179,13 +179,13 @@ export function generatePairNarrative(pairRow, biasEntry, exec) {
   if (zsc.zscore != null) {
     if (Math.abs(zsc.zscore) >= 2.5) {
       sentences.push(
-        `Positioning is at historical extremes (Z-score: ${fmtScore(zsc.zscore)}, ` +
-        `${zsc.percentile}th percentile) — elevated reversal risk.`
+        `El posicionamiento está en extremos históricos (Z-score: ${fmtScore(zsc.zscore)}, ` +
+        `percentil ${zsc.percentile}) — riesgo de reversión elevado.`
       );
     } else if (Math.abs(zsc.zscore) >= 1.5) {
       sentences.push(
-        `Z-score reads ${fmtScore(zsc.zscore)} (${zsc.percentile}th percentile), indicating ` +
-        `positioning is stretched but not yet extreme.`
+        `El Z-score marca ${fmtScore(zsc.zscore)} (percentil ${zsc.percentile}), indicando que ` +
+        `el posicionamiento está estirado pero no aún en extremos.`
       );
     }
   }
@@ -193,36 +193,36 @@ export function generatePairNarrative(pairRow, biasEntry, exec) {
   // Divergence (generic)
   if (div.state === 'EXHAUSTION') {
     sentences.push(
-      `An exhaustion signal is active — price trend and positioning are aligned at extremes. ` +
-      `Watch for reversal catalysts.`
+      `Una señal de agotamiento está activa — tendencia de precio y posicionamiento están alineados en extremos. ` +
+      `Vigilar catalizadores de reversión.`
     );
   } else if (div.state === 'BULLISH_DIVERGENCE') {
     sentences.push(
-      `A bullish divergence is present: institutions are accumulating while price softens — ` +
-      `a potential reversal setup.`
+      `Presente divergencia alcista: las instituciones acumulan mientras el precio cede — ` +
+      `configuración de potencial reversión.`
     );
   } else if (div.state === 'BEARISH_DIVERGENCE') {
     sentences.push(
-      `A bearish divergence is visible: institutions are reducing exposure into price strength — ` +
-      `distribution signal.`
+      `Divergencia bajista visible: las instituciones reducen exposición mientras el precio avanza — ` +
+      `señal de distribución.`
     );
   }
 
   // Execution (generic)
   if (execLabel === 'FAVORABLE') {
     sentences.push(
-      `Intraday execution conditions are currently favorable for directional entries aligned ` +
-      `with the institutional bias.`
+      `Las condiciones de ejecución intradía son actualmente favorables para entradas direccionales alineadas ` +
+      `con el sesgo institucional.`
     );
   } else if (execLabel === 'IMPROVING') {
     sentences.push(
-      `Execution conditions are improving — pullback setups may offer better risk/reward ` +
-      `than chasing current price action.`
+      `Las condiciones de ejecución están mejorando — los pullbacks pueden ofrecer mejor riesgo/beneficio ` +
+      `que perseguir la acción de precio actual.`
     );
   } else {
     sentences.push(
-      `Intraday execution is restricted. Await improvement in macro risk conditions before ` +
-      `executing directional trades.`
+      `La ejecución intradía está restringida. Esperar mejora en condiciones macro y de volatilidad antes ` +
+      `de ejecutar operaciones direccionales.`
     );
   }
 
@@ -230,15 +230,15 @@ export function generatePairNarrative(pairRow, biasEntry, exec) {
   if (confScore >= 70) {
     sentences.push(
       cat === 'fx'
-        ? `Multi-factor confluence score of ${Math.round(confScore)}/100 indicates strong alignment ` +
-          `across COT, carry, macro, and central bank policy vectors.`
-        : `Multi-factor confluence score of ${Math.round(confScore)}/100 indicates strong signal ` +
-          `alignment across COT positioning, macro, and volatility regime vectors.`
+        ? `La puntuación de confluencia multifactor de ${Math.round(confScore)}/100 indica fuerte alineación ` +
+          `entre COT, carry, macro y política de bancos centrales.`
+        : `La puntuación de confluencia multifactor de ${Math.round(confScore)}/100 indica fuerte alineación ` +
+          `entre posicionamiento COT, macro y régimen de volatilidad.`
     );
   } else if (confScore >= 45) {
     sentences.push(
-      `Confluence score of ${Math.round(confScore)}/100 shows partial alignment — confirmation ` +
-      `from at least one additional factor is advisable before adding directional exposure.`
+      `La puntuación de confluencia de ${Math.round(confScore)}/100 muestra alineación parcial — se recomienda ` +
+      `confirmación de al menos un factor adicional antes de añadir exposición direccional.`
     );
   }
 
@@ -248,7 +248,7 @@ export function generatePairNarrative(pairRow, biasEntry, exec) {
 // ── EXECUTIVE SUMMARY ─────────────────────────────────────────────────────────
 
 export function generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapshotDate, regime, crossAssetCtx }) {
-  if (!biasArr?.length) return 'No institutional data available for analysis.';
+  if (!biasArr?.length) return 'No hay datos institucionales disponibles para el análisis.';
 
   const bullish = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bullish');
   const bearish = biasArr.filter(b => (b.bias?.direction ?? b.direction) === 'bearish');
@@ -257,17 +257,17 @@ export function generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapsh
   const topBullish = [...bullish].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const topBearish = [...bearish].sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
 
-  const tone = bullish.length > bearish.length + 1 ? 'broadly bullish'
-    : bearish.length > bullish.length + 1           ? 'broadly bearish'
-    : 'mixed';
+  const tone = bullish.length > bearish.length + 1 ? 'mayoritariamente alcista'
+    : bearish.length > bullish.length + 1           ? 'mayoritariamente bajista'
+    : 'mixto';
 
   const sentences = [];
 
   // Opening: asset count + tone
   sentences.push(
-    `As of the ${cotDate ?? snapshotDate ?? 'latest'} CFTC report, institutional positioning ` +
-    `across ${biasArr.length} monitored asset${biasArr.length !== 1 ? 's' : ''} is ${tone}, ` +
-    `with ${bullish.length} bullish, ${bearish.length} bearish, and ${neutral.length} neutral.`
+    `En el informe CFTC del ${cotDate ?? snapshotDate ?? 'último período'}, el posicionamiento institucional ` +
+    `en ${biasArr.length} activo${biasArr.length !== 1 ? 's' : ''} monitorizados es ${tone}, ` +
+    `con ${bullish.length} alcista${bullish.length !== 1 ? 's' : ''}, ${bearish.length} bajista${bearish.length !== 1 ? 's' : ''} y ${neutral.length} neutral${neutral.length !== 1 ? 'es' : ''}.`
   );
 
   // Macro / regime context
@@ -281,21 +281,20 @@ export function generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapsh
   // Top bullish setups
   if (topBullish.length >= 2) {
     sentences.push(
-      `${topBullish.slice(0, 2).map(b => b.pair).join(' and ')} present the strongest bullish ` +
-      `institutional setups, with Leveraged Money maintaining elevated net long exposure ` +
-      `across consecutive reports.`
+      `${topBullish.slice(0, 2).map(b => b.pair).join(' y ')} presentan las configuraciones institucionales ` +
+      `alcistas más sólidas, con Leveraged Money manteniendo exposición neta larga elevada durante informes consecutivos.`
     );
   } else if (topBullish.length === 1) {
     sentences.push(
-      `${topBullish[0].pair} stands out as the primary bullish institutional setup this week.`
+      `${topBullish[0].pair} destaca como la principal configuración institucional alcista de la semana.`
     );
   }
 
   // Top bearish setups
   if (topBearish.length >= 2) {
     sentences.push(
-      `${topBearish.slice(0, 2).map(b => b.pair).join(' and ')} reflect the most significant ` +
-      `bearish institutional pressure, with continued reduction in net long exposure.`
+      `${topBearish.slice(0, 2).map(b => b.pair).join(' y ')} reflejan la mayor presión institucional ` +
+      `bajista, con reducción continuada en la exposición neta larga.`
     );
   }
 
@@ -307,8 +306,8 @@ export function generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapsh
   const extremes = biasArr.filter(b => b.zscore && Math.abs(b.zscore.zscore ?? 0) >= 2);
   if (extremes.length >= 2) {
     sentences.push(
-      `Elevated z-scores in ${extremes.map(b => b.pair).join(', ')} warrant risk management ` +
-      `discipline — extended positioning historically precedes sharp mean-reversion moves.`
+      `Los Z-scores elevados en ${extremes.map(b => b.pair).join(', ')} exigen disciplina en gestión de riesgo ` +
+      `— el posicionamiento extendido históricamente precede a movimientos bruscos de reversión a la media.`
     );
   }
 
@@ -328,17 +327,17 @@ export function generateExecutiveSummary({ biasArr, macroSignal, cotDate, snapsh
 export function generateMacroRegimeNarrative(regime, crossAssetCtx) {
   if (!regime?.regime || regime.regime === 'TRANSITIONAL') {
     return {
-      headline:   'Transitional Macro Environment',
-      body:       regime?.description ?? 'Cross-asset COT positioning does not yet establish a dominant macro regime. Monitor for convergence.',
+      headline:   'Entorno Macro en Transición',
+      body:       regime?.description ?? 'El posicionamiento COT entre activos aún no establece un régimen macro dominante. Monitorizar la convergencia.',
       keyDrivers: regime?.keyDrivers ?? [],
     };
   }
 
   const conf = regime.confidence ?? 0;
-  const confQual = conf >= 70 ? 'high-conviction' : conf >= 50 ? 'moderate-conviction' : 'emerging';
+  const confQual = conf >= 70 ? 'alta convicción' : conf >= 50 ? 'convicción moderada' : 'emergente';
 
   return {
-    headline:   `${regime.label} (${confQual}, ${conf}% confidence)`,
+    headline:   `${regime.label} (${confQual}, ${conf}% confianza)`,
     body:       regime.description,
     keyDrivers: [
       ...(regime.keyDrivers ?? []),
@@ -381,102 +380,102 @@ export function generateEnrichedAssetReport(pairRow, biasEntry, opts = {}) {
 
   // ── HEADLINE ──────────────────────────────────────────────────────────────
   const headlineMap = {
-    strong_bull:  (p) => `${p}: Institutional accumulation at scale — strong bullish conviction`,
-    mod_bull:     (p) => `${p}: Leveraged Money net long, bullish thesis intact`,
-    weak_bull:    (p) => `${p}: Mild bullish lean — insufficient conviction for high-probability setup`,
-    neutral:      (p) => `${p}: No dominant institutional directional bias`,
-    weak_bear:    (p) => `${p}: Mild bearish lean — conviction below threshold`,
-    mod_bear:     (p) => `${p}: Leveraged Money net short, bearish thesis building`,
-    strong_bear:  (p) => `${p}: Institutional distribution confirmed — strong bearish signal`,
+    strong_bull:  (p) => `${p}: Acumulación institucional a escala — fuerte convicción alcista`,
+    mod_bull:     (p) => `${p}: Leveraged Money neto largo, tesis alcista intacta`,
+    weak_bull:    (p) => `${p}: Inclinación alcista leve — convicción insuficiente para configuración de alta probabilidad`,
+    neutral:      (p) => `${p}: Sin sesgo direccional institucional dominante`,
+    weak_bear:    (p) => `${p}: Inclinación bajista leve — convicción por debajo del umbral`,
+    mod_bear:     (p) => `${p}: Leveraged Money neto corto, tesis bajista en construcción`,
+    strong_bear:  (p) => `${p}: Distribución institucional confirmada — señal bajista fuerte`,
   };
   const headlineKey = getOpeningKey(score);
-  const headline    = headlineMap[headlineKey]?.(pair) ?? `${pair}: Positioning signal available`;
+  const headline    = headlineMap[headlineKey]?.(pair) ?? `${pair}: Señal de posicionamiento disponible`;
 
   // ── MACRO CONTEXT ─────────────────────────────────────────────────────────
   let macroContext = null;
   if (riskRegime?.regime && riskRegime.regime !== 'TRANSITIONAL') {
-    macroContext = `The macro regime is classified as ${riskRegime.label} (${riskRegime.confidence}% confidence). `;
+    macroContext = `El régimen macro está clasificado como ${riskRegime.label} (${riskRegime.confidence}% confianza). `;
     if (cat === 'fx') {
       macroContext += macroSignal?.bias
-        ? `USD macro bias reads ${macroSignal.bias.replace(/_/g, ' ')} with ${macroSignal.confidence}/10 confidence.`
-        : 'USD yield spread signals are not conclusive.';
+        ? `El sesgo macro del USD es ${macroSignal.bias.replace(/_/g, ' ')} con confianza ${macroSignal.confidence}/10.`
+        : 'Las señales de diferenciales de tipos del USD no son concluyentes.';
     } else if (cat === 'index') {
       macroContext += riskRegime.regime === 'RISK_ON'
-        ? 'A risk-on macro posture is constructive for equity long exposure.'
+        ? 'Una postura macro de apetito por riesgo es constructiva para exposición larga en renta variable.'
         : riskRegime.regime === 'RISK_OFF'
-        ? 'A risk-off macro environment creates headwinds for equity futures longs.'
-        : `The ${riskRegime.regime.replace(/_/g, '-')} regime creates mixed conditions for equity futures.`;
+        ? 'Un entorno macro defensivo crea vientos en contra para posiciones largas en futuros de renta variable.'
+        : `El régimen ${riskRegime.regime.replace(/_/g, '-')} crea condiciones mixtas para futuros de renta variable.`;
     } else if (cat === 'bonds') {
       macroContext += riskRegime.regime === 'DISINFLATION'
-        ? 'Disinflationary regime is constructive for fixed income duration longs.'
+        ? 'El régimen desinflacionario es constructivo para posiciones largas de duración en renta fija.'
         : riskRegime.regime === 'STAGFLATION'
-        ? 'Stagflationary conditions create headwinds for bond longs — inflation premium drives yields higher.'
-        : `The current macro regime has ${riskRegime.signals?.bonds === direction ? 'aligned' : 'mixed'} implications for fixed income.`;
+        ? 'Las condiciones estanflacionarias crean vientos en contra para bonos largos — la prima de inflación presiona los tipos al alza.'
+        : `El régimen macro actual tiene implicaciones ${riskRegime.signals?.bonds === direction ? 'alineadas' : 'mixtas'} para la renta fija.`;
     } else if (cat === 'commodities') {
       macroContext += riskRegime.regime === 'STAGFLATION'
-        ? 'Stagflationary conditions are structurally supportive for commodity inflation hedges.'
+        ? 'Las condiciones estanflacionarias son estructuralmente favorables para coberturas de inflación en materias primas.'
         : riskRegime.regime === 'RISK_ON'
-        ? 'Risk-on macro posture supports demand-driven commodity bid.'
-        : `${riskRegime.label} regime has varying implications across commodity sub-classes.`;
+        ? 'La postura macro de apetito por riesgo apoya la demanda impulsada de materias primas.'
+        : `El régimen ${riskRegime.label} tiene implicaciones variables según la subclase de materia prima.`;
     }
   } else {
     macroContext = macroSignal?.implication
-      ?? 'Macro context is transitional or insufficient for high-conviction regime classification.';
+      ?? 'El contexto macro está en transición o es insuficiente para una clasificación de régimen de alta convicción.';
   }
 
   // ── INSTITUTIONAL READING ─────────────────────────────────────────────────
   const netStr     = latest.smartNet != null ? (latest.smartNet > 0 ? '+' : '') + Math.round(latest.smartNet / 1000) + 'K' : '—';
   const pctL       = latest.smartPctL != null ? latest.smartPctL.toFixed(1) + '%' : '—';
-  const institutional = `Leveraged Money holds net ${latest.smartNet >= 0 ? 'long' : 'short'} ${netStr} contracts (${pctL} long). ` +
+  const institutional = `Leveraged Money mantiene neto ${latest.smartNet >= 0 ? 'largo' : 'corto'} ${netStr} contratos (${pctL} largo). ` +
     (latest.assetNet != null
-      ? `Asset Managers ${latest.assetNet > 0 ? 'confirm with net long' : 'diverge net short'} ${Math.round(Math.abs(latest.assetNet) / 1000)}K.`
+      ? `Asset Managers ${latest.assetNet > 0 ? 'confirman con neto largo' : 'divergen neto corto'} ${Math.round(Math.abs(latest.assetNet) / 1000)}K.`
       : '') +
     (streak >= 2
-      ? ` This directional bias has persisted for ${streak} consecutive CFTC reports.`
-      : ' Streak below threshold for trend confirmation.');
+      ? ` Este sesgo direccional ha persistido durante ${streak} informes CFTC consecutivos.`
+      : ' Racha por debajo del umbral para confirmación de tendencia.');
 
   // ── POSITIONING READING ───────────────────────────────────────────────────
   let positioning = null;
   if (zsc.zscore != null) {
     const zAbs = Math.abs(zsc.zscore);
     if (zAbs >= 2.5) {
-      positioning = `Positioning is at a multi-year extreme (Z-score: ${zsc.zscore > 0 ? '+' : ''}${zsc.zscore?.toFixed(2)}, ${zsc.percentile}th percentile). ` +
-        `At these levels, historical mean-reversion risk is elevated. Carry/macro alignment required before adding directional exposure.`;
+      positioning = `El posicionamiento está en extremos plurianuales (Z-score: ${zsc.zscore > 0 ? '+' : ''}${zsc.zscore?.toFixed(2)}, percentil ${zsc.percentile}). ` +
+        `En estos niveles, el riesgo histórico de reversión a la media es elevado. Se requiere alineación carry/macro antes de añadir exposición direccional.`;
     } else if (zAbs >= 1.5) {
-      positioning = `Positioning is stretched but not extreme (Z-score: ${zsc.zscore?.toFixed(2)}, ${zsc.percentile}th percentile). ` +
-        `Not a reversal signal in isolation — requires divergence or catalyst to turn actionable.`;
+      positioning = `El posicionamiento está estirado pero no en extremos (Z-score: ${zsc.zscore?.toFixed(2)}, percentil ${zsc.percentile}). ` +
+        `No es señal de reversión por sí sola — requiere divergencia o catalizador para ser accionable.`;
     } else {
-      positioning = `Positioning is within normal historical range (Z-score: ${zsc.zscore?.toFixed(2)}, ${zsc.percentile}th percentile). ` +
-        `No crowding risk at current levels.`;
+      positioning = `El posicionamiento está dentro del rango histórico normal (Z-score: ${zsc.zscore?.toFixed(2)}, percentil ${zsc.percentile}). ` +
+        `Sin riesgo de saturación en los niveles actuales.`;
     }
   }
 
   // ── DIVERGENCE READING ────────────────────────────────────────────────────
   let divergence = null;
   if (div.state === 'EXHAUSTION') {
-    divergence = `An exhaustion signal is active: price and positioning are co-moving at extremes. ` +
-      `Historically, this configuration precedes sharp reversals — prioritize risk management over directional entry.`;
+    divergence = `Señal de agotamiento activa: precio y posicionamiento se mueven juntos en extremos. ` +
+      `Históricamente, esta configuración precede reversiones bruscas — priorizar gestión de riesgo sobre entrada direccional.`;
   } else if (div.state === 'BULLISH_DIVERGENCE') {
-    divergence = `Bullish divergence detected: institutional accounts accumulating while price declines. ` +
-      `Classic smart-money divergence — watch for price confirmation before entering long.`;
+    divergence = `Divergencia alcista detectada: cuentas institucionales acumulando mientras el precio cae. ` +
+      `Divergencia clásica de smart money — esperar confirmación de precio antes de entrar largo.`;
   } else if (div.state === 'BEARISH_DIVERGENCE') {
-    divergence = `Bearish divergence: Leveraged Money reducing exposure while price advances. ` +
-      `Distribution signal — avoid adding longs; evaluate short setups on price exhaustion.`;
+    divergence = `Divergencia bajista: Leveraged Money reduciendo exposición mientras el precio avanza. ` +
+      `Señal de distribución — evitar añadir posiciones largas; evaluar cortos en agotamiento del precio.`;
   } else {
-    divergence = `No significant divergence between price and positioning. Trend and institutional flow are aligned.`;
+    divergence = `Sin divergencia significativa entre precio y posicionamiento. Tendencia y flujo institucional están alineados.`;
   }
 
   // ── WEEKLY FLOW ───────────────────────────────────────────────────────────
   const chgNet  = latest.levChgNet ?? (latest.smartNet - (prev.smartNet ?? 0));
-  const flowDir = chgNet > 0 ? 'accumulation' : chgNet < 0 ? 'distribution' : 'flat';
   const flowMag = Math.round(Math.abs(chgNet) / 1000);
+  const flowDir = chgNet > 0 ? 'acumulación' : chgNet < 0 ? 'distribución' : 'plano';
   const weeklyFlow = chgNet != null
-    ? `Weekly flow shows ${flowDir} of ${flowMag}K contracts. ` +
-      (flowDir === 'accumulation' && direction === 'bullish' ? 'Inflows confirm the bullish directional thesis.'
-      : flowDir === 'distribution' && direction === 'bearish' ? 'Outflows confirm the bearish directional thesis.'
-      : flowDir !== 'flat' ? 'Weekly flow diverges from net positioning — watch for trend development.'
-      : 'No significant weekly flow signal.')
-    : 'Weekly flow data not available.';
+    ? `El flujo semanal muestra ${flowDir} de ${flowMag}K contratos. ` +
+      (flowDir === 'acumulación' && direction === 'bullish' ? 'Las entradas confirman la tesis direccional alcista.'
+      : flowDir === 'distribución' && direction === 'bearish' ? 'Las salidas confirman la tesis direccional bajista.'
+      : flowDir !== 'plano' ? 'El flujo semanal diverge del posicionamiento neto — vigilar el desarrollo de tendencia.'
+      : 'Sin señal de flujo semanal significativa.')
+    : 'Datos de flujo semanal no disponibles.';
 
   // ── RATES / CARRY (FX only) ───────────────────────────────────────────────
   let ratesReading = null;
@@ -486,10 +485,10 @@ export function generateEnrichedAssetReport(pairRow, biasEntry, opts = {}) {
     if (cp) {
       const baseCycle  = cycleProfiles?.[cp.base_bank];
       const quoteCycle = cycleProfiles?.[cp.quote_bank];
-      ratesReading = `${cp.base_bank} rate: ${cp.base_rate?.toFixed(2) ?? '—'}% (${baseCycle?.cycleLabel ?? '—'}). ` +
-        `${cp.quote_bank} rate: ${cp.quote_rate?.toFixed(2) ?? '—'}% (${quoteCycle?.cycleLabel ?? '—'}). ` +
-        `Differential: ${cp.rate_diff_bps != null ? (cp.rate_diff_bps > 0 ? '+' : '') + cp.rate_diff_bps + ' bps' : '—'}. ` +
-        `Carry direction: ${cp.carry_direction?.replace(/_/g, ' ') ?? 'neutral'}.`;
+      ratesReading = `Tipo ${cp.base_bank}: ${cp.base_rate?.toFixed(2) ?? '—'}% (${baseCycle?.cycleLabel ?? '—'}). ` +
+        `Tipo ${cp.quote_bank}: ${cp.quote_rate?.toFixed(2) ?? '—'}% (${quoteCycle?.cycleLabel ?? '—'}). ` +
+        `Diferencial: ${cp.rate_diff_bps != null ? (cp.rate_diff_bps > 0 ? '+' : '') + cp.rate_diff_bps + ' bps' : '—'}. ` +
+        `Dirección carry: ${cp.carry_direction?.replace(/_/g, ' ') ?? 'neutral'}.`;
       if (baseCycle?.impact?.notes?.length) {
         ratesReading += ' ' + baseCycle.impact.notes[0];
       }
@@ -498,13 +497,13 @@ export function generateEnrichedAssetReport(pairRow, biasEntry, opts = {}) {
     // For bonds, rate expectations from the FED cycle are directly relevant
     const fedCycle = cycleProfiles?.['FED'];
     if (fedCycle) {
-      ratesReading = `FED currently ${fedCycle.cycleLabel} (${fedCycle.maturityLabel}). ` +
-        `Cumulative cycle move: ${fedCycle.cumBps > 0 ? '+' : ''}${fedCycle.cumBps} bps. ` +
+      ratesReading = `FED actualmente ${fedCycle.cycleLabel} (${fedCycle.maturityLabel}). ` +
+        `Movimiento acumulado del ciclo: ${fedCycle.cumBps > 0 ? '+' : ''}${fedCycle.cumBps} bps. ` +
         (fedCycle.cycleType === 'HIKING'
-          ? 'Ongoing hikes create structural headwinds for long-duration bond positions.'
+          ? 'Las subidas en curso crean vientos en contra estructurales para posiciones largas de larga duración.'
           : fedCycle.cycleType === 'CUTTING'
-          ? 'Rate cuts support fixed income longs — duration accumulation favored.'
-          : 'FED on hold — watch for policy pivot signals that affect duration positioning.');
+          ? 'Las bajadas de tipos respaldan los largos de renta fija — acumulación de duración favorecida.'
+          : 'FED en pausa — vigilar señales de pivote de política que afecten al posicionamiento de duración.');
     }
   }
 
@@ -543,82 +542,82 @@ export function generateEnrichedAssetReport(pairRow, biasEntry, opts = {}) {
 
 function buildScenarioMain(cat, direction, streak, divState, zscore, regime, pair) {
   if (direction === 'neutral') {
-    return `Wait for directional confirmation from ${pair}. No actionable scenario while positioning is neutral.`;
+    return `Esperar confirmación direccional de ${pair}. Sin escenario accionable mientras el posicionamiento es neutral.`;
   }
 
-  const dirStr = direction === 'bullish' ? 'long' : 'short';
-  const oppStr = direction === 'bullish' ? 'bullish' : 'bearish';
-  const streakStr = streak >= 3 ? `(${streak}-report streak) ` : '';
+  const dirStr = direction === 'bullish' ? 'largo' : 'corto';
+  const oppStr = direction === 'bullish' ? 'alcista' : 'bajista';
+  const streakStr = streak >= 3 ? `(racha de ${streak} informes) ` : '';
 
   if (cat === 'fx') {
-    return `Primary scenario: ${oppStr} ${pair} ${streakStr}with Leveraged Money maintaining net ${dirStr} exposure. ` +
+    return `Escenario principal: ${oppStr} en ${pair} ${streakStr}con Leveraged Money manteniendo exposición neta ${dirStr}. ` +
       (regime && regime !== 'TRANSITIONAL' && (
         (direction === 'bullish' && ['RISK_ON'].includes(regime)) ||
         (direction === 'bearish' && ['RISK_OFF', 'LIQUIDITY_STRESS'].includes(regime))
       )
-        ? `The ${regime.replace(/_/g, '-')} macro regime provides additional tailwind for this setup.`
-        : 'Macro regime is not providing strong directional alignment — rely on COT signal quality.');
+        ? `El régimen macro ${regime.replace(/_/g, '-')} proporciona viento de cola adicional para esta configuración.`
+        : 'El régimen macro no proporciona alineación direccional fuerte — depender de la calidad de la señal COT.');
   }
 
   if (cat === 'index') {
     return direction === 'bullish'
-      ? `Primary scenario: equity risk appetite remains elevated. ${pair} index futures institutional longs persist. ` +
-        (regime === 'RISK_ON' ? 'Risk-on macro regime confirms equity bias.' : 'Watch for regime confirmation to increase conviction.')
-      : `Primary scenario: institutional equity de-risking continues. ${pair} futures remain under selling pressure. ` +
-        (regime === 'RISK_OFF' ? 'Risk-off macro regime confirms bearish equity bias.' : 'Await macro regime confirmation for full conviction.');
+      ? `Escenario principal: el apetito por renta variable permanece elevado. Los largos institucionales en futuros de ${pair} persisten. ` +
+        (regime === 'RISK_ON' ? 'El régimen macro de apetito por riesgo confirma el sesgo de renta variable.' : 'Vigilar confirmación de régimen para aumentar convicción.')
+      : `Escenario principal: el desapalancamiento institucional de renta variable continúa. Los futuros de ${pair} permanecen bajo presión vendedora. ` +
+        (regime === 'RISK_OFF' ? 'El régimen macro defensivo confirma el sesgo bajista de renta variable.' : 'Esperar confirmación del régimen macro para convicción plena.');
   }
 
   if (cat === 'bonds') {
     return direction === 'bullish'
-      ? `Primary scenario: fixed income accumulation continues — Leveraged Money expects rate declines or needs haven exposure. ` +
-        (regime === 'DISINFLATION' ? 'Disinflationary macro regime strongly supports this thesis.' : 'Monitor central bank guidance for rate path confirmation.')
-      : `Primary scenario: bond selling pressure persists — inflation premium drives duration reduction. ` +
-        (regime === 'STAGFLATION' ? 'Stagflationary regime provides fundamental support for this setup.' : 'Track yield curve for acceleration signals.');
+      ? `Escenario principal: la acumulación de renta fija continúa — Leveraged Money espera bajadas de tipos o necesita exposición refugio. ` +
+        (regime === 'DISINFLATION' ? 'El régimen macro desinflacionario apoya fuertemente esta tesis.' : 'Monitorizar la orientación de bancos centrales para confirmación del camino de tipos.')
+      : `Escenario principal: la presión vendedora en bonos persiste — la prima de inflación impulsa la reducción de duración. ` +
+        (regime === 'STAGFLATION' ? 'El régimen estanflacionario proporciona soporte fundamental para esta configuración.' : 'Seguir la curva de tipos para señales de aceleración.');
   }
 
   if (cat === 'commodities') {
     return direction === 'bullish'
-      ? `Primary scenario: institutional commodity accumulation continues. ` +
-        (pair === 'GOLD' || pair === 'SILVER' ? 'Precious metals bid consistent with inflation hedge or haven demand.' : '') +
-        (pair === 'WTI' ? 'Energy bid reflects demand-side confidence or supply constraint.' : '')
-      : `Primary scenario: commodity selling pressure extends. ` +
-        (pair === 'GOLD' || pair === 'SILVER' ? 'Precious metals reduction implies improving risk appetite or declining inflation expectations.' : '') +
-        (pair === 'WTI' ? 'Energy selling consistent with demand softness or supply surplus.' : '');
+      ? `Escenario principal: la acumulación institucional de materias primas continúa. ` +
+        (pair === 'GOLD' || pair === 'SILVER' ? 'La demanda de metales preciosos es coherente con cobertura de inflación o demanda refugio.' : '') +
+        (pair === 'WTI' ? 'La demanda de energía refleja confianza del lado de la demanda o restricción de oferta.' : '')
+      : `Escenario principal: la presión vendedora en materias primas se extiende. ` +
+        (pair === 'GOLD' || pair === 'SILVER' ? 'La reducción de metales preciosos implica mejora del apetito por riesgo o caída de expectativas de inflación.' : '') +
+        (pair === 'WTI' ? 'Las ventas de energía son coherentes con debilidad de demanda o superávit de oferta.' : '');
   }
 
-  return `Primary ${oppStr} scenario: institutional positioning supports ${dirStr} directional bias.`;
+  return `Escenario principal ${oppStr}: el posicionamiento institucional soporta el sesgo direccional ${dirStr}.`;
 }
 
 function buildScenarioAlt(cat, direction, divState, zscore, regime, pair) {
-  const inverse = direction === 'bullish' ? 'bearish' : direction === 'bearish' ? 'bullish' : 'neutral';
+  const inverse = direction === 'bullish' ? 'bajista' : direction === 'bearish' ? 'alcista' : 'neutral';
 
   if (divState === 'EXHAUSTION' || (zscore != null && Math.abs(zscore) >= 2.5)) {
-    return `Alternative scenario (elevated probability): positioning is extended — a catalyst-driven mean-reversion move is possible. ` +
-      `Z-score extremes historically precede 2-4 week corrective moves. Monitor for weekly flow reversal (levChgNet sign change) as early warning.`;
+    return `Escenario alternativo (probabilidad elevada): el posicionamiento está extendido — un movimiento de reversión a la media impulsado por catalizador es posible. ` +
+      `Los extremos de Z-score históricamente preceden movimientos correctivos de 2-4 semanas. Monitorizar la reversión del flujo semanal (cambio de signo en levChgNet) como aviso temprano.`;
   }
 
   if (divState === 'BULLISH_DIVERGENCE') {
-    return `Alternative ${inverse} scenario: price could continue declining despite institutional accumulation. ` +
-      `Smart money divergences do not always resolve immediately — confirmation candle or weekly close above key level required before acting.`;
+    return `Escenario alternativo ${inverse}: el precio podría continuar cayendo a pesar de la acumulación institucional. ` +
+      `Las divergencias de smart money no siempre se resuelven de inmediato — se requiere vela de confirmación o cierre semanal por encima de nivel clave antes de actuar.`;
   }
 
   if (divState === 'BEARISH_DIVERGENCE') {
-    return `Alternative ${inverse} scenario: price strength could persist despite institutional distribution. ` +
-      `Forced retail buying can extend price above institutional selling — await positioning capitulation (net cross to opposite side) before acting.`;
+    return `Escenario alternativo ${inverse}: la fortaleza del precio podría persistir a pesar de la distribución institucional. ` +
+      `La compra forzada del retail puede extender el precio por encima de las ventas institucionales — esperar capitulación del posicionamiento (cruce neto al lado opuesto) antes de actuar.`;
   }
 
   // Regime conflict scenarios
   if (direction === 'bullish' && regime === 'RISK_OFF') {
-    return `Alternative scenario: risk-off macro regime could override bullish ${pair} COT signal. ` +
-      `If macro deterioration accelerates, institutional position reversal is possible despite current long bias.`;
+    return `Escenario alternativo: el régimen macro defensivo podría sobreponerse a la señal COT alcista de ${pair}. ` +
+      `Si el deterioro macro se acelera, la reversión del posicionamiento institucional es posible a pesar del sesgo largo actual.`;
   }
   if (direction === 'bearish' && regime === 'RISK_ON') {
-    return `Alternative scenario: risk-on macro tailwinds could force short covering in ${pair}. ` +
-      `Monitor for capitulation pattern in positioning — net flip to long would invalidate the bearish setup.`;
+    return `Escenario alternativo: los vientos de cola macro de apetito por riesgo podrían forzar cobertura de cortos en ${pair}. ` +
+      `Monitorizar patrones de capitulación en el posicionamiento — un giro neto a largo invalidaría la configuración bajista.`;
   }
 
-  return `Alternative scenario: positioning could reverse if a catalyst disrupts the current institutional consensus. ` +
-    `A weekly net flip of Leveraged Money exposure would signal the need to reassess the ${direction} bias.`;
+  return `Escenario alternativo: el posicionamiento podría revertir si un catalizador disrumpe el consenso institucional actual. ` +
+    `Un giro neto semanal de la exposición de Leveraged Money señalaría la necesidad de reevaluar el sesgo ${direction === 'bullish' ? 'alcista' : 'bajista'}.`;
 }
 
 function buildInvalidation(cat, direction, latest, divState, regime, pair) {
@@ -626,22 +625,22 @@ function buildInvalidation(cat, direction, latest, divState, regime, pair) {
   const netStr  = Math.round(Math.abs(netPos) / 1000) + 'K';
 
   const baseInvalidation = direction === 'bullish'
-    ? `${pair} bullish thesis is invalidated if: (1) Leveraged Money net flips to negative (currently +${netStr}); ` +
-      `(2) Asset Managers shift to net short; (3) Weekly flow shows 2+ consecutive weeks of distribution.`
+    ? `La tesis alcista de ${pair} queda invalidada si: (1) el neto de Leveraged Money gira a negativo (actualmente +${netStr}); ` +
+      `(2) los Asset Managers cambian a neto corto; (3) el flujo semanal muestra 2+ semanas consecutivas de distribución.`
     : direction === 'bearish'
-    ? `${pair} bearish thesis is invalidated if: (1) Leveraged Money net flips to positive (currently ${Math.round(netPos / 1000)}K); ` +
-      `(2) Weekly accumulation flow persists 2+ consecutive weeks; (3) % long rises above 50%.`
-    : `No active thesis to invalidate. Confirm directional bias before establishing invalidation criteria.`;
+    ? `La tesis bajista de ${pair} queda invalidada si: (1) el neto de Leveraged Money gira a positivo (actualmente ${Math.round(netPos / 1000)}K); ` +
+      `(2) el flujo de acumulación semanal persiste 2+ semanas consecutivas; (3) el % largo supera el 50%.`
+    : `Sin tesis activa que invalidar. Confirmar el sesgo direccional antes de establecer criterios de invalidación.`;
 
   // Asset-class-specific additions
   if (cat === 'index' && direction === 'bearish') {
-    return baseInvalidation + ` Additionally: if VIX drops below 15 with equity futures showing weekly accumulation, bearish thesis is compromised.`;
+    return baseInvalidation + ` Adicionalmente: si el VIX cae por debajo de 15 con futuros de renta variable mostrando acumulación semanal, la tesis bajista queda comprometida.`;
   }
   if (cat === 'bonds' && direction === 'bullish') {
-    return baseInvalidation + ` Additionally: a surprise hawkish pivot from the FED would invalidate the bond accumulation thesis regardless of COT signal.`;
+    return baseInvalidation + ` Adicionalmente: un giro hawkish sorpresa de la FED invalidaría la tesis de acumulación de bonos independientemente de la señal COT.`;
   }
   if ((pair === 'GOLD' || pair === 'SILVER') && direction === 'bullish') {
-    return baseInvalidation + ` Additionally: a sustained USD strength cycle or rapid disinflation would pressure gold longs despite institutional accumulation.`;
+    return baseInvalidation + ` Adicionalmente: un ciclo sostenido de fortaleza del USD o desinflación rápida presionaría los largos de oro a pesar de la acumulación institucional.`;
   }
 
   return baseInvalidation;
@@ -653,33 +652,33 @@ function buildConclusion(cat, direction, streak, exec, divState, conf) {
   const execOK    = execLabel === 'FAVORABLE';
 
   if (direction === 'neutral') {
-    return 'No active operational conclusion — await directional confirmation from positioning data before establishing a bias.';
+    return 'Sin conclusión operacional activa — esperar confirmación direccional de los datos de posicionamiento antes de establecer un sesgo.';
   }
 
   if (divState === 'EXHAUSTION') {
-    return `CAUTION: Exhaustion signal active. Do not add directional exposure at current positioning levels. ` +
-      `Wait for positioning reset (z-score below ±1.5) before re-entering in the direction of the institutional bias.`;
+    return `ATENCIÓN: Señal de agotamiento activa. No añadir exposición direccional en los niveles de posicionamiento actuales. ` +
+      `Esperar que el posicionamiento se normalice (z-score por debajo de ±1.5) antes de re-entrar en la dirección del sesgo institucional.`;
   }
 
   if (!execOK) {
-    return `Directional bias is ${direction} — but execution conditions are ${execLabel.toLowerCase()}. ` +
-      `Hold the setup thesis, await macro and volatility conditions to improve before committing capital.`;
+    return `El sesgo direccional es ${direction === 'bullish' ? 'alcista' : 'bajista'} — pero las condiciones de ejecución son ${execLabel.toLowerCase()}. ` +
+      `Mantener la tesis de la configuración, esperar a que las condiciones macro y de volatilidad mejoren antes de comprometer capital.`;
   }
 
   if (streak >= 3 && confScore >= 60 && execOK) {
-    return `High-conviction operational setup: ${streak}-report ${direction} streak, confluence ${Math.round(confScore)}/100, and favorable execution conditions. ` +
-      `Position sizing can reflect elevated signal quality — manage risk via weekly net monitoring, not just price.`;
+    return `Configuración operacional de alta convicción: racha ${direction === 'bullish' ? 'alcista' : 'bajista'} de ${streak} informes, confluencia ${Math.round(confScore)}/100 y condiciones de ejecución favorables. ` +
+      `El dimensionamiento de posición puede reflejar la elevada calidad de la señal — gestionar el riesgo mediante monitoreo del neto semanal, no solo del precio.`;
   }
 
   if (streak >= 2 && execOK) {
-    return `Moderate ${direction} setup with improving conditions. ` +
-      `Entry timing should reference intraday structure aligned with the institutional direction. ` +
-      `Standard position sizing — do not overweight until confluence crosses 65+.`;
+    return `Configuración ${direction === 'bullish' ? 'alcista' : 'bajista'} moderada con condiciones mejorando. ` +
+      `El timing de entrada debe referenciar estructura intradía alineada con la dirección institucional. ` +
+      `Dimensionamiento estándar — no sobreponderar hasta que la confluencia supere 65+.`;
   }
 
-  return `${direction.charAt(0).toUpperCase() + direction.slice(1)} bias noted with execution conditions favorable. ` +
-    `Signal streak is limited (${streak} reports) — treat as an early-stage setup and size accordingly. ` +
-    `Full conviction requires at least 2-3 consecutive confirmatory reports.`;
+  return `Sesgo ${direction === 'bullish' ? 'alcista' : 'bajista'} identificado con condiciones de ejecución favorables. ` +
+    `La racha de señal es limitada (${streak} informes) — tratar como configuración en etapa temprana y dimensionar en consecuencia. ` +
+    `La convicción plena requiere al menos 2-3 informes confirmatorios consecutivos.`;
 }
 
 // ── MARKET REGIME LABEL ───────────────────────────────────────────────────────
@@ -696,9 +695,9 @@ export function generateMarketRegimeLabel(biasArr, macroSignal, riskRegime) {
   const dist = biasArr.filter(b => b.state === 'distribution').length;
   const exp  = biasArr.filter(b => b.state === 'expansion').length;
 
-  if (dist >= 2)         return 'Distribution Phase';
-  if (exp  >= 3)         return 'Trend Expansion';
-  if (bull > bear * 1.5) return 'Risk-On Bias';
-  if (bear > bull * 1.5) return 'Risk-Off Bias';
-  return 'Transition / Mixed';
+  if (dist >= 2)         return 'Fase de Distribución';
+  if (exp  >= 3)         return 'Expansión de Tendencia';
+  if (bull > bear * 1.5) return 'Sesgo Apetito por Riesgo';
+  if (bear > bull * 1.5) return 'Sesgo Defensivo';
+  return 'Transición / Mixto';
 }

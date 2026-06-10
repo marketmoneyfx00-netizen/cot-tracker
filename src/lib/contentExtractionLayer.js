@@ -258,28 +258,28 @@ function extractKeyFigures(asset) {
   const figures = [];
 
   if (raw?.smart_net != null) {
-    figures.push({ label: 'Leveraged Money Net',   value: fmtK(raw.smart_net),           unit: 'contracts', symbol });
+    figures.push({ label: 'Leveraged Money Neto',   value: fmtK(raw.smart_net),           unit: 'contratos', symbol });
   }
   if (raw?.smart_pct_l != null) {
-    figures.push({ label: '% Long',                 value: raw.smart_pct_l.toFixed(1),    unit: '%',         symbol });
+    figures.push({ label: '% Largo',                 value: raw.smart_pct_l.toFixed(1),    unit: '%',         symbol });
   }
   if (raw?.lev_chg_net != null) {
-    figures.push({ label: 'Weekly Flow',             value: fmtK(raw.lev_chg_net),        unit: 'contracts', symbol });
+    figures.push({ label: 'Flujo Semanal',            value: fmtK(raw.lev_chg_net),        unit: 'contratos', symbol });
   }
   if (positioning?.zscore != null) {
-    figures.push({ label: 'Z-Score',                 value: positioning.zscore.toFixed(2), unit: 'σ',        symbol });
+    figures.push({ label: 'Z-Score',                  value: positioning.zscore.toFixed(2), unit: 'σ',        symbol });
   }
   if (positioning?.percentile != null) {
-    figures.push({ label: 'Position Percentile',    value: positioning.percentile,         unit: 'pct',      symbol });
+    figures.push({ label: 'Percentil de Posición',   value: positioning.percentile,         unit: 'pct',      symbol });
   }
   if (rates_carry?.diff_bps != null) {
-    figures.push({ label: 'Carry Differential',      value: rates_carry.diff_bps,          unit: 'bps',      symbol });
+    figures.push({ label: 'Diferencial de Carry',    value: rates_carry.diff_bps,           unit: 'bps',      symbol });
   }
   if (raw?.open_interest != null) {
-    figures.push({ label: 'Open Interest',           value: fmtK(raw.open_interest),       unit: 'contracts', symbol });
+    figures.push({ label: 'Interés Abierto',          value: fmtK(raw.open_interest),       unit: 'contratos', symbol });
   }
   if (cftc_date) {
-    figures.push({ label: 'CFTC Report Date',        value: cftc_date,                      unit: 'date',     symbol });
+    figures.push({ label: 'Fecha Informe CFTC',       value: cftc_date,                      unit: 'fecha',    symbol });
   }
 
   return figures;

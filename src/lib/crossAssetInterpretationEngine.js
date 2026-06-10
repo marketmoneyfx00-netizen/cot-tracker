@@ -16,7 +16,7 @@ function interpretEquityBond(eq, bonds) {
   if (!eq || !bonds) {
     return {
       type: 'unknown',
-      description: 'Insufficient equity or bond data to establish a cross-asset relationship reading.',
+      description: 'Datos insuficientes de renta variable o bonos para establecer una lectura de relación multi-activo.',
     };
   }
 
@@ -24,43 +24,43 @@ function interpretEquityBond(eq, bonds) {
     return {
       type: 'risk-on',
       description:
-        'Classic risk-on configuration: equity longs increasing while bond futures face ' +
-        'institutional selling pressure — consistent with a growth-optimistic allocation shift ' +
-        'away from fixed income.',
+        'Configuración clásica risk-on: los largos en renta variable aumentan mientras los futuros de bonos ' +
+        'enfrentan presión vendedora institucional — coherente con un cambio de asignación optimista sobre el ' +
+        'crecimiento, alejándose de la renta fija.',
     };
   }
   if (eq === 'bearish' && bonds === 'bullish') {
     return {
       type: 'risk-off',
       description:
-        'Classic risk-off configuration: equity positioning declining while fixed income ' +
-        'absorbs institutional safe-haven demand — capital rotating into duration reflects ' +
-        'elevated growth or credit concern.',
+        'Configuración clásica risk-off: el posicionamiento en renta variable disminuye mientras la renta ' +
+        'fija absorbe demanda institucional de refugio seguro — la rotación de capital hacia duración refleja ' +
+        'preocupación elevada de crecimiento o crédito.',
     };
   }
   if (eq === 'bullish' && bonds === 'bullish') {
     return {
       type: 'goldilocks',
       description:
-        'Rare goldilocks dynamic: both equities and bonds are bid simultaneously — ' +
-        'typically observed when the market prices a soft-landing scenario (contained ' +
-        'inflation + resilient growth), supporting both asset classes concurrently.',
+        'Dinámica goldilocks poco común: tanto renta variable como bonos están comprados simultáneamente — ' +
+        'típicamente observado cuando el mercado descuenta un aterrizaje suave (inflación contenida + ' +
+        'crecimiento resiliente), respaldando ambas clases de activos de forma concurrente.',
     };
   }
   if (eq === 'bearish' && bonds === 'bearish') {
     return {
       type: 'stagflationary',
       description:
-        'Stagflationary pressure: both equities and bonds are under institutional selling ' +
-        'pressure — a dual-asset bearish setup consistent with rising inflation expectations ' +
-        'meeting deteriorating growth, eroding both earnings and fixed income returns.',
+        'Presión estanflacionaria: tanto renta variable como bonos están bajo presión vendedora institucional ' +
+        '— una configuración bajista en ambos activos coherente con expectativas de inflación crecientes ' +
+        'combinadas con deterioro del crecimiento, erosionando tanto los beneficios como los rendimientos de renta fija.',
     };
   }
   return {
     type: 'neutral',
     description:
-      'Equity and bond positioning are broadly neutral — no dominant risk-on or risk-off ' +
-      'institutional rotation signal is currently established.',
+      'El posicionamiento en renta variable y bonos es ampliamente neutral — no se ha establecido ninguna ' +
+      'señal de rotación institucional dominante risk-on o risk-off.',
   };
 }
 
@@ -72,9 +72,9 @@ function interpretGoldRates(gld, bonds, usd) {
       type:        'inflation-protection',
       aligned:     true,
       description:
-        'Gold accumulation alongside bond selling is consistent with institutional inflation ' +
-        'protection: Leveraged Money is building gold longs as a real-yield hedge while ' +
-        'reducing fixed income duration exposure.',
+        'La acumulación de oro junto con la venta de bonos es coherente con la protección institucional ' +
+        'contra la inflación: Leveraged Money está construyendo largos en oro como cobertura de rendimiento ' +
+        'real mientras reduce exposición a duración de renta fija.',
     };
   }
   if (gld === 'bullish' && bonds === 'bullish') {
@@ -82,9 +82,9 @@ function interpretGoldRates(gld, bonds, usd) {
       type:        'safety-stacking',
       aligned:     true,
       description:
-        'Simultaneous gold and bond accumulation signals a defensive portfolio posture — ' +
-        'institutions are stacking multiple safe-haven vehicles, suggesting elevated ' +
-        'tail-risk hedging activity.',
+        'La acumulación simultánea de oro y bonos señala una postura de cartera defensiva — las instituciones ' +
+        'están apilando múltiples vehículos de refugio seguro, lo que sugiere actividad elevada de cobertura ' +
+        'de riesgo de cola.',
     };
   }
   if (gld === 'bearish' && bonds === 'bullish') {
@@ -92,9 +92,9 @@ function interpretGoldRates(gld, bonds, usd) {
       type:        'disinflationary-rotation',
       aligned:     false,
       description:
-        'Gold selling combined with bond buying points to a disinflationary rotation: ' +
-        'declining inflation expectations make rate-adjusted fixed income more attractive ' +
-        'than inflation hedges.',
+        'La venta de oro combinada con la compra de bonos apunta a una rotación desinflacionaria: la caída ' +
+        'de las expectativas de inflación hace que la renta fija ajustada por tipos sea más atractiva que ' +
+        'las coberturas de inflación.',
     };
   }
   if (gld === 'bullish' && usd === 'bullish') {
@@ -102,9 +102,9 @@ function interpretGoldRates(gld, bonds, usd) {
       type:        'stress-driven',
       aligned:     false,
       description:
-        'Gold and USD both bid simultaneously is atypical — historically associated with ' +
-        'systemic stress where both safe havens are sought concurrently, or with ' +
-        'USD-denominated gold demand driven by non-US institutional accounts.',
+        'Oro y USD comprados simultáneamente es atípico — históricamente asociado con estrés sistémico ' +
+        'donde se buscan ambos refugios de forma concurrente, o con demanda de oro denominada en USD ' +
+        'impulsada por cuentas institucionales no estadounidenses.',
     };
   }
   return null;
@@ -117,35 +117,36 @@ function interpretOilMacro(oil, eq, _usd) {
     return {
       type:        'synchronized-growth',
       description:
-        'Oil and equity institutional flows are both bullish — a synchronized growth signal: ' +
-        'demand-side energy positioning aligns with equity risk appetite, consistent with ' +
-        'global expansion expectations.',
+        'Los flujos institucionales en petróleo y renta variable son ambos alcistas — una señal de crecimiento ' +
+        'sincronizado: el posicionamiento en energía por el lado de la demanda se alinea con el apetito de ' +
+        'riesgo en renta variable, coherente con expectativas de expansión global.',
     };
   }
   if (oil === 'bullish' && eq === 'bearish') {
     return {
       type:        'supply-shock',
       description:
-        'Oil bid against declining equity exposure suggests a supply-shock narrative: energy ' +
-        'cost pressure rising while growth concerns mount — a stagflationary configuration ' +
-        'for corporate margins.',
+        'El petróleo comprado frente a la reducción de exposición en renta variable sugiere una narrativa de ' +
+        'shock de oferta: la presión de costes energéticos aumenta mientras crecen las preocupaciones de ' +
+        'crecimiento — una configuración estanflacionaria para los márgenes corporativos.',
     };
   }
   if (oil === 'bearish' && eq === 'bearish') {
     return {
       type:        'demand-destruction',
       description:
-        'Both oil and equity positioning declining — demand destruction signal: institutional ' +
-        'accounts reducing growth-sensitive exposure simultaneously, consistent with broad ' +
-        'recession hedging or demand-side deterioration.',
+        'Tanto el petróleo como la renta variable están disminuyendo en posicionamiento — señal de destrucción ' +
+        'de demanda: las cuentas institucionales reducen exposición sensible al crecimiento simultáneamente, ' +
+        'coherente con cobertura de recesión amplia o deterioro del lado de la demanda.',
     };
   }
   if (oil === 'bearish' && eq === 'bullish') {
     return {
       type:        'disinflation-equity',
       description:
-        'Falling oil positioning alongside equity bid is a favorable disinflation signal: ' +
-        'lower energy costs support margin recovery while equities discount rate-cut potential.',
+        'La caída del posicionamiento en petróleo junto con la compra de renta variable es una señal ' +
+        'desinflacionaria favorable: los menores costes energéticos apoyan la recuperación de márgenes ' +
+        'mientras la renta variable descuenta el potencial de bajadas de tipos.',
     };
   }
   return null;
@@ -159,16 +160,15 @@ function interpretDollarFX(usd, allBiasArr) {
   const bearFX  = fxPairs.filter(b => b.bias?.direction === 'bearish').map(b => b.pair);
 
   if (usd === 'bullish') {
-    // Pairs bearish with bullish USD: EUR/USD, GBP/USD, AUD/USD, NZD/USD (quote = USD)
     const aligned = bearFX.filter(p => !p.startsWith('USD/')).slice(0, 3);
     return {
       usdDirection:   'bullish',
       alignedFxPairs: aligned,
       description:
-        `USD strength is creating institutional tailwinds for USD-long exposure.` +
+        `La fortaleza del USD está creando vientos favorables institucionales para exposiciones largas en USD.` +
         (aligned.length > 0
-          ? ` Bearish institutional bias in ${aligned.join(', ')} is directionally consistent with dollar demand.`
-          : ' FX pair positioning is not yet fully aligned with the USD strength signal.'),
+          ? ` El sesgo institucional bajista en ${aligned.join(', ')} es direccionalmente coherente con la demanda de dólar.`
+          : ' El posicionamiento en pares de divisas aún no está completamente alineado con la señal de fortaleza del USD.'),
     };
   }
   if (usd === 'bearish') {
@@ -177,16 +177,16 @@ function interpretDollarFX(usd, allBiasArr) {
       usdDirection:   'bearish',
       alignedFxPairs: aligned,
       description:
-        'USD weakness reflects soft yield-spread dynamics or institutional de-positioning of the dollar.' +
+        'La debilidad del USD refleja dinámicas de diferencial de rendimientos débiles o desposicionamiento institucional del dólar.' +
         (aligned.length > 0
-          ? ` Bullish bias in ${aligned.join(', ')} is consistent with dollar outflow.`
-          : ' FX institutional positioning is not yet fully expressing the USD weakness theme.'),
+          ? ` El sesgo alcista en ${aligned.join(', ')} es coherente con la salida de flujos del dólar.`
+          : ' El posicionamiento institucional en divisas aún no expresa completamente el tema de debilidad del USD.'),
     };
   }
   return {
     usdDirection:   'neutral',
     alignedFxPairs: [],
-    description:    'USD positioning is neutral — no dominant directional dollar flow signal is established.',
+    description:    'El posicionamiento en USD es neutral — no se ha establecido ninguna señal dominante de flujo direccional en el dólar.',
   };
 }
 
@@ -214,32 +214,32 @@ function detectRotations(allBiasArr, combinedData) {
 
   if (eq === 'bearish' && bond === 'bullish') {
     rotations.push(
-      'Equity-to-fixed income rotation: institutional reduction of equity futures coincides ' +
-      'with fixed income accumulation'
+      'Rotación de renta variable a renta fija: la reducción de futuros de índices coincide ' +
+      'con acumulación de renta fija'
     );
   }
   if (eq === 'bullish' && bond === 'bearish') {
     rotations.push(
-      'Fixed income-to-equity rotation: bond selling pressure redirects institutional flows ' +
-      'into equity index futures'
+      'Rotación de renta fija a renta variable: la presión vendedora en bonos redirige flujos ' +
+      'institucionales hacia futuros de índices de renta variable'
     );
   }
   if (gld === 'bullish' && eq === 'bearish') {
     rotations.push(
-      'Risk-to-safety rotation: equity de-risking accompanied by institutional gold ' +
-      'accumulation'
+      'Rotación de riesgo a seguridad: reducción de riesgo en renta variable acompañada de ' +
+      'acumulación institucional de oro'
     );
   }
   if (gld === 'bearish' && eq === 'bullish') {
     rotations.push(
-      'Safety-to-risk rotation: gold being reduced while equity exposure builds — ' +
-      'risk appetite expanding'
+      'Rotación de seguridad a riesgo: el oro se está reduciendo mientras se construye exposición ' +
+      'en renta variable — apetito por riesgo en expansión'
     );
   }
   if (oil === 'bullish' && bond === 'bearish') {
     rotations.push(
-      'Reflationary rotation: energy demand bid alongside bond selling suggests a shift ' +
-      'toward inflation-linked assets'
+      'Rotación reflacionaria: la demanda de energía al alza junto con la venta de bonos sugiere ' +
+      'un desplazamiento hacia activos vinculados a la inflación'
     );
   }
 
@@ -288,31 +288,30 @@ export function buildCrossAssetContext({
 
   const DOMINANT_THEMES = {
     RISK_ON:
-      'The multi-asset positioning tableau is consistent with an institutional risk-on posture: ' +
-      'growth-sensitive assets are being accumulated while defensive positioning is being reduced.',
+      'El panorama de posicionamiento multi-activo es coherente con una postura institucional risk-on: ' +
+      'los activos sensibles al crecimiento se están acumulando mientras el posicionamiento defensivo se reduce.',
     RISK_OFF:
-      'Cross-asset flows reflect a coordinated institutional flight to safety: defensive assets ' +
-      'are being accumulated as risk-sensitive positioning is wound down.',
+      'Los flujos multi-activo reflejan una huida coordinada institucional hacia la seguridad: los activos ' +
+      'defensivos se están acumulando mientras el posicionamiento sensible al riesgo se deshace.',
     STAGFLATION:
-      'The cross-asset tableau is consistent with a stagflationary macro environment: ' +
-      'inflation hedges are bid, yield-bearing assets face institutional selling, and ' +
-      'growth-sensitive positioning is under pressure.',
+      'El panorama multi-activo es coherente con un entorno macro estanflacionario: las coberturas de ' +
+      'inflación están compradas, los activos con rendimiento enfrentan ventas institucionales y el ' +
+      'posicionamiento sensible al crecimiento está bajo presión.',
     DISINFLATION:
-      'Institutional positioning reflects a disinflationary regime: duration is being ' +
-      'accumulated in expectation of declining yields while inflation-sensitive positioning is reduced.',
+      'El posicionamiento institucional refleja un régimen desinflacionario: se está acumulando duración ' +
+      'en anticipación de tipos a la baja mientras el posicionamiento sensible a la inflación se reduce.',
     LIQUIDITY_STRESS:
-      'Positioning patterns are consistent with an acute liquidity stress episode: the USD is ' +
-      'being accumulated while risk assets face broad institutional selling — a characteristic ' +
-      'signature of a dollar squeeze or systemic funding event.',
+      'Los patrones de posicionamiento son coherentes con un episodio agudo de estrés de liquidez: el USD ' +
+      'se está acumulando mientras los activos de riesgo enfrentan ventas institucionales generalizadas — ' +
+      'firma característica de un squeeze del dólar o evento sistémico de financiación.',
     TRANSITIONAL:
-      'Multi-asset COT positioning is currently transitional, with no dominant directional ' +
-      'thesis established across asset classes. Signals are mixed, suggesting institutional ' +
-      'uncertainty or a regime change in progress.',
+      'El posicionamiento COT multi-activo es actualmente transicional, sin una tesis direccional dominante ' +
+      'establecida entre clases de activos. Las señales son mixtas, sugiriendo incertidumbre institucional ' +
+      'o un cambio de régimen en curso.',
   };
 
   const dominantTheme = DOMINANT_THEMES[regimeKey] ?? DOMINANT_THEMES.TRANSITIONAL;
 
-  // Collect the most informative relationship descriptions for the report
   const keyDrivers = [];
   if (equityBondDynamic?.type !== 'unknown') keyDrivers.push(equityBondDynamic.description);
   if (goldRateDynamic)                       keyDrivers.push(goldRateDynamic.description);

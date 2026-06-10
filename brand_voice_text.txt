@@ -1,0 +1,271 @@
+﻿COT TRACKER
+Brand Voice & Communication Guidelines
+Institutional Market Intelligence — Voice, Messaging Pillars, Tone & Channel Playbook
+Version 1.0  ·  Internal
+
+0. Antes de empezar — tensiones a resolver
+Este documento se construyó sobre el brief original, pero corrige cuatro puntos donde el brief se contradice o se acerca peligrosamente al estereotipo retail que se quiere evitar. Cada corrección está marcada en su sección. Aceptarlas o no es una decisión de negocio, no de copywriting.
+Corrección #1 — "Smart money flow" no es lenguaje institucional
+El término está dominado por ICT/SMC y gurus retail. Las mesas reales hablan de positioning, dealer flow, speculative net length, CTA exposure. Recomendación: reemplazar "smart money flow" por "institutional positioning" o "speculative positioning" en todo material externo. Si se mantiene, queda como término puente para audiencia retail no iniciada en COT — pero nunca como pillar.
+ 
+Corrección #2 — Macro/COT y ejecución intradía conviven, pero hay que nombrarlas distinto
+El producto tiene un intradayExecutionEngine. Si la marca se vende solo como "macro/institucional/calmado", el módulo intradía suena contradictorio. Solución: encuadrar COT y macro como context layer (qué hacer y por qué), e intradía como execution layer (cuándo y dónde). Una marca, dos capas — nunca dos voces.
+ 
+Corrección #3 — "No somos gurus" ya no diferencia
+Bookmap, Quantower, decenas de Substacks y la comunidad SMC entera dicen lo mismo. La diferenciación real es lo que el producto hace con COT: bias score -100/+100, composite score, divergence engine. La marca debe apoyarse en *capacidad analítica*, no en *anti-guru posturing*.
+ 
+Corrección #4 — Riesgo comercial del tono "calmado"
+El forex retail (la audiencia que paga) responde a urgencia y claridad de outcome. Un tono totalmente Financial Times baja conversión. Calibración: institucional en estética, vocabulario y disclaimers; pero CTAs y landings cargan beneficio específico y medible. Tono ≠ aburrido.
+
+1. Brand Voice
+La voz de COT Tracker se define por seis atributos. Cada atributo está descripto en términos operativos: qué significa en práctica, qué no significa, y cómo suena cuando se aplica bien o mal.
+Atributo 1 — Analítico
+Somos: explicativos, basados en datos verificables, con lógica visible. Cuando afirmamos algo, mostramos por qué.
+No somos: predictivos. No decimos "el euro va a subir". Decimos "el net positioning institucional en EUR sugiere acumulación; históricamente este setup precedió rebotes en X% de los casos".
+Suena así: "Los large speculators redujeron su short en GBP por tercera semana consecutiva. Es la señal más temprana de cambio de bias que captamos."
+No suena así: "GBP a punto de explotar. Entren ya."
+Atributo 2 — Calmado y de alta señal
+Somos: concisos. Cada frase carga información. Sin signos de exclamación, sin urgencia fabricada, sin emojis salvo en contextos específicamente definidos.
+No somos: monótonos ni acartonados. Calmado no es aburrido — es la diferencia entre un analista senior y un becario nervioso.
+Suena así: "Esta semana el reporte COT muestra tres divergencias relevantes. Acá están."
+No suena así: "🚨 ATENCIÓN TRADERS 🚨 ESTA SEMANA HAY OPORTUNIDADES BRUTALES 🔥🔥🔥"
+Atributo 3 — Preciso
+Somos: específicos en cifras, fechas, fuentes. "Tres semanas", no "hace un tiempo". "-42 net contracts", no "bastante short".
+No somos: innecesariamente técnicos. Si una cifra no aporta, no va.
+Suena así: "Reporte CFTC del 14-may-26: large specs +12,400 contratos en JPY, primera lectura net long en siete semanas."
+Atributo 4 — Educativo, no condescendiente
+Somos: explicamos lo complejo sin asumir ignorancia. Tratamos al lector como adulto inteligente que puede no estar familiarizado con un concepto puntual.
+No somos: didácticos de manera condescendiente ("como te expliqué antes..."), ni evangelizadores ("el 99% de los traders no entiende esto").
+Atributo 5 — Honesto sobre los límites
+Somos: transparentes sobre lo que COT puede y no puede hacer. La data tiene 3 días de lag. No predice intradía. Trabaja mejor en swing y position trading. Lo decimos.
+No somos: vendedores de soluciones mágicas. Nuestra credibilidad depende de no inflar lo que el producto entrega.
+Atributo 6 — Profesional, no corporativo
+Somos: limpios, formales en estética pero accesibles en lenguaje. Inspirados en Bloomberg/FT, no en LinkedIn-influencer-speak.
+No somos: ni jerga corporativa ("sinergias", "unleash", "empower") ni slang de telegram retail ("diosa", "bro", "mafia").
+
+2. Messaging Pillars
+Cinco pilares ordenan todo el contenido. Cualquier pieza debe reforzar al menos uno. Si una pieza no entra en ninguno, no es contenido de marca.
+Pilar 1 — Context First
+El precio sin contexto es ruido. COT, macro y positioning institucional son las tres capas que convierten una vela en información.
+Aplicación práctica: todo análisis técnico que publiquemos debe estar acompañado de su contexto macro o de positioning. Nunca un gráfico solo.
+Pilar 2 — Lo que las instituciones están haciendo
+COT es el único reporte público que muestra positioning institucional con granularidad. Nosotros lo traducimos a decisiones operables.
+Aplicación práctica: cada release semanal del CFTC genera contenido. Es nuestro "earnings season".
+Pilar 3 — Divergencia entre precio y positioning
+Cuando el precio se mueve en una dirección y el positioning institucional en la opuesta, hay información. Lo señalamos antes de que sea obvio.
+Aplicación práctica: divergence engine es nuestro hallazgo más diferenciable. Comunicarlo con casos concretos, no en abstracto.
+Pilar 4 — Composite, no signal único
+Ningún indicador aislado funciona consistente. COT bias + macro + intradía + divergencia, combinados en un composite score, es la propuesta.
+Aplicación práctica: educar sobre por qué un solo número (RSI, MACD, COT bias) nunca alcanza.
+Pilar 5 — Decisiones, no predicciones
+No anticipamos qué va a pasar. Damos al trader el contexto para decidir mejor. Esto nos protege legalmente y nos diferencia de cualquier servicio que venda "señales".
+Aplicación práctica: nunca "GBP va a subir". Siempre "el setup actual históricamente precedió X resultado". Lenguaje probabilístico.
+
+3. Tone Guidelines
+La voz es fija. El tono se calibra por contexto. Acá está el spectrum y dónde nos posicionamos.
+Spectrum
+Posición COT Tracker
+Por qué
+Formalidad
+Medio-alta
+Institucional pero accesible. No FT, no Telegram.
+Autoridad
+Experto, pero no autoritario
+Mostramos análisis, no damos órdenes.
+Emoción
+Directo, contenido
+Sin urgencia fabricada. Información clara.
+Complejidad
+Técnico cuando aporta, simple por defecto
+El término "net positioning" sí. El término "convexidad implícita" solo si suma.
+Energía
+Calmado, mesurado
+Estamos del lado de la lectura paciente, no del scalp impulsivo.
+Humor
+Seco, ocasional, nunca payaso
+Un comentario irónico bien colocado refuerza la voz. Memes, no.
+Innovación
+Establecido, basado en data verificable
+COT existe desde 1962. Esto es viejo y probado, no AI hype.
+Cómo se modula el tono por situación
+Situación
+Ajuste tonal
+Reporte semanal COT (recurrente)
+Calmado, factual, denso en data. "Acá está lo nuevo."
+Análisis de divergencia destacada
+Levemente más enfático. Es nuestra punta de lanza diferencial.
+Cambio macro importante (Fed decision, NFP)
+Sobrio, contextual. Nunca "esto lo cambia todo". Sí "esto modifica el bias en X".
+Caída del sistema / incidente
+Transparente, directo, sin esquivar. "Estuvo caído de 14:00 a 14:23. Causa: X. Compensación: Y."
+Anuncio de feature nuevo
+Mostrar capacidad, no celebrar. "Ahora el composite score incluye macro spread."
+Comunicación de precio / cambio de plan
+Honesto, sin disculpas excesivas. Razón clara.
+
+4. Communication Style
+Estructura de cualquier pieza de contenido
+Lead con la conclusión. Qué pasó / qué encontramos en la primera oración.
+Data, no adjetivos. "+12,400 contratos" es mejor que "un aumento significativo".
+Fuente verificable. CFTC, FRED, BIS. Citar fecha del reporte.
+Implicación accionable. Qué hace el trader con esta info. No le decimos qué tradear; le decimos qué considerar.
+Caveat honesto. Cuando aplica, lag o limitación se menciona explícitamente.
+Reglas de redacción
+Frases cortas. Promedio 15-20 palabras. Cuando una frase pasa los 30, dividirla.
+Voz activa siempre que se pueda. "Los large specs redujeron" mejor que "fue reducido por".
+Cifras como cifras: 12,400 / 42% / 3 semanas. Nunca "unos miles" o "casi la mitad".
+Fechas en formato ISO o long: 2026-05-14 o 14-may-26. Nunca "esta semana" sin anclaje.
+Sin signos de exclamación en contenido de análisis. Excepción acotada: confirmaciones en UI ("¡Listo!").
+Sin emojis en LinkedIn, landing pages, emails de análisis. Permitidos con criterio en Telegram (1 emoji por post, máximo) y X (idem).
+Disclaimers visibles: "COT data tiene 3 días de lag" / "Análisis informativo, no recomendación de inversión". No escondidos en footer microscópico.
+
+5. Terminology Preferences
+Términos preferidos vs. términos a evitar
+Decir esto
+No decir esto
+Por qué
+Institutional positioning / speculative positioning
+Smart money flow
+"Smart money" es vocabulario guru. "Positioning" es lo que usan las mesas reales.
+Large speculators / commercials / non-commercials
+Big players / los grandes / pros
+Es la nomenclatura del propio CFTC. Usa la fuente.
+Net long / net short / net positioning
+Compras / ventas / posición
+Específico y verificable.
+Bias score / composite score
+Predicción / pronóstico
+Bias es probabilístico. Predicción es promesa.
+Divergence / divergencia entre precio y positioning
+Discrepancia / desfasaje
+"Divergence" es término establecido en análisis.
+Setup / configuración
+Oportunidad imperdible / chance de oro
+Setup describe estructura. Lo otro es venta.
+Context / macro narrative
+Big picture / panorama general
+Más específico, menos cliché.
+Análisis informativo / lectura del mercado
+Señal / call / pronóstico
+Implicaciones legales y de marca.
+Probable / históricamente / en condiciones similares
+Va a subir / seguro que / 100% confirmado
+Cualquier cosa que prometa resultado pierde credibilidad.
+Position trading / swing trading
+Trading rentable / trading ganador
+Describe horizonte temporal, no resultado.
+Términos que evitar siempre
+"Trading desde casa en pantuflas"
+"Libertad financiera" — sobreusado por guru-sphere
+"Pasivo / ingresos pasivos" aplicado a trading
+"Señal exclusiva" / "información que pocos tienen"
+"X pips garantizados"
+"Algoritmo / IA" sin especificar qué hace exactamente
+Términos militares: "sniper entry", "kill zone", "hunt the liquidity"
+Lambo, yates, relojes, lifestyle
+Nombre de marca y producto
+"COT Tracker" siempre así, con T mayúscula y separado. No "Cottracker", no "cot-tracker" en copy.
+Primera mención en cualquier pieza pública: "COT Tracker, una plataforma de institutional market intelligence". Después: "COT Tracker" o "la plataforma".
+"COT" siempre en mayúsculas. Primera mención en contenido educativo: "Commitment of Traders (COT)".
+
+6. Content Positioning
+Cómo posicionamos COT Tracker en cada tipo de contenido. La regla general: el contenido educa o informa. No vende directo. La venta sale de la credibilidad acumulada del análisis.
+Categoría 1 — Análisis recurrente (semanal)
+El COT Weekly. Cada martes/miércoles después del release del CFTC. Es nuestra columna vertebral.
+Formato: 3-5 pares de mayor cambio en positioning, divergencias destacadas, contexto macro.
+Tono: factual, sin opinión personal del autor.
+Cierre: "Análisis informativo. No constituye recomendación de inversión."
+Categoría 2 — Educación
+Cómo se lee un COT report, qué significa el composite score, cómo interpretar una divergencia.
+Formato: artículos largos (1500-2500 palabras), videos explicativos, infografías limpias.
+Tono: didáctico sin condescendencia. "Acá está cómo lo hacemos nosotros" en vez de "acá está LA verdad".
+Categoría 3 — Casos reales / postmortem
+Setup que se cumplió, setup que falló. Ambos importantes.
+Mostrar fallos públicamente es nuestra credibilidad más fuerte. Diferencial total contra cualquier servicio guru.
+Formato: "Hace 4 semanas señalamos X. Esto fue lo que pasó: Y. Esto fue lo que faltó: Z."
+Categoría 4 — Comentario macro
+Cuando hay evento de alto impacto (decisión Fed, CPI, NFP). Contextual, no reactivo.
+Publicar después del evento con contexto, no antes con especulación.
+Categoría 5 — Producto (anuncios, features)
+Solo cuando hay algo concreto que mostrar.
+Estructura: qué cambió + por qué + cómo se usa. Nunca "revolucionario" / "game-changer" / "único en el mercado".
+
+7. Cómo Sonamos por Canal
+LinkedIn
+Audiencia: traders profesionales, analistas, prop traders, gestores de patrimonio pequeños, finance professionals curiosos.
+Formato: posts de 800-1500 caracteres, ocasionalmente carruseles. Sin hashtags retail (#trading, #forex, #money).
+Tono: más formal del spectrum. Cero emojis. Argumentación basada en data.
+Estructura típica: (1) observación específica con cifra; (2) qué dice el COT; (3) implicación; (4) caveat.
+Frecuencia: 2-3 posts/semana. Calidad > volumen. El feed de LinkedIn castiga el contenido genérico.
+Ejemplo: "El último reporte CFTC muestra que los large speculators acumularon 18,200 contratos long en oro durante mayo. Es la racha más larga desde Q3 2024. Lo notable no es la dirección sino la velocidad: 3 semanas para construir lo que normalmente lleva 6-8. Implicación: el setup es maduro, no temprano. Para quien usa COT como context layer, este es el momento de revisar exposiciones, no de iniciar nuevas. (Análisis informativo, no recomendación.)"
+X / Twitter
+Audiencia: traders activos, finance Twitter, fintwit macro, prop firm sphere.
+Formato: tweets singulares con un dato, hilos cortos (3-5 tweets) para análisis.
+Tono: más punchy que LinkedIn, sin perder precisión. Un emoji por tweet, máximo, y solo cuando aporta (📊 para data, no 🚀).
+Reglas duras: no "thread 🧵" salvo que sea genuinamente extenso. No "bookmark this". No "99% of traders don't know this".
+Frecuencia: 3-5 posts/semana mínimo. El algoritmo premia presencia consistente.
+Ejemplo: "Reporte CFTC del 14-may: los large specs en JPY pasaron a net long por primera vez en 7 semanas. +12,400 contratos. Cambios de esa magnitud, en esa dirección, históricamente preceden movimientos sostenidos en yen."
+Telegram
+Audiencia: subscribers existentes y prospects calientes. Este es el canal más íntimo, no se vende — se entrega.
+Formato: broadcast 1-on-many. Updates cortos cuando hay algo. Nunca "vacío relleno".
+Tono: el más conversacional dentro de la voz. "Acá está el update de la semana". Sigue prohibido "señores", "familia", "mafia".
+Frecuencia: 1-2 mensajes por semana sustanciales. Resistir la tentación de spamear.
+Lo que NO va: "señales" tradicionales (entrada/SL/TP). Si entregamos eso, somos otra cosa.
+Landing Pages
+Tono institucional al máximo en estética. Vocabulario claro. CTAs específicos.
+Hero: una afirmación específica + qué entrega la plataforma. "Análisis institucional para traders que necesitan contexto antes que velas" — no "Domina el mercado con IA".
+Pruebas: métricas reales del producto (bias score, divergencias detectadas), casos verificables, no testimonials anónimos con foto stock.
+CTAs: "Probar 14 días", "Ver análisis de esta semana". No "Empezá a ganar", no "Tu libertad financiera".
+FAQ obligatoria: qué hace, qué no hace, en qué horizonte funciona, riesgos. La honestidad es conversión a largo plazo.
+Disclaimer regulatorio: visible. No microscópico en footer. Posicionarlo como signo de seriedad, no como letra chica.
+
+8. Riesgos — Lo que puede hacernos parecer un servicio retail genérico
+Estas son las trampas concretas. Cada una se mide en cada pieza antes de publicar.
+Riesgo 1 — Lenguaje contaminado por la cultura guru
+"Smart money", "manipulación", "liquidity hunt", "order block". Cada término que tomemos prestado del léxico ICT/SMC nos asocia con esa cultura, queramos o no. Si vamos a usarlos, contextualizar explícitamente con la nomenclatura institucional real.
+Riesgo 2 — Visual y estética
+Gradientes saturados, fondos negros con verdes neón, gráficos con 50 indicadores superpuestos, screenshots de cuentas con balances enormes. Todo esto comunica retail, no institucional, antes de que el usuario lea una palabra. La paleta debe ser sobria: navy, grises, blanco, un acento azul. Tipografía: limpia, sans-serif clásica.
+Riesgo 3 — Testimoniales y resultados
+Mostrar P&L de cuentas, screenshots de ganancias, capturas de telegram con "+500 pips esta semana" — todo eso es retail-trading-culture clásico. Si se usan testimoniales, deben ser de personas identificables, con contexto ("trader independiente, 6 años en mercado"), y nunca enfocados en resultado monetario sino en valor analítico ("el composite score me ayudó a evitar entrar en X setup").
+Riesgo 4 — Urgencia fabricada
+Countdown timers, "oferta termina hoy", "solo 5 lugares", "última oportunidad". Cualquier dispositivo de urgencia comercial nos baja de categoría inmediatamente. Si hay descuento, decirlo plano: "hasta el 31 de mayo, plan anual a USD X".
+Riesgo 5 — Promesa de resultado
+"Mejorá tu performance", "resultados consistentes", "trading más rentable". Todo lo que prometa outcome económico es problemático legal y de marca. Reemplazar siempre por descripción de capacidad: "sumá contexto institucional a tu análisis", "identificá divergencias entre precio y positioning".
+Riesgo 6 — Sobreuso de "AI" / "algoritmo"
+Mencionar IA sin especificar qué hace exactamente es una bandera retail. Si nuestros engines hacen scoring matemático determinístico, llamémoslos así: "bias score calculado a partir de net positioning". "IA" se reserva para lo que efectivamente es IA, y aún así con descripción concreta.
+Riesgo 7 — Tono cambiante
+LinkedIn institucional, Telegram "hola familia", X con memes. Cambiar de personalidad por canal nos hace inconsistentes. La voz se mantiene, el tono se modula — pero nunca al punto de ser una marca distinta.
+Riesgo 8 — "Diferenciación negativa" como obsesión
+Hablar todo el tiempo de "a diferencia de los gurus", "no como esos servicios de señales", "acá hacemos las cosas en serio". Es la mejor manera de quedar pegados al universo del que queremos separarnos. La diferenciación se demuestra haciendo, no atacando. Nuestro contenido debe simplemente ser distinto, no estar todo el tiempo nombrando al otro.
+Riesgo 9 — Volumen sobre calidad
+Postear todos los días en todos los canales para "estar presentes". El contenido genérico bajo el nombre institucional es peor que silencio. Mejor tres posts excelentes por semana que catorce mediocres.
+Riesgo 10 — Comunicación de fallos
+Cuando un setup falla, la tentación es no mencionarlo. Es exactamente lo opuesto de lo que conviene. Publicar postmortems honestos de setups fallidos es la jugada más institucional que existe — es lo que hacen los hedge funds en sus letters trimestrales y nadie en el mundo retail hace. Es una ventaja gratuita.
+
+Apéndice — Quick Reference Card
+Para imprimir y tener al lado. Si una pieza no cumple, no publicar.
+Antes de publicar, verificar
+Sí / No
+¿Hay una afirmación específica con cifras y fuente?
+
+¿La conclusión está en la primera frase?
+
+¿Está libre de "smart money", "liquidity", "sniper"?
+
+¿Está libre de signos de exclamación (excepto UI)?
+
+¿El tono coincide con el canal específico?
+
+¿Hay un caveat o disclaimer donde corresponde?
+
+¿La pieza alinea con al menos un messaging pillar?
+
+¿Le suena natural a un analista senior leerla?
+
+¿Le suena genuino a un trader serio recibirla?
+
+¿La pieza describe capacidad, no promete resultado?
+
+ 
+ 
+Documento de marca interna. COT Tracker · Brand Voice v1.0

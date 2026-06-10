@@ -17,12 +17,6 @@ import { NarrativeGenerator } from './narrative/NarrativeGenerator.js';
 import { signalBus }         from './signals/SignalBus.js';
 import { HealthMonitor }     from './health/HealthMonitor.js';
 import { SignalLog }         from './validation/SignalLog.js';
-import { CRYPTO_REGISTRY }   from './crypto/CryptoRegistryData.js';
-import {
-  calculateCryptoRegulatoryRegime,
-  calculateCryptoETFSignal,
-  calculateStablecoinStress,
-} from './crypto/CryptoMetrics.js';
 import {
   calculateConsensusVelocity,
   calculateRecessionRiskComposite,
@@ -53,7 +47,6 @@ const DEFAULT_CONFIG = {
     enableManipulationDetection: true,
     enableNarrativeGeneration:   true,
     enableBiasModification:      true,
-    enableCryptoLayer:           true,  // Phase 4: institutional crypto intelligence
     enableSignalLog:             true,  // Phase 4: localStorage audit trail
   },
   fds: {
@@ -127,12 +120,6 @@ class PolymarketService {
     try {
       await this._registry.resolveAll();
       console.info(`[PolymarketService] Registry resolved: ${this._registry.count()} markets`);
-
-      // Phase 4: load crypto intelligence markets if enabled
-      if (this._cfg.features.enableCryptoLayer) {
-        await this._registry.resolveAdditional(CRYPTO_REGISTRY);
-        console.info(`[PolymarketService] Crypto layer active: ${this._registry.count()} total markets`);
-      }
 
       await this._runBatch();
 
@@ -330,32 +317,6 @@ class PolymarketService {
       this._metrics.nts.set(snapshot.conditionId, nts);
     }
 
-    // ── Crypto intelligence layer (Phase 4) ──────────────────────────────
-    if (this._cfg.features.enableCryptoLayer) {
-      const cryptoRegMarkets = snapshots.filter(s => s.category === 'CRYPTO_REGULATION');
-      const cryptoEtfMarkets = snapshots.filter(s => s.category === 'CRYPTO_ETF');
-      const stablecoinMarkets = snapshots.filter(s => s.category === 'CRYPTO_STABLECOIN');
-
-      // Enrich snapshots with compositeWeight from registry
-      const withWeight = (markets) => markets.map(s => {
-        const reg = this._registry.getBySlug(s.slug);
-        return reg ? { ...s, compositeWeight: reg.compositeWeight, riskReducing: reg.riskReducing } : s;
-      });
-
-      if (cryptoRegMarkets.length > 0) {
-        this._metrics.crr = calculateCryptoRegulatoryRegime(withWeight(cryptoRegMarkets));
-        this._health.recordCompositeUpdate('crr');
-      }
-      if (cryptoEtfMarkets.length > 0) {
-        this._metrics.cesi = calculateCryptoETFSignal(cryptoEtfMarkets);
-        this._health.recordCompositeUpdate('cesi');
-      }
-      if (stablecoinMarkets.length > 0) {
-        this._metrics.ssi = calculateStablecoinStress(stablecoinMarkets);
-        this._health.recordCompositeUpdate('ssi');
-      }
-    }
-
     this._metrics.lastFullRecalculation = Date.now();
     this._metrics.lastMarketCount       = snapshots.length;
 
@@ -457,38 +418,6 @@ class PolymarketService {
       }
     });
 
-    // ── Crypto layer signals (Phase 4) ────────────────────────────────────
-    const { crr, ssi } = this._metrics;
-
-    if (crr && crr.confidence !== 'INSUFFICIENT') {
-      signalBus.emit({
-        type:      'CRR_UPDATE',
-        category:  'CRYPTO_REGULATION',
-        value:     crr.value,
-        confidence: CONF_TO_NUM[crr.confidence] ?? 0,
-        direction:  crr.regime === 'HIGH_RISK' || crr.regime === 'UNCERTAIN' ? 'BEARISH' : 'NEUTRAL',
-        magnitude:  crr.regime === 'HIGH_RISK' ? 'HIGH' : crr.regime === 'UNCERTAIN' ? 'MEDIUM' : 'LOW',
-        generatedAt: Date.now(),
-        sources:   [],
-        payload:   { crr },
-        narrative: crr.explanation,
-      });
-    }
-
-    if (ssi && ssi.confidence !== 'INSUFFICIENT' && ssi.value >= 0.05) {
-      signalBus.emit({
-        type:      'MSC_UPDATE', // SSI contributes to macro stress — reuse MSC channel
-        category:  'CRYPTO_STABLECOIN',
-        value:     Math.round(ssi.value * 100),
-        confidence: CONF_TO_NUM[ssi.confidence] ?? 0,
-        direction:  ssi.risk !== 'MINIMAL' ? 'BEARISH' : 'NEUTRAL',
-        magnitude:  ssi.risk === 'SEVERE' ? 'HIGH' : ssi.risk === 'ELEVATED' ? 'MEDIUM' : 'LOW',
-        generatedAt: Date.now(),
-        sources:   [],
-        payload:   { ssi },
-        narrative: ssi.explanation,
-      });
-    }
   }
 
   // ── WebSocket (Phase 3) ───────────────────────────────────────────────────

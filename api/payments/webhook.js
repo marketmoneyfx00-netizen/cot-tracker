@@ -15,7 +15,7 @@ import {
   handleSubscriptionCancelled,
   handleSubscriptionUpdated,
   handleChargeRefunded,
-} from './fulfillment.js';
+} from '../_lib/payments/fulfillment.js';
 
 function getRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -104,8 +104,22 @@ export default async function handler(req, res) {
 
       case 'invoice.payment_failed': {
         const inv = event.data.object;
-        console.warn(`[webhook] payment_failed | invoice=${inv.id} | sub=${inv.subscription} | attempt=${inv.attempt_count} | next=${inv.next_payment_attempt}`);
-        // Stripe reintenta automáticamente. Si agota reintentos → subscription.deleted.
+        const attemptCount = inv.attempt_count ?? 1;
+        console.warn(`[webhook] payment_failed | invoice=${inv.id} | sub=${inv.subscription} | attempt=${attemptCount} | next=${inv.next_payment_attempt}`);
+
+        // On FIRST failure: subscription.updated(past_due) is also fired by Stripe,
+        // which sets a 3-day grace period. We log here for visibility.
+        // On subsequent failures (attempt >= 2) or when next_payment_attempt is null
+        // (Stripe has given up): revoke access immediately.
+        if (inv.subscription && (attemptCount >= 2 || !inv.next_payment_attempt)) {
+          const r = await handleSubscriptionUpdated({
+            id:     typeof inv.subscription === 'string' ? inv.subscription : inv.subscription?.id,
+            status: attemptCount >= 3 ? 'unpaid' : 'past_due',
+            items:  { data: [{ price: { id: inv.lines?.data?.[0]?.price?.id ?? null } }] },
+            current_period_end: inv.period_end ?? null,
+          });
+          console.log(`[webhook] payment_failed(attempt=${attemptCount}) → handled as ${attemptCount >= 3 ? 'unpaid' : 'past_due'}: ok=${r.ok}`);
+        }
         return res.status(200).json({ received: true });
       }
 

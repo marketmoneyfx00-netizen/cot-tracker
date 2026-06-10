@@ -41,15 +41,15 @@ export const CONVICTION_TRENDS = {
 };
 
 export const FLOW_STATE_LABELS = {
-  ACCUMULATING_LONG:  'Long Accumulation',
-  ACCUMULATING_SHORT: 'Short Accumulation',
-  ACCELERATING_LONG:  'Accelerating Long',
-  ACCELERATING_SHORT: 'Accelerating Short',
-  DECELERATING_LONG:  'Decelerating Long',
-  DECELERATING_SHORT: 'Decelerating Short',
-  EXHAUSTING:         'Position Exhausting',
-  REVERSING:          'Positioning Reversal',
-  NEUTRAL:            'Neutral / Mixed',
+  ACCUMULATING_LONG:  'Acumulación Larga',
+  ACCUMULATING_SHORT: 'Acumulación Corta',
+  ACCELERATING_LONG:  'Aceleración Larga',
+  ACCELERATING_SHORT: 'Aceleración Corta',
+  DECELERATING_LONG:  'Desaceleración Larga',
+  DECELERATING_SHORT: 'Desaceleración Corta',
+  EXHAUSTING:         'Posición en Agotamiento',
+  REVERSING:          'Reversión de Posicionamiento',
+  NEUTRAL:            'Neutral / Mixto',
 };
 
 export const FLOW_STATE_COLORS = {

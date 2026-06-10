@@ -41,7 +41,7 @@ function runCotAgent({ biasArr = [] }) {
   if (!biasArr.length) {
     return {
       score: 50, confidence: 'unavailable', direction: 'neutral',
-      signals: ['No COT data uploaded — load CFTC file to activate'],
+      signals: ['Sin datos COT cargados — sube un archivo CFTC para activar'],
       warnings: [], breakdown: { bullCount: 0, bearCount: 0, extremeCount: 0 },
     };
   }
@@ -50,7 +50,7 @@ function runCotAgent({ biasArr = [] }) {
   if (!validBias.length) {
     return {
       score: 50, confidence: 'low', direction: 'neutral',
-      signals: ['COT data present but scores unavailable'],
+      signals: ['Datos COT presentes pero puntuaciones no disponibles'],
       warnings: [], breakdown: {},
     };
   }
@@ -79,32 +79,32 @@ function runCotAgent({ biasArr = [] }) {
 
   const signals = [];
   if (bullish.length > bearish.length) {
-    signals.push(`${bullish.length}/${validBias.length} FX pairs net long — bullish institutional flow`);
+    signals.push(`${bullish.length}/${validBias.length} pares FX neto largo — flujo institucional alcista`);
   } else if (bearish.length > bullish.length) {
-    signals.push(`${bearish.length}/${validBias.length} FX pairs net short — bearish institutional flow`);
+    signals.push(`${bearish.length}/${validBias.length} pares FX neto corto — flujo institucional bajista`);
   } else {
-    signals.push(`COT positioning mixed — no directional edge established`);
+    signals.push(`Posicionamiento COT mixto — sin ventaja direccional establecida`);
   }
   if (expansionPairs.length >= 2) {
-    signals.push(`${expansionPairs.length} pairs in expansion state — active accumulation detected`);
+    signals.push(`${expansionPairs.length} pares en estado de expansión — acumulación activa detectada`);
   }
   if (highConfluence.length) {
     const names = highConfluence.slice(0, 3).map(b => b.pair).join(', ');
-    signals.push(`High-confluence alignment: ${names}`);
+    signals.push(`Alineación de alta confluencia: ${names}`);
   }
   strongBull.slice(0, 2).forEach(b =>
-    signals.push(`${b.pair}: strong institutional net long (score ${b.score > 0 ? '+' : ''}${b.score?.toFixed(1)})`)
+    signals.push(`${b.pair}: posición neta larga institucional fuerte (puntuación ${b.score > 0 ? '+' : ''}${b.score?.toFixed(1)})`)
   );
   strongBear.slice(0, 2).forEach(b =>
-    signals.push(`${b.pair}: strong institutional net short (score ${b.score?.toFixed(1)})`)
+    signals.push(`${b.pair}: posición neta corta institucional fuerte (puntuación ${b.score?.toFixed(1)})`)
   );
 
   const warnings = [];
   extremes.forEach(b => {
-    warnings.push(`${b.pair}: positioning at extreme — mean reversion risk elevated`);
+    warnings.push(`${b.pair}: posicionamiento en extremo — riesgo de reversión a la media elevado`);
   });
   if (distribution.length >= 2) {
-    warnings.push(`${distribution.length} pairs showing distribution — institutional unwinding signal`);
+    warnings.push(`${distribution.length} pares mostrando distribución — señal de desenredo institucional`);
   }
 
   return {
@@ -126,7 +126,7 @@ function runMacroAgent({ macroSignal, sharedLiveVix }) {
   if (!macroSignal) {
     return {
       score: 50, confidence: 'unavailable', regime: 'UNKNOWN', usdBias: 'NEUTRAL',
-      vix: null, signals: ['Macro signal loading — refresh in 30 minutes'],
+      vix: null, signals: ['Señal macro cargando — actualiza en 30 minutos'],
       warnings: [], biasNum: 0,
     };
   }
@@ -160,19 +160,19 @@ function runMacroAgent({ macroSignal, sharedLiveVix }) {
   if (macroSignal.drivers?.length) {
     macroSignal.drivers.slice(0, 3).forEach(d => signals.push(d));
   } else {
-    signals.push(`USD macro bias: ${usdBias.replace(/_/g, ' ')}`);
+    signals.push(`Sesgo macro USD: ${usdBias.replace(/_/g, ' ')}`);
   }
   if (vix !== null) {
-    const vixLabel = vix > 30 ? 'extreme fear' : vix > 25 ? 'elevated fear' : vix > 20 ? 'cautious' : vix < 13 ? 'complacency' : 'neutral';
+    const vixLabel = vix > 30 ? 'miedo extremo' : vix > 25 ? 'miedo elevado' : vix > 20 ? 'cautela' : vix < 13 ? 'complacencia' : 'neutral';
     signals.push(`VIX ${vix.toFixed(1)} — ${vixLabel}`);
   }
 
   const warnings = [];
-  if (vix !== null && vix > 25) warnings.push(`VIX ${vix.toFixed(0)} — risk-off pressure active, reduce size`);
+  if (vix !== null && vix > 25) warnings.push(`VIX ${vix.toFixed(0)} — presión risk-off activa, reducir tamaño`);
   if (usdBias === 'USD_WEAK' && vix !== null && vix > 20) {
-    warnings.push('USD weakness + elevated VIX — carry unwind risk active');
+    warnings.push('Debilidad USD + VIX elevado — riesgo de desenredo de carry activo');
   }
-  if (macroConf <= 2) warnings.push('Macro signal confidence low — insufficient yield spread data');
+  if (macroConf <= 2) warnings.push('Confianza en señal macro baja — datos de spread de rendimiento insuficientes');
 
   return { score, confidence, regime, usdBias, biasNum, vix, signals, warnings };
 }
@@ -204,26 +204,26 @@ function runLiquidityAgent({ riskRegime, sharedLiveVix }) {
   const confidence = regimeConf >= 6 ? 'high' : regimeConf >= 3 ? 'medium' : 'low';
 
   const REGIME_LABELS = {
-    RISK_ON:          'Risk-On Expansion',
-    RISK_OFF:         'Risk-Off / Defensive',
-    STAGFLATION:      'Stagflationary Pressure',
-    DISINFLATION:     'Disinflationary Repricing',
-    LIQUIDITY_STRESS: 'Liquidity Stress',
-    TRANSITIONAL:     'Transitional / Mixed',
+    RISK_ON:          'Expansión Risk-On',
+    RISK_OFF:         'Risk-Off / Defensivo',
+    STAGFLATION:      'Presión Estanflacionaria',
+    DISINFLATION:     'Repricing Desinflacionario',
+    LIQUIDITY_STRESS: 'Estrés de Liquidez',
+    TRANSITIONAL:     'Transicional / Mixto',
   };
 
   const signals = [];
-  signals.push(`Regime: ${REGIME_LABELS[regime] || regime}`);
-  signals.push(`Liquidity condition: ${condition}`);
+  signals.push(`Régimen: ${REGIME_LABELS[regime] || regime}`);
+  signals.push(`Condición de liquidez: ${condition}`);
   if (riskRegime?.keyDrivers?.length) {
     riskRegime.keyDrivers.slice(0, 2).forEach(d => signals.push(d));
   }
 
   const warnings = [];
-  if (condition === 'STRESSED') warnings.push('Liquidity stress — position sizing must be reduced');
-  if (regime === 'LIQUIDITY_STRESS') warnings.push('Forced institutional de-risking pattern detected');
-  if (regime === 'RISK_OFF') warnings.push('Defensive regime — USD and bond demand elevated');
-  if (condition === 'TIGHT') warnings.push('Tight liquidity — avoid low-liquidity session entries');
+  if (condition === 'STRESSED') warnings.push('Estrés de liquidez — el tamaño de posición debe reducirse');
+  if (regime === 'LIQUIDITY_STRESS') warnings.push('Patrón de desapalancamiento institucional forzado detectado');
+  if (regime === 'RISK_OFF') warnings.push('Régimen defensivo — demanda de USD y bonos elevada');
+  if (condition === 'TIGHT') warnings.push('Liquidez ajustada — evitar entradas en sesiones de baja liquidez');
 
   return { score, condition, regime, confidence, regimeLabel: REGIME_LABELS[regime], signals, warnings };
 }
@@ -253,86 +253,36 @@ function runIntradayAgent({ currentContext, sentimentData, allSentimentData, tra
 
   // Tactical momentum
   const tac = tacStateMap?.[selectedPair || 'EUR/USD'];
-  const tacLabel = tac?.pressure === 'bullish' ? 'bullish momentum'
-                 : tac?.pressure === 'bearish' ? 'bearish momentum'
-                 : tac?.pressure === 'neutral' ? 'neutral momentum' : null;
+  const tacLabel = tac?.pressure === 'bullish' ? 'momentum alcista'
+                 : tac?.pressure === 'bearish' ? 'momentum bajista'
+                 : tac?.pressure === 'neutral' ? 'momentum neutral' : null;
 
   const signals = [];
-  signals.push(`Execution quality: ${quality} (${score}/100)`);
-  signals.push(`Trade Readiness: ${trs}/100`);
-  if (tacLabel) signals.push(`4H tactical momentum: ${tacLabel}`);
-  const fgLabel = fg < 25 ? 'extreme fear' : fg < 40 ? 'fear' : fg > 75 ? 'extreme greed' : fg > 60 ? 'greed' : 'neutral';
-  signals.push(`Fear/Greed index: ${fgLabel} (${Math.round(fg)})`);
+  signals.push(`Calidad de ejecución: ${quality} (${score}/100)`);
+  signals.push(`Preparación para operar: ${trs}/100`);
+  if (tacLabel) signals.push(`Momentum táctico 4H: ${tacLabel}`);
+  const fgLabel = fg < 25 ? 'miedo extremo' : fg < 40 ? 'miedo' : fg > 75 ? 'codicia extrema' : fg > 60 ? 'codicia' : 'neutral';
+  signals.push(`Índice Miedo/Codicia: ${fgLabel} (${Math.round(fg)})`);
 
   const warnings = [];
-  if (quality === 'AVOID') warnings.push('Execution blocked — conditions below minimum threshold');
-  else if (quality === 'LOW') warnings.push('Suboptimal execution window — reduce position size');
-  if (highEventCount >= 3) warnings.push(`${highEventCount} high-impact events scheduled — pre-event caution`);
-  if (fg < 20) warnings.push('Extreme fear — panic-driven price action, avoid trend-following');
+  if (quality === 'AVOID') warnings.push('Ejecución bloqueada — condiciones por debajo del umbral mínimo');
+  else if (quality === 'LOW') warnings.push('Ventana de ejecución subóptima — reducir tamaño de posición');
+  if (highEventCount >= 3) warnings.push(`${highEventCount} eventos de alto impacto programados — precaución pre-evento`);
+  if (fg < 20) warnings.push('Miedo extremo — acción del precio por pánico, evitar seguir tendencias');
 
   return { score, quality, trs, fg, signals, warnings };
 }
 
-// ─── CRYPTO AGENT ────────────────────────────────────────────────────────────
-
-function runCryptoAgent({ riskRegime, macroSignal, combinedData }) {
-  const regime = riskRegime?.regime || 'TRANSITIONAL';
-  const usdBias = macroSignal?.bias || 'NEUTRAL';
-  const usdBiasNum = USD_BIAS_NUM[usdBias] ?? 0;
-
-  // Base score from macro regime
-  let score = REGIME_LIQUIDITY_BASE[regime] ?? 50;
-
-  // USD inverse relationship (BTC/crypto inversely correlated to USD strength)
-  score -= usdBiasNum * 7;
-
-  // COT crypto positioning (from Combined upload if available)
-  const btcAsset = combinedData?.byAsset?.['BITCOIN'] || combinedData?.byAsset?.['BTC'];
-  let hasCotPositioning = false;
-
-  if (btcAsset?.latest) {
-    hasCotPositioning = true;
-    const net = btcAsset.latest.smartNet ?? 0;
-    if (net > 5000) score += 10;
-    else if (net < -5000) score -= 10;
-  }
-
-  score = Math.min(100, Math.max(0, Math.round(score)));
-
-  const cryptoRegime = score >= 65 ? 'RISK_ON' : score >= 42 ? 'NEUTRAL' : 'RISK_OFF';
-
-  const REGIME_COLORS = { RISK_ON: '#22c55e', NEUTRAL: '#f59e0b', RISK_OFF: '#ef4444' };
-
-  const signals = [];
-  signals.push(`Crypto regime: ${cryptoRegime.replace('_', '-')}`);
-  const btcDxyLabel = usdBiasNum < 0 ? 'favorable (USD weakness supports BTC)'
-                     : usdBiasNum > 0 ? 'headwind (USD strength suppresses BTC)'
-                     : 'neutral (no clear USD directional edge)';
-  signals.push(`BTC/DXY relationship: ${btcDxyLabel}`);
-  if (regime === 'RISK_ON') signals.push('Risk-on regime historically positive for crypto beta');
-  if (regime === 'DISINFLATION') signals.push('Disinflationary repricing — watch BTC as inflation narrative fades');
-  if (hasCotPositioning) signals.push('CFTC BTC futures positioning available — institutional flow visible');
-  else signals.push('CFTC crypto COT: upload TFF Combined for institutional BTC positioning');
-
-  const warnings = [];
-  if (regime === 'LIQUIDITY_STRESS') warnings.push('Liquidity stress — crypto highly vulnerable to forced selling');
-  if (regime === 'RISK_OFF') warnings.push('Risk-off environment — defensive institutional posture');
-  if (usdBiasNum >= 2) warnings.push('Strong USD headwind — reduce crypto exposure');
-
-  return { score, cryptoRegime, hasCotPositioning, usdBiasNum, regimeColor: REGIME_COLORS[cryptoRegime], signals, warnings };
-}
-
 // ─── RISK MANAGER AGENT (VETO POWER) ─────────────────────────────────────────
 
-function runRiskManagerAgent({ cotAgent, macroAgent, liquidityAgent, intradayAgent, cryptoAgent }) {
+function runRiskManagerAgent({ cotAgent, macroAgent, liquidityAgent, intradayAgent }) {
   // Weighted consensus
-  const WEIGHTS = { cot: 0.30, macro: 0.28, liquidity: 0.22, intraday: 0.14, crypto: 0.06 };
+  const WEIGHTS = { cot: 0.32, macro: 0.30, liquidity: 0.24, intraday: 0.14 };
   const score = Math.round(
     cotAgent.score      * WEIGHTS.cot      +
     macroAgent.score    * WEIGHTS.macro     +
     liquidityAgent.score * WEIGHTS.liquidity +
-    intradayAgent.score  * WEIGHTS.intraday  +
-    cryptoAgent.score    * WEIGHTS.crypto
+    intradayAgent.score  * WEIGHTS.intraday
   );
 
   // Risk level from total warning count + individual agent states
@@ -373,10 +323,10 @@ function runRiskManagerAgent({ cotAgent, macroAgent, liquidityAgent, intradayAge
                     : 'DANGER';
 
   const ENV_CONFIG = {
-    FAVORABLE: { color: '#22c55e', label: 'FAVORABLE',  desc: 'Institutional alignment supports execution' },
-    CAUTION:   { color: '#f59e0b', label: 'CAUTION',    desc: 'Mixed conditions — selective execution only' },
-    DEFENSIVE: { color: '#f97316', label: 'DEFENSIVE',  desc: 'Risk elevated — reduce exposure and await clarity' },
-    DANGER:    { color: '#ef4444', label: 'DANGER',     desc: 'Adverse conditions — capital preservation priority' },
+    FAVORABLE: { color: '#22c55e', label: 'FAVORABLE',   desc: 'Alineación institucional favorable para ejecución' },
+    CAUTION:   { color: '#f59e0b', label: 'PRECAUCIÓN',  desc: 'Condiciones mixtas — ejecución selectiva únicamente' },
+    DEFENSIVE: { color: '#f97316', label: 'DEFENSIVO',   desc: 'Riesgo elevado — reducir exposición y esperar claridad' },
+    DANGER:    { color: '#ef4444', label: 'PELIGRO',     desc: 'Condiciones adversas — prioridad: preservar capital' },
   };
 
   // Best conditions (actionable)
@@ -441,7 +391,7 @@ function runRiskManagerAgent({ cotAgent, macroAgent, liquidityAgent, intradayAge
  *   probability: { continuation, reversal, trap },
  *   risk:        { level, veto, vetoReason, factors },
  *   conditions:  { best, avoid },
- *   agents:      { cot, macro, liquidity, intraday, cryptoFlow, riskManager },
+ *   agents:      { cot, macro, liquidity, intraday, riskManager },
  *   summary:     string,
  *   timestamp:   Date,
  * }}
@@ -451,9 +401,8 @@ export function runAgentConsensus(inputs = {}) {
   const macroAgent     = runMacroAgent(inputs);
   const liquidityAgent = runLiquidityAgent(inputs);
   const intradayAgent  = runIntradayAgent(inputs);
-  const cryptoAgent    = runCryptoAgent(inputs);
   const riskManager    = runRiskManagerAgent({
-    cotAgent, macroAgent, liquidityAgent, intradayAgent, cryptoAgent,
+    cotAgent, macroAgent, liquidityAgent, intradayAgent,
   });
 
   const direction = cotAgent.direction === 'bull' ? 'LONG BIAS'
@@ -499,7 +448,6 @@ export function runAgentConsensus(inputs = {}) {
       macro:       macroAgent,
       liquidity:   liquidityAgent,
       intraday:    intradayAgent,
-      cryptoFlow:  cryptoAgent,
       riskManager,
     },
     summary,

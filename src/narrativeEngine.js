@@ -93,11 +93,11 @@ function getTacDesc(tacState) {
 // ── Execution readiness text ─────────────────────────────────────────────────
 
 const EXEC_TEXT = {
-  continuation_context: 'Execution conditions improving. Monitor for tactical entry context within the institutional thesis.',
-  pullback_monitoring:  'Pullback monitoring active. Tactical execution conditions pending further improvement.',
-  await_stabilization:  'Await stabilization before reassessing continuation conditions.',
-  await_confirmation:   'Await further COT confirmation before adding directional exposure.',
-  no_edge:              'No directional edge established. Maintain neutral observational posture.',
+  continuation_context: 'Condiciones de ejecución mejorando. Monitorizar contexto de entrada táctica dentro de la tesis institucional.',
+  pullback_monitoring:  'Monitorización de retroceso activa. Condiciones de ejecución táctica pendientes de mayor mejora.',
+  await_stabilization:  'Esperar estabilización antes de reevaluar condiciones de continuación.',
+  await_confirmation:   'Esperar confirmación COT adicional antes de añadir exposición direccional.',
+  no_edge:              'Sin ventaja direccional establecida. Mantener postura observacional neutral.',
 };
 
 // ── Main narrative builder ───────────────────────────────────────────────────

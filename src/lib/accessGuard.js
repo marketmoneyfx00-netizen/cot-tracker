@@ -133,9 +133,17 @@ export async function loadUserSubscription() {
 export function hasActiveAccess(profile) {
   if (!profile) return false;
   const status = (profile.status ?? '').toLowerCase();
-  if (!['active', 'trial', 'free'].includes(status)) return false;
-  const expiry = profile.expires_at ?? null;
+
+  // Statuses that can have access (subject to expiry check):
+  //   active, trial, free — full access
+  //   past_due             — grace period: access while valid_until has not expired
+  const ALLOWED_STATUSES = ['active', 'trial', 'free', 'past_due'];
+  if (!ALLOWED_STATUSES.includes(status)) return false;
+
+  // Expiry check applies to ALL statuses (including past_due grace window)
+  const expiry = profile.expires_at ?? profile.valid_until ?? null;
   if (expiry && new Date(expiry) < new Date()) return false;
+
   return true;
 }
 
@@ -160,11 +168,14 @@ export function getAccessStatus(profile) {
 
   let reason = 'active';
   if (!active) {
-    if (isTrialExpired(profile))    reason = 'trial_expired';
+    if (isTrialExpired(profile))     reason = 'trial_expired';
+    else if (status === 'past_due')  reason = 'past_due';
     else if (status === 'cancelled') reason = 'cancelled';
     else if (status === 'expired')   reason = 'expired';
     else if (status === 'suspended') reason = 'suspended';
     else                             reason = 'no_access';
+  } else if (status === 'past_due') {
+    reason = 'past_due_grace'; // active but in grace period
   }
 
   return { hasAccess: active, reason, plan, status, expiresAt: expiry, isExpired: isTrialExpired(profile) };

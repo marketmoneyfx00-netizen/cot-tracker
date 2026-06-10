@@ -43,37 +43,30 @@ const MARKETS = [
     desc: 'XAUUSD, petróleo, materias primas',
     insight: 'XAUUSD depende del USD Index, yields reales y apetito de riesgo. Todos están en el reporte COT Combined.',
   },
-  {
-    id: 'crypto',
-    emoji: '₿',
-    label: 'Crypto',
-    desc: 'BTC, ETH y correlaciones macro',
-    insight: 'BTC correlaciona con apetito de riesgo global y flujo de liquidez institucional. El sesgo en índices y DXY anticipa movimientos en crypto.',
-  },
 ];
 
 const MODULES = [
   {
     icon: '🎯',
-    title: 'Institutional Bias Engine',
+    title: 'Motor de Sesgo Institucional',
     color: '#0055cc',
     desc: 'Sesgo semanal HTF. Muestra dónde está posicionado el capital profesional. No es señal de entrada — es filtro de contexto.',
   },
   {
     icon: '↔',
-    title: 'Divergences',
+    title: 'Divergencias',
     color: '#f59e0b',
     desc: 'Detecta desacuerdo entre precio y flujo institucional. Anticipa retrocesos técnicos y posibles giros de tendencia.',
   },
   {
     icon: '⚡',
-    title: 'Intraday Execution Layer',
+    title: 'Capa de Ejecución Intradía',
     color: '#22c55e',
     desc: 'Convierte el contexto macro en permiso operativo táctico. Timing intradía basado en datos institucionales.',
   },
   {
     icon: '🌐',
-    title: 'Cross Asset Flow',
+    title: 'Flujo Cross-Asset',
     color: '#8b5cf6',
     desc: 'Visión global del flujo institucional en FX, índices y bonos simultáneamente. Requiere reporte Combined.',
   },

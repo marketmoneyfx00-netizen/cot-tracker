@@ -9,24 +9,26 @@
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { fdService }                    from '../services/financialDatasets/index.js';
+import { fdService, fdClient }           from '../services/financialDatasets/index.js';
 import { computeEquityIntelligence }    from '../engines/fd/equityIntelligenceEngine.js';
 import { computeEarningsRegime }        from '../engines/fd/earningsRegimeEngine.js';
 import { computeBalanceSheetStress }    from '../engines/fd/balanceSheetStressEngine.js';
-import { computeCryptoMacroLayer }      from '../engines/fd/cryptoMacroLayer.js';
 import { generateInstitutionalNarrative } from '../engines/fd/institutionalNarrativeEngine.js';
 import { computeInstitutionalComposite }  from '../engines/fd/institutionalCompositeEngine.js';
 
 // ── FX pair → equity proxy mapping ───────────────────────────────────────────
+// Uses individual stocks (not ETFs) because Financial Datasets API only provides
+// income/balance/cashflow statements for individual companies, not ETFs.
+// Proxies chosen as major ADRs listed in the US that correlate with each currency.
 const PAIR_EQUITY_MAP = {
-  'EUR/USD': { ticker: 'EWG',   sector: 'consumer',   label: 'iShares MSCI Germany' },
-  'GBP/USD': { ticker: 'EWU',   sector: 'financials', label: 'iShares MSCI UK' },
-  'USD/JPY': { ticker: 'EWJ',   sector: 'industrials',label: 'iShares MSCI Japan' },
-  'USD/CHF': { ticker: 'EWL',   sector: 'financials', label: 'iShares MSCI Switzerland' },
-  'USD/CAD': { ticker: 'EWC',   sector: 'energy',     label: 'iShares MSCI Canada' },
-  'AUD/USD': { ticker: 'EWA',   sector: 'consumer',   label: 'iShares MSCI Australia' },
-  'NZD/USD': { ticker: 'ENZL',  sector: 'consumer',   label: 'iShares MSCI New Zealand' },
-  'USD Index': { ticker: 'SPY', sector: 'tech',       label: 'S&P 500 ETF' },
+  'EUR/USD':   { ticker: 'SAP',  sector: 'technology', label: 'SAP SE (ADR)' },
+  'GBP/USD':   { ticker: 'BP',   sector: 'energy',     label: 'BP PLC (ADR)' },
+  'USD/JPY':   { ticker: 'TM',   sector: 'automotive', label: 'Toyota Motor (ADR)' },
+  'USD/CHF':   { ticker: 'NVS',  sector: 'healthcare', label: 'Novartis AG (ADR)' },
+  'USD/CAD':   { ticker: 'SU',   sector: 'energy',     label: 'Suncor Energy' },
+  'AUD/USD':   { ticker: 'BHP',  sector: 'materials',  label: 'BHP Group (ADR)' },
+  'NZD/USD':   { ticker: 'RIO',  sector: 'materials',  label: 'Rio Tinto (ADR)' },
+  'USD Index': { ticker: 'JPM',  sector: 'financials', label: 'JPMorgan Chase' },
 };
 
 const REFRESH_INTERVAL = 5 * 60_000; // 5 minutes
@@ -40,9 +42,8 @@ async function loadAllData(pair, cotBiasScore, macroSignal, signal) {
 
   const equityProxy = PAIR_EQUITY_MAP[pair];
 
-  const [macroBasket, cryptoEtf, equityBundle, earnings] = await Promise.allSettled([
+  const [macroBasket, equityBundle, earnings] = await Promise.allSettled([
     fdService.getMacroBasket(),
-    fdService.getCryptoEtf(),
     equityProxy ? fdService.getEquity(equityProxy.ticker) : Promise.resolve(null),
     equityProxy ? fdService.getEarnings(equityProxy.ticker) : Promise.resolve(null),
   ]);
@@ -50,7 +51,6 @@ async function loadAllData(pair, cotBiasScore, macroSignal, signal) {
   if (signal?.aborted) throw new Error('Aborted');
 
   const macroBasketData = macroBasket.status === 'fulfilled' ? macroBasket.value : null;
-  const cryptoEtfData   = cryptoEtf.status === 'fulfilled'   ? cryptoEtf.value   : null;
   const equityData      = equityBundle.status === 'fulfilled' ? equityBundle.value : null;
   const earningsData    = earnings.status === 'fulfilled'     ? earnings.value     : null;
 
@@ -74,16 +74,11 @@ async function loadAllData(pair, cotBiasScore, macroSignal, signal) {
       )
     : null;
 
-  const cryptoLayer = cryptoEtfData
-    ? computeCryptoMacroLayer(cryptoEtfData, macroBasketData)
-    : null;
-
   const narrative = generateInstitutionalNarrative({
     cotBias:      buildCotBiasInput(cotBiasScore),
     equityIntel,
     earningsRegime,
     stressEngine,
-    cryptoLayer,
     macroContext,
     pair,
   });
@@ -94,7 +89,6 @@ async function loadAllData(pair, cotBiasScore, macroSignal, signal) {
     equityIntel,
     earningsRegime,
     stressEngine,
-    cryptoLayer,
   });
 
   return {
@@ -102,7 +96,6 @@ async function loadAllData(pair, cotBiasScore, macroSignal, signal) {
     equityProxy,
     earningsRegime,
     stressEngine,
-    cryptoLayer,
     macroBasket:  macroBasketData,
     narrative,
     composite,
@@ -209,6 +202,7 @@ export function useInstitutionalData({ pair, cotBiasScore, macroSignal, enabled 
   }, [load, enabled]);
 
   const retry = useCallback(() => {
+    fdClient.resetBreaker();
     fdService.resetCache();
     load();
   }, [load]);

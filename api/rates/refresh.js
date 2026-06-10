@@ -47,11 +47,11 @@ function rateRange(bankId, rate) {
 function computeStance(rate, prevRate) {
   if (prevRate == null) return { score: 0, label: 'Neutral' };
   const bps = Math.round((rate - prevRate) * 100);
-  if (bps >= 75)  return { score: 5,  label: 'Extremadamente Hawkish' };
-  if (bps >= 25)  return { score: 3,  label: 'Hawkish' };
+  if (bps >= 75)  return { score: 5,  label: 'Extremadamente Restrictivo' };
+  if (bps >= 25)  return { score: 3,  label: 'Restrictivo' };
   if (bps === 0)  return { score: 0,  label: 'Neutral' };
-  if (bps >= -50) return { score: -3, label: 'Dovish' };
-  return              { score: -5, label: 'Expansivo agresivo' };
+  if (bps >= -50) return { score: -3, label: 'Expansivo' };
+  return              { score: -5, label: 'Expansivo Agresivo' };
 }
 
 function signalLabel(rate, prevRate) {
@@ -101,17 +101,6 @@ async function fetchChangePoints(seriesCfg) {
     if (lastValue === null || Math.abs(val - lastValue) >= 0.005) {
       points.push({ date: obs.date, rate: parseFloat(val.toFixed(3)) });
       lastValue = val;
-    }
-  }
-
-  // Always include the most recent observation (even if rate hasn't changed)
-  // so we have a current-rate record in the DB.
-  const lastObs = observations.filter(o => o.value !== '.' && o.value !== '').at(-1);
-  if (lastObs) {
-    const lastRate = parseFloat(parseFloat(lastObs.value).toFixed(3));
-    const alreadyIncluded = points.some(p => p.date === lastObs.date);
-    if (!alreadyIncluded) {
-      points.push({ date: lastObs.date, rate: lastRate });
     }
   }
 

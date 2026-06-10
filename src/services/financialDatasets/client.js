@@ -141,10 +141,6 @@ export const fdClient = {
   getSnapshot: (tickers) =>
     fdRequest('snapshot', { tickers: Array.isArray(tickers) ? tickers.join(',') : tickers }),
 
-  /** Crypto ETF basket (IBIT, ETHA, COIN, MSTR...) */
-  getCryptoEtf: () =>
-    fdRequest('crypto-etf', {}),
-
   /** Macro ETF basket (SPY, QQQ, TLT, GLD...) */
   getMacroBasket: () =>
     fdRequest('macro-basket', {}),

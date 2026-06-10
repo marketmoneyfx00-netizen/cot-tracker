@@ -197,7 +197,7 @@ export async function fulfillFromCheckoutSession(session, stripe) {
   const currency   = (invoice?.currency   ?? session.currency   ?? 'eur').toUpperCase();
   const periodEnd  = invoice?.lines?.data?.[0]?.period?.end ?? invoice?.period_end ?? null;
   const validUntil = resolveValidUntil(periodEnd, planId);
-  const idempotencyKey = invoice?.id ?? subscriptionId;
+  const idempotencyKey = invoice?.id ?? subscriptionId ?? sessionId;
 
   return _pipeline({
     idempotencyKey, subscriptionId, customerId, sessionId,
@@ -327,38 +327,108 @@ export async function handleChargeRefunded(charge) {
 }
 
 // ── customer.subscription.updated ──────────────────────────────────────────────
+//
+// Stripe subscription statuses and their access implications:
+//   active          → full access (normal)
+//   trialing        → full access (trial)
+//   past_due        → grace period (3 days), then block
+//   unpaid          → block immediately
+//   canceled        → block immediately (also covered by subscription.deleted)
+//   incomplete      → payment never succeeded — block
+//   incomplete_expired → block
+//   paused          → block
+//
 export async function handleSubscriptionUpdated(subscription) {
   const status = subscription.status;
+  const subId  = subscription.id;
 
-  if (status !== 'active' && status !== 'trialing') {
-    console.log(`[fulfillment] subscription.updated: status=${status} — no action`);
-    return { ok: true, skipped: true };
+  console.log(`[fulfillment] subscription.updated: sub=${subId} | status=${status}`);
+
+  // ── ACTIVE / TRIALING — full access ──────────────────────────────────────────
+  if (status === 'active' || status === 'trialing') {
+    const priceId    = subscription.items?.data?.[0]?.price?.id ?? null;
+    const planId     = PRICE_ID_TO_PLAN[priceId] ?? null;
+    const periodEnd  = subscription.current_period_end ?? null;
+
+    if (!planId || !periodEnd) {
+      console.warn(`[fulfillment] subscription.updated: unrecognized priceId=${priceId} or no periodEnd — skip`);
+      return { ok: true, skipped: true };
+    }
+
+    const validUntil = new Date(periodEnd * 1000);
+    const { error } = await supabaseAdmin
+      .from('users_access')
+      .update({ plan_id: planId, valid_until: validUntil.toISOString(), status: 'active' })
+      .eq('stripe_subscription_id', subId);
+
+    if (error) {
+      console.error('[fulfillment] handleSubscriptionUpdated (active) DB error:', error.message);
+      return { ok: false, error: error.message };
+    }
+
+    console.log(`[fulfillment] subscription.updated OK: sub=${subId} → plan=${planId} valid_until=${validUntil.toISOString()}`);
+    return { ok: true };
   }
 
-  const subId      = subscription.id;
-  const priceId    = subscription.items?.data?.[0]?.price?.id ?? null;
-  const planId     = PRICE_ID_TO_PLAN[priceId] ?? null;
-  const periodEnd  = subscription.current_period_end ?? null;
+  // ── PAST_DUE — grace period (3 days) ─────────────────────────────────────────
+  // Payment failed but Stripe is still retrying. Give user 3-day grace period.
+  // After that, access is blocked by valid_until expiry check in accessGuard.
+  if (status === 'past_due') {
+    const GRACE_DAYS = Math.max(1, parseInt(process.env.PAST_DUE_GRACE_DAYS ?? '3', 10));
+    const gracePeriodEnd = new Date();
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_DAYS); // configurable grace
 
-  if (!planId || !periodEnd) {
-    console.warn(`[fulfillment] subscription.updated: unrecognized priceId=${priceId} or no periodEnd — skip`);
-    return { ok: true, skipped: true };
+    const { error } = await supabaseAdmin
+      .from('users_access')
+      .update({ status: 'past_due', valid_until: gracePeriodEnd.toISOString() })
+      .eq('stripe_subscription_id', subId);
+
+    if (error) {
+      console.error('[fulfillment] handleSubscriptionUpdated (past_due) DB error:', error.message);
+      return { ok: false, error: error.message };
+    }
+
+    console.warn(`[fulfillment] subscription.updated: sub=${subId} → PAST_DUE, grace until ${gracePeriodEnd.toISOString()}`);
+    return { ok: true };
   }
 
-  const validUntil = new Date(periodEnd * 1000);
+  // ── BLOCKING STATUSES — revoke access immediately ─────────────────────────────
+  // unpaid, canceled, incomplete, incomplete_expired, paused
+  if (['unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'paused'].includes(status)) {
+    const { error } = await supabaseAdmin
+      .from('users_access')
+      .update({
+        status: 'cancelled',
+        valid_until: new Date().toISOString(), // expire immediately
+      })
+      .eq('stripe_subscription_id', subId);
 
-  const { error } = await supabaseAdmin
-    .from('users_access')
-    .update({ plan_id: planId, valid_until: validUntil.toISOString(), status: 'active' })
-    .eq('stripe_subscription_id', subId);
+    if (error) {
+      console.error(`[fulfillment] handleSubscriptionUpdated (${status}) DB error:`, error.message);
+      return { ok: false, error: error.message };
+    }
 
-  if (error) {
-    console.error('[fulfillment] handleSubscriptionUpdated DB error:', error.message);
-    return { ok: false, error: error.message };
+    console.warn(`[fulfillment] subscription.updated: sub=${subId} → ${status.toUpperCase()}, access revoked immediately`);
+    return { ok: true };
   }
 
-  console.log(`[fulfillment] subscription.updated: sub=${subId} → plan=${planId} valid_until=${validUntil.toISOString()}`);
-  return { ok: true };
+  // Unknown status — log and skip
+  console.log(`[fulfillment] subscription.updated: sub=${subId} status=${status} — unhandled (safe skip)`);
+  return { ok: true, skipped: true };
+}
+
+// ── Fulfillment log helper ─────────────────────────────────────────────────────
+async function logStep(paymentId, authUserId, step, status, detail = null) {
+  try {
+    await supabaseAdmin.from('fulfillment_logs').insert({
+      payment_id: paymentId ?? null,
+      action:     step,
+      status,
+      details:    { auth_user_id: authUserId ?? null, message: detail ? String(detail).slice(0, 1000) : null },
+    });
+  } catch (e) {
+    console.warn(`[fulfillment] logStep(${step}) write error (non-critical):`, e.message);
+  }
 }
 
 // ── PIPELINE INTERNO ───────────────────────────────────────────────────────────
@@ -409,6 +479,7 @@ async function _pipeline({
 
   if (existing?.fulfilled_at && existing?.access_granted) {
     console.log(`[fulfillment] [1/8] Already fulfilled: ${idempotencyKey}`);
+    await logStep(existing.id, authUserId, 'idempotency_check', 'skipped', `Already fulfilled: ${idempotencyKey}`);
     return { ok: true, paymentId: existing.id, skipped: true };
   }
 
@@ -471,6 +542,7 @@ async function _pipeline({
       console.log(`[fulfillment] [2/8] ✅ payment inserted: ${paymentId}`);
     }
   }
+  await logStep(paymentId, authUserId, 'payment_insert', 'ok', `plan=${planId} amount=${amount}${currency}`);
 
   // ── [3/8] Activate access — CRITICAL (moved early: user gets access before PDF/email) ──
   console.log(`[fulfillment] [3/8] activate_user_access | auth:${authUserId} | cus:${customerId} | plan:${planId} | valid_until:${validUntil.toISOString()}`);
@@ -488,9 +560,11 @@ async function _pipeline({
   if (accErr) {
     console.error('[fulfillment] [3/8] CRITICAL activate_user_access FAILED:', accErr.message, accErr.code, accErr.details, accErr.hint);
     await supabaseAdmin.from('payments').update({ status: 'access_error' }).eq('id', paymentId);
+    await logStep(paymentId, authUserId, 'access_activation', 'error', accErr.message);
     return { ok: false, paymentId, error: `access_activation_failed: ${accErr.message}` };
   }
   console.log(`[fulfillment] [3/8] ✅ users_access updated`);
+  await logStep(paymentId, authUserId, 'access_activation', 'ok', `valid_until=${validUntil.toISOString()}`);
 
   // ── [4/8] Invoice number ──────────────────────────────────────────────────
   console.log(`[fulfillment] [4/8] invoice number`);
@@ -501,7 +575,12 @@ async function _pipeline({
   const invoiceNumber = (invNum && !invNumErr)
     ? (typeof invNum === 'string' ? invNum : String(invNum))
     : null;
-  if (invoiceNumber) console.log(`[fulfillment] [4/8] ✅ ${invoiceNumber}`);
+  if (invoiceNumber) {
+    console.log(`[fulfillment] [4/8] ✅ ${invoiceNumber}`);
+    await logStep(paymentId, authUserId, 'invoice_number', 'ok', invoiceNumber);
+  } else {
+    await logStep(paymentId, authUserId, 'invoice_number', 'error', invNumErr?.message ?? 'no_invoice_number');
+  }
 
   // ── [5/8] PDF ─────────────────────────────────────────────────────────────
   console.log(`[fulfillment] [5/8] PDF`);
@@ -516,8 +595,10 @@ async function _pipeline({
         amount, currency, paidAt, issuedAt: paidAt,
       });
       console.log(`[fulfillment] [5/8] ✅ ${pdfBytes.byteLength} bytes`);
+      await logStep(paymentId, authUserId, 'pdf_generate', 'ok', `${pdfBytes.byteLength} bytes`);
     } catch (e) {
       console.error('[fulfillment] [5/8] PDF failed (non-critical):', e.message);
+      await logStep(paymentId, authUserId, 'pdf_generate', 'error', e.message);
     }
   } else {
     console.log(`[fulfillment] [5/8] skip (no invoice number)`);
@@ -537,6 +618,7 @@ async function _pipeline({
       const { data: su } = await supabaseAdmin.storage.from('receipts').createSignedUrl(sp, 60 * 60 * 24 * 365);
       receiptUrl = su?.signedUrl ?? null;
       console.log(`[fulfillment] [6/8] ✅ signed URL: ${!!receiptUrl}`);
+      await logStep(paymentId, authUserId, 'pdf_upload', 'ok', sp);
     }
   } else {
     console.log(`[fulfillment] [6/8] skip (no PDF)`);
@@ -577,10 +659,16 @@ async function _pipeline({
       receiptPdfBytes: pdfBytes ?? new Uint8Array(0),
     });
     emailOk = er.success;
-    if (emailOk) console.log(`[fulfillment] [8/8] ✅ email: ${er.messageId}`);
-    else         console.warn('[fulfillment] [8/8] email failed (non-critical):', er.error);
+    if (emailOk) {
+      console.log(`[fulfillment] [8/8] ✅ email: ${er.messageId}`);
+      await logStep(paymentId, authUserId, 'email_send', 'ok', er.messageId);
+    } else {
+      console.warn('[fulfillment] [8/8] email failed (non-critical):', er.error);
+      await logStep(paymentId, authUserId, 'email_send', 'error', er.error);
+    }
   } catch (e) {
     console.error('[fulfillment] [8/8] email error (non-critical):', e.message);
+    await logStep(paymentId, authUserId, 'email_send', 'error', e.message);
   }
 
   // ── Mark fulfilled ─────────────────────────────────────────────────────────
@@ -593,5 +681,6 @@ async function _pipeline({
   }).eq('id', paymentId);
 
   console.log(`[fulfillment] ✅ DONE | ${isRenewal ? 'RENEWAL' : 'NEW'} | ${idempotencyKey} → ${invoiceNumber} | auth:${authUserId} | valid_until:${validUntil.toISOString()}`);
+  await logStep(paymentId, authUserId, 'pipeline_complete', 'ok', `${isRenewal ? 'renewal' : 'new'} valid_until=${validUntil.toISOString()}`);
   return { ok: true, paymentId, skipped: false };
 }

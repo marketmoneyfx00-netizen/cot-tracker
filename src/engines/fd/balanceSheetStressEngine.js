@@ -12,12 +12,12 @@ import { clamp, weightedAvg }
 // ── Stress level classification ───────────────────────────────────────────────
 
 const STRESS_LEVELS = {
-  CRITICAL:    { min: 80, label: 'Critical Stress',  color: '#dc2626', emoji: '🔴' },
-  HIGH:        { min: 65, label: 'High Stress',       color: '#ef4444', emoji: '🟠' },
-  ELEVATED:    { min: 50, label: 'Elevated Risk',     color: '#f97316', emoji: '🟡' },
-  MODERATE:    { min: 35, label: 'Moderate Risk',     color: '#fbbf24', emoji: '🟡' },
-  LOW:         { min: 15, label: 'Low Risk',           color: '#4ade80', emoji: '🟢' },
-  NEGLIGIBLE:  { min: 0,  label: 'Negligible Risk',   color: '#22c55e', emoji: '🟢' },
+  CRITICAL:    { min: 80, label: 'Estrés Crítico',    color: '#dc2626', emoji: '🔴' },
+  HIGH:        { min: 65, label: 'Estrés Alto',        color: '#ef4444', emoji: '🟠' },
+  ELEVATED:    { min: 50, label: 'Riesgo Elevado',     color: '#f97316', emoji: '🟡' },
+  MODERATE:    { min: 35, label: 'Riesgo Moderado',    color: '#fbbf24', emoji: '🟡' },
+  LOW:         { min: 15, label: 'Riesgo Bajo',        color: '#4ade80', emoji: '🟢' },
+  NEGLIGIBLE:  { min: 0,  label: 'Riesgo Negligible',  color: '#22c55e', emoji: '🟢' },
 };
 
 function stressLevel(score) {
@@ -159,11 +159,11 @@ function analyzeTrend(balance) {
     : null;
 
   const signals = [];
-  if (cashChange != null && cashChange < -20) signals.push({ label: 'Cash burn', severity: 'negative' });
-  if (debtChange != null && debtChange > 20)  signals.push({ label: 'Debt increase', severity: 'negative' });
-  if (equityChange != null && equityChange < -10) signals.push({ label: 'Equity erosion', severity: 'negative' });
-  if (cashChange != null && cashChange > 20)  signals.push({ label: 'Cash build', severity: 'positive' });
-  if (debtChange != null && debtChange < -10) signals.push({ label: 'Debt reduction', severity: 'positive' });
+  if (cashChange != null && cashChange < -20) signals.push({ label: 'Quema de caja', severity: 'negative' });
+  if (debtChange != null && debtChange > 20)  signals.push({ label: 'Aumento de deuda', severity: 'negative' });
+  if (equityChange != null && equityChange < -10) signals.push({ label: 'Erosión de capital', severity: 'negative' });
+  if (cashChange != null && cashChange > 20)  signals.push({ label: 'Acumulación de caja', severity: 'positive' });
+  if (debtChange != null && debtChange < -10) signals.push({ label: 'Reducción de deuda', severity: 'positive' });
 
   const direction = signals.filter(s => s.severity === 'negative').length > signals.filter(s => s.severity === 'positive').length
     ? 'DETERIORATING' : signals.length === 0 ? 'STABLE' : 'IMPROVING';

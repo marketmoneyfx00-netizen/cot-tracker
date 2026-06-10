@@ -8,9 +8,9 @@ import { useMemo } from 'react';
 import { calculateBiasScore, deriveInputsFromPair } from '../cotBiasEngine.js';
 
 const CONF_CFG = {
-  HIGH:   { label: 'Favorable Context',  color: '#22c55e' },
-  MEDIUM: { label: 'Moderate Context',   color: '#f59e0b' },
-  LOW:    { label: 'Awaiting Alignment', color: '#6b7280' },
+  HIGH:   { label: 'Contexto Favorable',  color: '#22c55e' },
+  MEDIUM: { label: 'Contexto Moderado',   color: '#f59e0b' },
+  LOW:    { label: 'Esperando Alineación', color: '#6b7280' },
 };
 
 function buildIdea(pair, biasScore, signal, strength, marketState) {
@@ -27,20 +27,20 @@ function buildIdea(pair, biasScore, signal, strength, marketState) {
   const abs      = Math.abs(biasScore);
   const aligned  = biasDir && tacDir && biasDir === tacDir;
 
-  const strLabel = abs >= 3 ? 'strong' : abs >= 2 ? 'moderate' : 'mild';
-  const dirText  = isLong ? 'bullish' : 'bearish';
+  const strLabel = abs >= 3 ? 'fuerte' : abs >= 2 ? 'moderado' : 'leve';
+  const dirText  = isLong ? 'alcista' : 'bajista';
 
   const idea = aligned
-    ? (isLong ? `Structural bullish bias · Monitoring pullbacks in ${pair}` : `Structural bearish bias · Monitoring bounces in ${pair}`)
+    ? (isLong ? `Sesgo estructural alcista · Monitoreando retrocesos en ${pair}` : `Sesgo estructural bajista · Monitoreando rebotes en ${pair}`)
     : biasDir
-    ? (isLong ? `Bullish HTF bias in ${pair} · Awaiting tactical confirmation` : `Bearish HTF bias in ${pair} · Awaiting tactical confirmation`)
-    : (isLong ? `Bullish tactical signal in ${pair} · No HTF institutional backing` : `Bearish tactical signal in ${pair} · No HTF institutional backing`);
+    ? (isLong ? `Sesgo alcista HTF en ${pair} · Esperando confirmación táctica` : `Sesgo bajista HTF en ${pair} · Esperando confirmación táctica`)
+    : (isLong ? `Señal táctica alcista en ${pair} · Sin respaldo institucional HTF` : `Señal táctica bajista en ${pair} · Sin respaldo institucional HTF`);
 
   const context = aligned
-    ? `HTF institutional flow ${dirText} (${strLabel}) — aligned with tactical signal`
+    ? `Flujo institucional HTF ${dirText} (${strLabel}) — alineado con señal táctica`
     : biasDir
-    ? `HTF institutional flow ${dirText} (${strLabel}) — tactical confirmation pending`
-    : `Tactical signal only — no HTF institutional backing`;
+    ? `Flujo institucional HTF ${dirText} (${strLabel}) — confirmación táctica pendiente`
+    : `Solo señal táctica — sin respaldo institucional HTF`;
 
   const confidence = aligned && abs >= 3 ? 'HIGH' : aligned || abs >= 2 ? 'MEDIUM' : 'LOW';
 
@@ -97,10 +97,10 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
           <span style={{ fontSize: 14, flexShrink: 0 }}>🚫</span>
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 700, color: '#ef4444', fontSize: 11 }}>
-              Macro risk elevated — context only
+              Riesgo macro elevado — solo contexto
             </span>
             <span style={{ fontSize: 11, color: T.sub }}>
-              {' '}Institutional context remains valid for planning. Do not execute under current macro conditions.
+              {' '}El contexto institucional sigue válido para planificación. No ejecutar bajo las condiciones macro actuales.
             </span>
           </div>
           <span style={{
@@ -108,7 +108,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
             padding: '2px 7px', borderRadius: 99,
             background: 'rgba(239,68,68,0.12)', color: '#ef4444',
             border: '1px solid rgba(239,68,68,0.28)', letterSpacing: '0.06em',
-          }}>AVOID</span>
+          }}>EVITAR</span>
         </div>
       )}
 
@@ -122,10 +122,10 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 700, color: '#f59e0b', fontSize: 11 }}>
-              Execution conditions below threshold
+              Condiciones de ejecución por debajo del umbral
             </span>
             <span style={{ fontSize: 11, color: T.sub }}>
-              {' '}COT institutional context is valid, but execution conditions are not yet favorable.
+              {' '}El contexto institucional COT es válido, pero las condiciones de ejecución aún no son favorables.
             </span>
           </div>
           <span style={{
@@ -133,7 +133,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
             padding: '2px 7px', borderRadius: 99,
             background: 'rgba(245,158,11,0.12)', color: '#f59e0b',
             border: '1px solid rgba(245,158,11,0.28)', letterSpacing: '0.06em',
-          }}>AVOID</span>
+          }}>EVITAR</span>
         </div>
       )}
 
@@ -146,8 +146,8 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
         }}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>🔍</span>
           <span style={{ fontSize: 11, color: T.sub }}>
-            <span style={{ fontWeight: 700, color: '#06b6d4' }}>Preparation Phase</span>
-            {' '}— conditions improving. Monitor for tactical confirmation before acting.
+            <span style={{ fontWeight: 700, color: '#06b6d4' }}>Fase de Preparación</span>
+            {' '}— condiciones mejorando. Monitoriza para confirmar tácticamente antes de actuar.
           </span>
         </div>
       )}
@@ -165,7 +165,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
             background: tacState.color,
           }} />
           <span style={{ fontSize: 10, fontWeight: 700, color: tacState.color, letterSpacing: '0.04em' }}>
-            MARKET STATE: {tacState.label.toUpperCase()}
+            ESTADO DE MERCADO: {tacState.label.toUpperCase()}
           </span>
           {tacState.description && (
             <span style={{ fontSize: 10, color: T.sub, marginLeft: 4 }}>
@@ -176,7 +176,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
       )}
 
       <div style={{ fontSize: 11, color: T.sub2, marginBottom: 8, fontStyle: 'italic' }}>
-        Pairs shown have valid institutional confluence · swing perspective only
+        Los pares mostrados tienen confluencia institucional válida · perspectiva swing únicamente
       </div>
 
       {showEmpty ? (
@@ -225,7 +225,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
                         border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
                         padding: '1px 5px', borderRadius: 99,
                       }}>
-                        {isMacroBlocked ? 'MACRO BLOCK' : 'AWAIT'}
+                        {isMacroBlocked ? 'BLOQUEO MACRO' : 'ESPERAR'}
                       </span>
                     )}
                     <span style={{
@@ -240,7 +240,7 @@ export default function TradeIdeas({ fxPairs, darkMode, T, isPremium, onUpgrade,
                 <div style={{ fontSize: 13, fontWeight: 600, color: dirColor }}>{idea.idea}</div>
                 <div style={{ fontSize: 11, color: T.sub, lineHeight: 1.5 }}>{idea.context}</div>
                 <div style={{ fontSize: 10, color: T.sub2, fontStyle: 'italic', marginTop: 2 }}>
-                  Weekly COT context · swing perspective · no tactical entry implied
+                  Contexto semanal COT · perspectiva swing · sin entrada táctica implícita
                 </div>
                 {/* Per-card footer status — derived from finalDecision */}
                 {isMacroBlocked && (

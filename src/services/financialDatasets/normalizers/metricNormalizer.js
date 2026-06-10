@@ -98,36 +98,36 @@ export function correlation(x, y) {
 
 /** Score label */
 export function scoreLabel(score) {
-  if (score >= 80) return 'Very Strong';
-  if (score >= 65) return 'Strong';
+  if (score >= 80) return 'Impulso Muy Fuerte';
+  if (score >= 65) return 'Impulso Institucional';
   if (score >= 45) return 'Neutral';
-  if (score >= 30) return 'Weak';
-  return 'Very Weak';
+  if (score >= 30) return 'Resistencia Moderada';
+  return 'Resistencia Estructural';
 }
 
 /** Direction label */
 export function directionLabel(score) {
-  if (score >= 60) return 'bullish';
-  if (score <= 40) return 'bearish';
+  if (score >= 60) return 'alcista';
+  if (score <= 40) return 'bajista';
   return 'neutral';
 }
 
 /** Conviction label */
 export function convictionLabel(score) {
-  if (score >= 75) return 'HIGH';
-  if (score >= 50) return 'MEDIUM';
-  return 'LOW';
+  if (score >= 75) return 'ALTA';
+  if (score >= 50) return 'MEDIA';
+  return 'BAJA';
 }
 
 /** Format percent for display */
 export function fmtPct(v, decimals = 1) {
-  if (v == null || !isFinite(v)) return 'N/A';
+  if (v == null || !isFinite(v)) return 'N/D';
   return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 }
 
 /** Format large numbers (1.2M, 350B) */
 export function fmtLarge(v) {
-  if (v == null) return 'N/A';
+  if (v == null) return 'N/D';
   if (Math.abs(v) >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
   if (Math.abs(v) >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
   if (Math.abs(v) >= 1e6)  return `$${(v / 1e6).toFixed(1)}M`;

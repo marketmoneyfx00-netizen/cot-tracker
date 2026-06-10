@@ -189,39 +189,39 @@ function classifyMarketState(instBias, structureBias, alignmentScore, timingStat
 // ── Execution context (observational language, never imperative) ───────────────
 function deriveExecutionContext(marketState, timingState, instBias, structureBias) {
   if (marketState === MARKET_STATES.FULL_ALIGNMENT) {
-    return 'Trend continuation context — structural alignment favorable across layers';
+    return 'Contexto de continuación de tendencia — alineación estructural favorable en todas las capas';
   }
 
   if (marketState === MARKET_STATES.DISTRIBUTION) {
-    return 'Positioning at extremes — crowding risk elevated, exhaustion signals present';
+    return 'Posicionamiento en extremos — riesgo de aglomeración elevado, señales de agotamiento presentes';
   }
 
   if (marketState === MARKET_STATES.CONFLICTED) {
-    return 'No directional edge — multiple layers in conflict, maintain observational posture';
+    return 'Sin ventaja direccional — múltiples capas en conflicto, mantener postura observacional';
   }
 
   if (marketState === MARKET_STATES.TRANSITIONAL) {
     if (timingState === 'EARLY_ACCUMULATION') {
       if (instBias === 'BULLISH') {
-        return 'Wait structural confirmation — institutional accumulation forming above current structure';
+        return 'Esperar confirmación estructural — acumulación institucional formándose por encima de la estructura actual';
       }
-      return 'Wait structural confirmation — institutional distribution forming below current structure';
+      return 'Esperar confirmación estructural — distribución institucional formándose por debajo de la estructura actual';
     }
     if (timingState === 'CONFIRMATION') {
-      return 'Momentum improving — monitor for structural break to confirm institutional thesis';
+      return 'Momentum mejorando — monitorizar ruptura estructural para confirmar la tesis institucional';
     }
-    return 'Transition in progress — await structural confirmation before directional commitment';
+    return 'Transición en curso — esperar confirmación estructural antes de comprometerse direccionalmente';
   }
 
   if (timingState === 'EXPANSION') {
-    return 'Expansion phase — institutional flow and structure aligned, monitor for continuation';
+    return 'Fase de expansión — flujo institucional y estructura alineados, monitorizar continuación';
   }
 
   if (timingState === 'LATE_TREND') {
-    return 'Late trend context — positioning elevated, new entries carry higher risk';
+    return 'Contexto de tendencia tardía — posicionamiento elevado, nuevas entradas conllevan mayor riesgo';
   }
 
-  return 'No directional edge — await institutional positioning development';
+  return 'Sin ventaja direccional — esperar desarrollo del posicionamiento institucional';
 }
 
 // ── UI metadata ───────────────────────────────────────────────────────────────
@@ -231,64 +231,64 @@ const STATE_META = {
     color:       '#22c55e',
     bg:          'rgba(34,197,94,0.08)',
     border:      'rgba(34,197,94,0.25)',
-    label:       'Full Alignment',
-    description: 'Institutional flow, structure, carry, and macro all point in the same direction.',
+    label:       'Alineación Total',
+    description: 'Flujo institucional, estructura, carry y macro apuntan en la misma dirección.',
   },
   TRANSITIONAL: {
     icon:        '🟡',
     color:       '#f59e0b',
     bg:          'rgba(245,158,11,0.08)',
     border:      'rgba(245,158,11,0.25)',
-    label:       'Transitional Structure',
-    description: 'Institutional positioning is shifting before higher-timeframe structure has confirmed.',
+    label:       'Estructura Transicional',
+    description: 'El posicionamiento institucional está girando antes de que la estructura HTF lo confirme.',
   },
   DISTRIBUTION: {
     icon:        '🟠',
     color:       '#f97316',
     bg:          'rgba(249,115,22,0.08)',
     border:      'rgba(249,115,22,0.25)',
-    label:       'Distribution / Exhaustion',
-    description: 'Positioning at extremes or showing reversal signs. Elevated crowded-trade risk.',
+    label:       'Distribución / Agotamiento',
+    description: 'Posicionamiento en extremos o con señales de reversión. Riesgo de operativa masificada elevado.',
   },
   CONFLICTED: {
     icon:        '🔴',
     color:       '#ef4444',
     bg:          'rgba(239,68,68,0.08)',
     border:      'rgba(239,68,68,0.25)',
-    label:       'Conflicted Signals',
-    description: 'Key layers are contradicting each other — avoid directional commitment.',
+    label:       'Señales Conflictivas',
+    description: 'Capas clave se contradicen entre sí — evitar compromisos direccionales.',
   },
   NEUTRAL: {
     icon:        '⚪',
     color:       '#6b7280',
     bg:          'rgba(107,114,128,0.06)',
     border:      'rgba(107,114,128,0.2)',
-    label:       'Neutral / Range',
-    description: 'No clear institutional directional edge. Monitor for positioning development.',
+    label:       'Neutral / Lateral',
+    description: 'Sin ventaja direccional institucional clara. Monitorizar el desarrollo del posicionamiento.',
   },
 };
 
 const TIMING_LABELS = {
-  EARLY_ACCUMULATION: 'Early Accumulation',
-  CONFIRMATION:       'Confirmation Phase',
-  EXPANSION:          'Expansion',
-  LATE_TREND:         'Late Trend',
-  EXHAUSTION:         'Exhaustion',
-  NEUTRAL:            'Developing',
+  EARLY_ACCUMULATION: 'Acumulación Temprana',
+  CONFIRMATION:       'Fase de Confirmación',
+  EXPANSION:          'Expansión',
+  LATE_TREND:         'Tendencia Tardía',
+  EXHAUSTION:         'Agotamiento',
+  NEUTRAL:            'En Desarrollo',
 };
 
 const CROWDING_META = {
-  LOW:      { label: 'Low',      color: '#22c55e' },
-  MODERATE: { label: 'Moderate', color: '#f59e0b' },
-  ELEVATED: { label: 'Elevated', color: '#f97316' },
-  EXTREME:  { label: 'Extreme',  color: '#ef4444' },
+  LOW:      { label: 'Bajo',     color: '#22c55e' },
+  MODERATE: { label: 'Moderado', color: '#f59e0b' },
+  ELEVATED: { label: 'Elevado',  color: '#f97316' },
+  EXTREME:  { label: 'Extremo',  color: '#ef4444' },
 };
 
 const VOLATILITY_LABELS = {
-  COMPRESSION: 'Compression',
+  COMPRESSION: 'Compresión',
   NORMAL:      'Normal',
-  ELEVATED:    'Elevated',
-  EXPANSION:   'Expansion',
+  ELEVATED:    'Elevada',
+  EXPANSION:   'Expansión',
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export function computeMarketState(biasEntry, tacState, macroSignal, sentimentDa
       institutionalBias:'NEUTRAL',
       alignmentScore:   0,
       timingState:      'NEUTRAL',
-      executionContext: 'No COT data loaded — upload a CFTC file to enable structural context.',
+      executionContext: 'Sin datos COT cargados — sube un archivo CFTC para activar el contexto estructural.',
       volatilityState:  'NORMAL',
       crowdingRisk:     'LOW',
       ...STATE_META.NEUTRAL,

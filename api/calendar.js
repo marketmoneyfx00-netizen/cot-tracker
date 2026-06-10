@@ -308,8 +308,8 @@ async function fetchRapidAPI(from, to, hasPendingPast = false, forceRefresh = fa
     // Diagnóstico de estructura real
     const s = arr[0];
     console.log(`[ra] ✅ ${arr.length} eventos. Claves: ${Object.keys(s).join(', ')}`);
-    console.log(`[ra] Sample[0]: name="${s.name||s.event}" country="${s.countryCode||s.country}" actual=${s.actual} consensus=${s.consensus} date="${s.date||s.datetime||s.eventDate}"`);
-    const wa = arr.filter(e => normActual(e.actual) !== null).length;
+    console.log(`[ra] Sample[0]: name="${s.name||s.event}" country="${s.countryCode||s.country}" actual=${s.actual??s.Actual??s.ActualValue} consensus=${s.consensus} date="${s.date||s.datetime||s.eventDate}"`);
+    const wa = arr.filter(e => normActual(e.actual??e.Actual??e.ActualValue??e.actualValue??e.result??null) !== null).length;
     console.log(`[ra] Con actual: ${wa}/${arr.length}`);
 
     rapidCache = { data: arr, ts: Date.now(), from, to };
@@ -334,8 +334,8 @@ function normRapidAPI(ev, keepTime = false) {
     ? (keepTime ? rawDate : rawDate.slice(0, 10))
     : '';
 
-  // normActual: 0 numérico es dato válido
-  const actual   = normActual(ev.actual);
+  // normActual: 0 numérico es dato válido — cubrir todas las variantes de campo
+  const actual   = normActual(ev.actual ?? ev.Actual ?? ev.actualValue ?? ev.ActualValue ?? ev.result ?? ev.Result ?? null);
   const estimate = normStr(String(ev.consensus ?? ev.forecast ?? ev.estimate ?? ''));
   const previous = normStr(String(ev.previous ?? ev.prev ?? ''));
   const event    = ev.name || ev.event || ev.indicator || ev.title || '';
@@ -513,7 +513,8 @@ function mergeActuals(ffEvents, raEvents, fxsEvents) {
 
       if (m) {
         // Merge explícito: RA tiene prioridad absoluta
-        const actual   = normActual(m.ev.actual)   ?? normActual(ffEv.actual)   ?? null;
+        const actual   = normActual(m.ev.actual ?? m.ev.Actual ?? m.ev.actualValue ?? m.ev.ActualValue ?? m.ev.result ?? m.ev.Result ?? null)
+          ?? normActual(ffEv.actual) ?? null;
         const estimate = normStr(m.ev.estimate)     ?? normStr(ffEv.estimate)    ?? null;
         const previous = normStr(m.ev.previous)     ?? normStr(ffEv.previous)    ?? null;
 
@@ -751,7 +752,7 @@ export default async function handler(req, res) {
         env:     { hasRapidAPI: !!process.env.RAPIDAPI_KEY },
         rapidapi: {
           count:      raRaw.length,
-          withActual: raRaw.filter(e => normActual(e.actual) !== null).length,
+          withActual: raRaw.filter(e => normActual(e.actual??e.Actual??e.ActualValue??e.actualValue??e.result??null) !== null).length,
           sampleRaw:  raRaw.slice(0, 3),
           sampleNorm: raNorm.slice(0, 3),
           countriesFound: [...new Set(raNorm.map(e=>e.country))].sort(),

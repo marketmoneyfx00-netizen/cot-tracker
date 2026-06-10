@@ -49,7 +49,6 @@ import OnboardingModal from './components/OnboardingModal.jsx';
 import CreatePasswordModal from './components/CreatePasswordModal.jsx';
 import { useOnboarding } from './hooks/useOnboarding.js';
 import MacroTab from './components/MacroTab.jsx';
-import TradeReadinessChecklist from './components/TradeReadinessChecklist.jsx';
 import MacroEventCard from './components/MacroEventCard.jsx';
 import ResumenTab from './components/ResumenTab.jsx';
 import { computeContextualImpact } from './eventImpactEngine.js';
@@ -57,9 +56,7 @@ import { usePolymarketEventMonitor } from './polymarket/hooks/usePolymarketEvent
 const ExportPanel = lazy(() => import('./components/ExportPanel.jsx'));
 import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
-import InstitutionalDashboard from './components/institutional/InstitutionalDashboard.jsx';
 import InstitutionalIntelligencePanel from './components/InstitutionalIntelligencePanel.jsx';
-import CryptoIntelligencePanel from './components/CryptoIntelligencePanel.jsx';
 import AdaptiveRegimePanel from './components/AdaptiveRegimePanel.jsx';
 import { useAgentConsensus } from './hooks/useAgentConsensus.js';
 import { computeAdaptiveRegime } from './engines/adaptiveRegimeEngine.js';
@@ -216,14 +213,14 @@ function generateSignal(rows) {
   }
   const extremeLong=pctL>=80,extremeShort=pctL<=20;
   const accelerating=Math.abs(trend)>Math.abs(prev2?prev.smartNet-prev2.smartNet:0);
-  if (extremeLong&&trend<0) return {signal:"sell",strength:3,reason:`Extreme long positioning (${pctL}%) reversing — institutions reducing longs`};
-  if (extremeShort&&trend>0) return {signal:"buy",strength:3,reason:`Extreme short positioning (${pctL}% long) reversing — Leveraged Money covering shorts`};
-  if (net>0&&trend>0&&streak>=2&&assetAligned!==false) return {signal:"buy",strength:streak>=3?(accelerating?3:2):1,reason:`Bullish bias ${streak>=3?"confirmed":"detected"} — ${streak} consecutive CFTC reports with net accumulation. Asset Managers ${assetAligned?"aligned":"diverging"}.`};
-  if (net<0&&trend<0&&streak>=2&&assetAligned!==false) return {signal:"sell",strength:streak>=3?(accelerating?3:2):1,reason:`Bearish bias ${streak>=3?"confirmed":"detected"} — ${streak} consecutive CFTC reports with net reduction. Asset Managers ${assetAligned?"aligned":"diverging"}.`};
-  if (net>0&&trend>0) return {signal:"buy",strength:1,reason:`Nascent bullish bias — positive net accumulation by Leveraged Money. Awaiting confirmation in next CFTC report.`};
-  if (net<0&&trend<0) return {signal:"sell",strength:1,reason:`Nascent bearish bias — net reduction by Leveraged Money. Awaiting confirmation in next CFTC report.`};
-  if (Math.abs(net)<5000||(trend>0&&net<0)||(trend<0&&net>0)) return {signal:"indecision",strength:0,reason:`Divergent data between Leveraged Money and Asset Managers — possible bias shift in progress`};
-  return {signal:"wait",strength:0,reason:`Neutral positioning — no directional bias established. Await confirmation in next CFTC report`};
+  if (extremeLong&&trend<0) return {signal:"sell",strength:3,reason:`Posicionamiento largo extremo (${pctL}%) revirtiendo — instituciones reduciendo largos`};
+  if (extremeShort&&trend>0) return {signal:"buy",strength:3,reason:`Posicionamiento corto extremo (${pctL}% largo) revirtiendo — Leveraged Money cubriendo cortos`};
+  if (net>0&&trend>0&&streak>=2&&assetAligned!==false) return {signal:"buy",strength:streak>=3?(accelerating?3:2):1,reason:`Sesgo alcista ${streak>=3?"confirmado":"detectado"} — ${streak} informes CFTC consecutivos con acumulación neta. Asset Managers ${assetAligned?"alineados":"divergiendo"}.`};
+  if (net<0&&trend<0&&streak>=2&&assetAligned!==false) return {signal:"sell",strength:streak>=3?(accelerating?3:2):1,reason:`Sesgo bajista ${streak>=3?"confirmado":"detectado"} — ${streak} informes CFTC consecutivos con reducción neta. Asset Managers ${assetAligned?"alineados":"divergiendo"}.`};
+  if (net>0&&trend>0) return {signal:"buy",strength:1,reason:`Sesgo alcista naciente — acumulación neta positiva por Leveraged Money. Esperando confirmación en próximo informe CFTC.`};
+  if (net<0&&trend<0) return {signal:"sell",strength:1,reason:`Sesgo bajista naciente — reducción neta por Leveraged Money. Esperando confirmación en próximo informe CFTC.`};
+  if (Math.abs(net)<5000||(trend>0&&net<0)||(trend<0&&net>0)) return {signal:"indecision",strength:0,reason:`Datos divergentes entre Leveraged Money y Asset Managers — posible cambio de sesgo en progreso`};
+  return {signal:"wait",strength:0,reason:`Posicionamiento neutral — sin sesgo direccional establecido. Esperar confirmación en próximo informe CFTC`};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,10 +242,10 @@ function calcConviction(weeks,biasEntry){
   const z=biasEntry?.zscore?.zscore??biasEntry?.zScore??0;
   if(Math.abs(z)>2)score+=2;else if(Math.abs(z)>1)score+=1;
   if(latest.assetNet!=null&&latest.smartNet!==0&&Math.sign(latest.assetNet)===Math.sign(latest.smartNet))score+=0.5;
-  if(score>=5.5)return{label:"Extreme Conviction",level:4};
-  if(score>=3.5)return{label:"High Conviction",level:3};
-  if(score>=2)return{label:"Moderate Conviction",level:2};
-  return{label:"Low Conviction",level:1};
+  if(score>=5.5)return{label:"Convicción Extrema",level:4};
+  if(score>=3.5)return{label:"Convicción Alta",level:3};
+  if(score>=2)return{label:"Convicción Moderada",level:2};
+  return{label:"Convicción Baja",level:1};
 }
 function buildInstWhy(p,biasEntry){
   const{latest,weeks,signal}=p;
@@ -288,10 +285,10 @@ const weeksAgo=(n)=>{const d=new Date();d.setDate(d.getDate()-n*7);return d.toIS
 // SIGNAL CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const SIGNAL_CFG = {
-  buy:        {icon:"▲",label:"Bullish Bias",  bg:"rgba(136,201,153,0.15)", border:"rgba(136,201,153,0.4)",  fg:"#2e7d4f",dot:"#88C999"},
-  sell:       {icon:"▼",label:"Bearish Bias",  bg:"rgba(239,154,154,0.15)", border:"rgba(239,154,154,0.4)",  fg:"#b71c1c",dot:"#EF9A9A"},
-  wait:       {icon:"–",label:"Neutral",       bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#616161",dot:"#BDBDBD"},
-  indecision: {icon:"↔",label:"Divergent",     bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#757575",dot:"#9E9E9E"},
+  buy:        {icon:"▲",label:"Sesgo Alcista",  bg:"rgba(136,201,153,0.15)", border:"rgba(136,201,153,0.4)",  fg:"#2e7d4f",dot:"#88C999"},
+  sell:       {icon:"▼",label:"Sesgo Bajista",  bg:"rgba(239,154,154,0.15)", border:"rgba(239,154,154,0.4)",  fg:"#b71c1c",dot:"#EF9A9A"},
+  wait:       {icon:"–",label:"Neutral",        bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#616161",dot:"#BDBDBD"},
+  indecision: {icon:"↔",label:"Divergente",     bg:"rgba(180,180,180,0.10)", border:"rgba(180,180,180,0.25)", fg:"#757575",dot:"#9E9E9E"},
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,9 +390,9 @@ function InstitutionalBiasCard({ biasResult, darkMode, T, isMobile }) {
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <div style={{width:6,height:6,borderRadius:'50%',background:color,boxShadow:`0 0 6px ${color}`,flexShrink:0}}/>
           <span style={{fontSize:11,fontWeight:700,color:T.sub,letterSpacing:'0.08em'}}>
-            INSTITUTIONAL BIAS ENGINE
+            MOTOR DE SESGO INSTITUCIONAL
           </span>
-          <TooltipInfo text="Institutional bias engine based on CFTC COT data and weekly macro flow." align="left"/>
+          <TooltipInfo text="Motor de sesgo institucional basado en datos CFTC COT y flujo macro semanal." align="left"/>
         </div>
         <span style={{fontSize:10,color:T.sub2,background:T.card2,border:`1px solid ${T.border}`,
           padding:'2px 8px',borderRadius:99,letterSpacing:'0.06em',flexShrink:0}}>WEEKLY · HTF</span>
@@ -715,11 +712,11 @@ function InfoTooltip({text}) {
 }
 
 const COT_TOOLTIPS = {
-  levLong:  "Open long contracts held by Hedge Funds and CTAs (Leveraged Money). A sustained increase signals accumulation.",
-  levShort: "Open short contracts held by Hedge Funds and CTAs (Leveraged Money). A sustained increase signals distribution or bearish positioning.",
-  levNet:   "Net position of Leveraged Money (Longs − Shorts). Primary market bias indicator. Positive = bullish bias.",
-  assetNet: "Net positioning of Asset Managers (long-term institutional funds). When it aligns with Lev. Net, it confirms the trend.",
-  dealerNet:"Net position of Dealers and financial intermediaries. They typically act as counterparty; their bias is often inverse to price.",
+  levLong:  "Contratos largos abiertos por Hedge Funds y CTAs (Dinero Apalancado). Un aumento sostenido señala acumulación.",
+  levShort: "Contratos cortos abiertos por Hedge Funds y CTAs (Dinero Apalancado). Un aumento sostenido señala distribución o posicionamiento bajista.",
+  levNet:   "Posición neta del Dinero Apalancado (Largos − Cortos). Indicador primario de sesgo de mercado. Positivo = sesgo alcista.",
+  assetNet: "Posicionamiento neto de Gestores de Activos (fondos institucionales a largo plazo). Cuando se alinea con la posición neta apalancada, confirma la tendencia.",
+  dealerNet:"Posición neta de Dealers e intermediarios financieros. Suelen actuar como contraparte; su sesgo es a menudo inverso al precio.",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -905,10 +902,10 @@ function DetailSheet({pairData, onClose, darkMode = false, T: Tp}) {
           <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"center", marginBottom:6}}>
             <span style={{fontSize:9, fontWeight:700, color:DS.sub2, letterSpacing:"0.07em", textTransform:"uppercase"}}>Heatmap:</span>
             {[
-              {bg:"rgba(136,201,153,0.55)", label:"Strong accumulation (>10K)"},
-              {bg:"rgba(136,201,153,0.22)", label:"Weak accumulation (<10K)"},
-              {bg:"rgba(239,154,154,0.55)", label:"Strong distribution (>10K)"},
-              {bg:"rgba(239,154,154,0.22)", label:"Weak distribution (<10K)"},
+              {bg:"rgba(136,201,153,0.55)", label:"Acumulación fuerte (>10K)"},
+              {bg:"rgba(136,201,153,0.22)", label:"Acumulación débil (<10K)"},
+              {bg:"rgba(239,154,154,0.55)", label:"Distribución fuerte (>10K)"},
+              {bg:"rgba(239,154,154,0.22)", label:"Distribución débil (<10K)"},
             ].map(item=>(
               <div key={item.label} style={{display:"flex", alignItems:"center", gap:4}}>
                 <div style={{width:12, height:12, borderRadius:2, background:item.bg, border:"1px solid rgba(0,0,0,0.06)", flexShrink:0}}/>
@@ -1034,40 +1031,40 @@ function lastSunday(year, month) {
 // ─── BILLING / PLAN MODAL ─────────────────────────────────────────────────────
 // Full access on all paid plans — the only difference is the discount.
 const FULL_ACCESS = [
-  "Full Institutional COT Dashboard",
-  "Market Decision Layer — HTF + LTF interpretation",
-  "Cross Asset Flow — FX, Indices & Bonds",
-  "Intraday Execution with factor breakdown",
-  "Full institutional bias per asset",
-  "Enriched macro calendar with impact analysis",
-  "Private traders community (Telegram)",
+  "Panel COT Institucional Completo",
+  "Capa de Decisión de Mercado — interpretación HTF + LTF",
+  "Flujo Cross-Asset — FX, Índices y Bonos",
+  "Ejecución Intradía con desglose de factores",
+  "Sesgo institucional completo por activo",
+  "Calendario macro enriquecido con análisis de impacto",
+  "Comunidad privada de traders (Telegram)",
 ];
 
 // Free plan visible benefits
 const FREE_BENEFITS = [
-  "Institutional Bias Engine (base view)",
-  "Basic COT Dashboard (read-only)",
-  "Public macro calendar",
+  "Motor de Sesgo Institucional (vista base)",
+  "Panel COT Básico (solo lectura)",
+  "Calendario macro público",
 ];
 
 // Features locked on free plan
 const FREE_LOCKED = [
-  "Full Market Decision Layer",
-  "Full Cross Asset Flow",
-  "Intraday Execution with breakdown",
-  "Private Telegram community",
+  "Capa de Decisión de Mercado Completa",
+  "Flujo Cross-Asset Completo",
+  "Ejecución Intradía con desglose",
+  "Comunidad privada Telegram",
 ];
 
 const PLANS = [
-  { id: "free",       label: "Free",        price: "0€",   period: "",         color: "#8e8e93", url: null,   saving: null,
+  { id: "free",       label: "Gratis",      price: "0€",   period: "",            color: "#8e8e93", url: null,   saving: null,
     benefits: FREE_BENEFITS },
-  { id: "mensual",    label: "Monthly",     price: "24€",  period: "/month",   color: "#0066cc", priceId: STRIPE_PRICE_IDS.mensual,   saving: null,
+  { id: "mensual",    label: "Mensual",     price: "24€",  period: "/mes",        color: "#0066cc", priceId: STRIPE_PRICE_IDS.mensual,   saving: null,
     benefits: [...FULL_ACCESS] },
-  { id: "trimestral", label: "Quarterly",   price: "59€",  period: "/3 months",color: "#5856d6", priceId: STRIPE_PRICE_IDS.trimestral, saving: "Save 13€ · 18% off",
+  { id: "trimestral", label: "Trimestral",  price: "59€",  period: "/3 meses",    color: "#5856d6", priceId: STRIPE_PRICE_IDS.trimestral, saving: "Ahorra 13€ · 18% dto.",
     benefits: [...FULL_ACCESS] },
-  { id: "semestral",  label: "Biannual",    price: "99€",  period: "/6 months",color: "#34c759", priceId: STRIPE_PRICE_IDS.semestral,  saving: "Save 45€ · 31% off",
+  { id: "semestral",  label: "Semestral",   price: "99€",  period: "/6 meses",    color: "#34c759", priceId: STRIPE_PRICE_IDS.semestral,  saving: "Ahorra 45€ · 31% dto.",
     benefits: [...FULL_ACCESS] },
-  { id: "anual",      label: "Annual",      price: "169€", period: "/year",    color: "#ff2d55", priceId: STRIPE_PRICE_IDS.anual,      saving: "Save 119€ · 41% off",
+  { id: "anual",      label: "Anual",       price: "169€", period: "/año",        color: "#ff2d55", priceId: STRIPE_PRICE_IDS.anual,      saving: "Ahorra 119€ · 41% dto.",
     benefits: [...FULL_ACCESS] },
 ];
 
@@ -1081,7 +1078,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
     console.log('[BillingModal] handleStripeCheckout | authUserId:', authUserId, '| priceId:', priceId);
     if (!authUserId || typeof authUserId !== 'string' || authUserId.length < 10) {
       console.error('[BillingModal] BLOCKED: authUserId invalid or missing:', authUserId);
-      alert('Error: session not detected. Please reload the page and try again.');
+      alert('Error: sesión no detectada. Recarga la página e inténtalo de nuevo.');
       return;
     }
     setCheckoutLoading(priceId);
@@ -1126,8 +1123,8 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
         {/* Header */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px" }}>
           <div>
-            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Choose your plan</p>
-            <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Current plan: <strong>{user?.plan || "Trial"}</strong></p>
+            <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Elige tu plan</p>
+            <p style={{ margin:0,fontSize:12,color:"#8e8e93",marginTop:2 }}>Plan actual: <strong>{planLabel(user?.plan)}</strong></p>
           </div>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
@@ -1144,7 +1141,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                 {isActive && (
                   <span style={{ position:"absolute",top:10,right:12,fontSize:10,fontWeight:700,
                     background:plan.color,color:"white",padding:"2px 8px",borderRadius:99 }}>
-                    CURRENT
+                    ACTIVO
                   </span>
                 )}
                 <div style={{ display:"flex",alignItems:"baseline",gap:6,marginBottom:plan.saving?4:8 }}>
@@ -1154,7 +1151,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                   {/* Recommended badge for trimestral */}
                   {plan.id === "trimestral" && !isActive && (
                     <span style={{ fontSize:9,fontWeight:700,background:"#5856d6",color:"white",
-                      padding:"2px 7px",borderRadius:99,marginLeft:4 }}>MOST POPULAR</span>
+                      padding:"2px 7px",borderRadius:99,marginLeft:4 }}>MÁS POPULAR</span>
                   )}
                 </div>
                 {plan.saving && (
@@ -1176,7 +1173,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       fontSize:10, fontWeight:700, color:"#ef4444",
                       letterSpacing:"0.06em", marginBottom:5, marginTop:4,
                     }}>
-                      LOCKED ON FREE PLAN
+                      BLOQUEADO EN PLAN GRATIS
                     </div>
                     <ul style={{ margin:"0 0 10px",padding:0,listStyle:"none" }}>
                       {FREE_LOCKED.map((b,i) => (
@@ -1192,7 +1189,7 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       borderTop: `1px solid ${darkMode?"#1a2230":"#e2e8f0"}`,
                       paddingTop:8, marginBottom:4,
                     }}>
-                      Limited to basic analysis — upgrade for full institutional intelligence
+                      Análisis básico limitado — mejora para acceso institucional completo
                     </div>
                   </>
                 )}
@@ -1202,13 +1199,13 @@ function BillingModal({ user, darkMode, onClose, authUserId }) {
                       background:`linear-gradient(135deg,${plan.color},${plan.color}cc)`,
                       color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",
                       boxShadow:`0 3px 12px ${plan.color}44` }}>
-                    Select {plan.label} →
+                    Seleccionar {plan.label} →
                   </button>
                 ) : (
                   <div style={{ textAlign:"center",padding:"10px",borderRadius:12,
                     background:darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.04)",
                     color:"#8e8e93",fontSize:13,fontWeight:600 }}>
-                    {isActive ? "Active plan" : "Free plan"}
+                    {isActive ? "Plan activo" : "Plan gratuito"}
                   </div>
                 )}
               </div>
@@ -1257,7 +1254,7 @@ function BugReportModal({ user, darkMode, onClose }) {
         <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 12px",
           borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
-          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>🐛 Report a Bug</p>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>🐛 Reportar un error</p>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
         </div>
@@ -1265,28 +1262,28 @@ function BugReportModal({ user, darkMode, onClose }) {
           {sent ? (
             <div style={{ textAlign:"center",padding:"28px 0" }}>
               <div style={{ fontSize:44,marginBottom:14 }}>✅</div>
-              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>Report sent!</p>
+              <p style={{ margin:"0 0 6px",fontSize:16,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>¡Reporte enviado!</p>
               <p style={{ margin:0,fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
-                Your report was submitted successfully.<br/>Thank you for helping us improve.
+                Tu reporte fue enviado correctamente.<br/>Gracias por ayudarnos a mejorar.
               </p>
             </div>
           ) : (
             <>
               <p style={{ margin:"0 0 14px",fontSize:13,color:"#8e8e93",lineHeight:1.6 }}>
-                Describe what happened and we'll fix it as quickly as possible.
+                Describe lo que ocurrió y lo solucionaremos lo antes posible.
               </p>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
-                letterSpacing:"0.05em",textTransform:"uppercase" }}>Subject</label>
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Asunto</label>
               <input value={subject} onChange={e=>setSubject(e.target.value)}
-                placeholder="E.g.: Dropdown doesn't close correctly"
+                placeholder="Ej.: El desplegable no se cierra correctamente"
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
                   border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
                   fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
                   boxSizing:"border-box",fontFamily:"inherit",marginBottom:12,outline:"none" }}/>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:"#8e8e93",marginBottom:4,
-                letterSpacing:"0.05em",textTransform:"uppercase" }}>Description</label>
+                letterSpacing:"0.05em",textTransform:"uppercase" }}>Descripción</label>
               <textarea value={desc} onChange={e=>setDesc(e.target.value)}
-                placeholder="Describe the issue in as much detail as possible…" rows={4}
+                placeholder="Describe el problema con el mayor detalle posible…" rows={4}
                 style={{ width:"100%",padding:"10px 12px",borderRadius:10,
                   border:`1.5px solid ${darkMode?"#263041":"#dbe4ed"}`,
                   fontSize:14,color:darkMode?"#e8eaf0":"#111827",background:darkMode?"#1a2230":"#f8fafc",
@@ -1297,7 +1294,7 @@ function BugReportModal({ user, darkMode, onClose }) {
                   cursor:sending||!desc.trim()?"not-allowed":"pointer",
                   background:sending||!desc.trim()?"#c7e0f4":"linear-gradient(135deg,#0066cc,#0077ed)",
                   color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
-                {sending ? "Sending…" : "Send report →"}
+                {sending ? "Enviando…" : "Enviar reporte →"}
               </button>
             </>
           )}
@@ -1313,7 +1310,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
   const bg = darkMode ? "#12171f" : "#ffffff";
   const txt = darkMode ? "#e8eaf0" : "#111827";
   const sub = "#8e8e93";
-  const title = isPrivacy ? "Privacy Policy" : "Terms & Conditions";
+  const title = isPrivacy ? "Política de Privacidad" : "Términos y Condiciones";
 
   return (
     <div onClick={onClose}
@@ -1328,7 +1325,7 @@ function LegalView({ type, darkMode, onBack, onClose }) {
           borderBottom:`1px solid ${darkMode?"#1a2230":"#f0f4f8"}` }}>
           <button onClick={onBack}
             style={{ background:"none",border:"none",cursor:"pointer",color:"#0066cc",fontSize:13,fontWeight:600,padding:0 }}>
-            ← Back
+            ← Volver
           </button>
           <span style={{ fontSize:16,fontWeight:700,color:txt,flex:1,textAlign:"center",marginRight:40 }}>{title}</span>
         </div>
@@ -1421,18 +1418,24 @@ function SettingsShell({children, onBack, title, onClose, dark}) {
 // ─── SETTINGS PANEL (main) ───────────────────────────────────────────────────
 // ─── SECURITY MODAL — create / change password ────────────────────────────────
 function SecurityModal({ darkMode, onClose }) {
-  const [pw1,     setPw1]     = useState("");
-  const [pw2,     setPw2]     = useState("");
-  const [showPw,  setShowPw]  = useState(false);
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState("");
-  const [success, setSuccess] = useState(false);
+  // step: 'form' → user fills password
+  //       'otp'  → reauthentication code sent to email, user enters it
+  const [step,     setStep]    = useState("form");
+  const [pw1,      setPw1]     = useState("");
+  const [pw2,      setPw2]     = useState("");
+  const [otp,      setOtp]     = useState("");
+  const [showPw,   setShowPw]  = useState(false);
+  const [saving,   setSaving]  = useState(false);
+  const [sending,  setSending] = useState(false);
+  const [error,    setError]   = useState("");
+  const [success,  setSuccess] = useState(false);
+  const { user: authUser } = useAuth();
 
   const bg  = darkMode ? "#12171f" : "#ffffff";
   const txt = darkMode ? "#e8eaf0" : "#111827";
   const sub = "#8e8e93";
   const bd  = darkMode ? "#263041" : "#dbe4ed";
-  const inputBg = T?.inputBg || (darkMode ? "#1a2230" : "#f8fafc");
+  const inputBg = darkMode ? "#1a2230" : "#f8fafc";
 
   const validate = () => {
     if (pw1.length < 8)               return "Mínimo 8 caracteres";
@@ -1442,18 +1445,65 @@ function SecurityModal({ darkMode, onClose }) {
     return null;
   };
 
-  const handleSave = async () => {
+  // Step 1: validate password and send reauthentication OTP
+  const handleRequestOtp = async () => {
     const err = validate();
     if (err) { setError(err); return; }
-    setSaving(true); setError("");
-    const { error: authError } = await updatePassword(pw1);
-    setSaving(false);
-    if (authError) {
-      setError(authError.message || "Error saving password");
+    setSending(true); setError("");
+    try {
+      const { supabase: sb } = await import('./lib/supabase.js');
+      const { error: reErr } = await sb.auth.reauthenticate();
+      if (reErr) {
+        // If reauthentication is not needed (password-based sessions), go straight to update
+        if (reErr.message?.toLowerCase().includes('not supported') ||
+            reErr.status === 422) {
+          const { error: authError } = await updatePassword(pw1);
+          setSending(false);
+          if (authError) { setError(authError.message); return; }
+          setSuccess(true);
+          setTimeout(onClose, 2200);
+          return;
+        }
+        setError("Error al enviar el código de verificación. Inténtalo de nuevo.");
+        setSending(false);
+        return;
+      }
+    } catch (e) {
+      setError("Error de conexión. Inténtalo de nuevo.");
+      setSending(false);
       return;
     }
-    setSuccess(true);
-    setTimeout(onClose, 2200);
+    setSending(false);
+    setStep("otp");
+  };
+
+  // Step 2: verify OTP then update password
+  const handleVerifyAndSave = async () => {
+    if (!otp.trim() || otp.length < 6) { setError("Introduce el código de 6 dígitos"); return; }
+    const email = authUser?.email ?? "";
+    if (!email) { setError("No se encontró el email del usuario"); return; }
+    setSaving(true); setError("");
+    try {
+      const { supabase: sb } = await import('./lib/supabase.js');
+      const { error: vErr } = await sb.auth.verifyOtp({
+        email,
+        token: otp.trim(),
+        type: 'reauthentication',
+      });
+      if (vErr) {
+        setError("Código incorrecto o expirado. Solicita uno nuevo.");
+        setSaving(false);
+        return;
+      }
+      const { error: authError } = await updatePassword(pw1);
+      setSaving(false);
+      if (authError) { setError(authError.message); return; }
+      setSuccess(true);
+      setTimeout(onClose, 2200);
+    } catch (e) {
+      setError("Error de verificación. Inténtalo de nuevo.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -1467,7 +1517,7 @@ function SecurityModal({ darkMode, onClose }) {
         <div style={{ width:36,height:4,borderRadius:99,background:darkMode?"#263041":"#d1d8e1",margin:"12px auto 0"}}/>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
           padding:"16px 20px 12px",borderBottom:`1px solid ${bd}` }}>
-          <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Password</p>
+          <p style={{ margin:0,fontSize:17,fontWeight:700,color:txt }}>🔑 Contraseña</p>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",
               border:"none",cursor:"pointer",color:sub,fontSize:14 }}>✕</button>
@@ -1488,18 +1538,18 @@ function SecurityModal({ darkMode, onClose }) {
               <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>✅</span>
               <div>
                 <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: "#14532d", letterSpacing: "-0.1px" }}>
-                  Password updated successfully
+                  Contraseña actualizada correctamente
                 </p>
                 <p style={{ margin: 0, fontSize: 12, color: "#166534", lineHeight: 1.55 }}>
-                  Your new password is now active and will be used on your next login.
+                  Tu nueva contraseña ya está activa y se usará en tu próximo inicio de sesión.
                 </p>
               </div>
             </div>
-          ) : (
+          ) : step === "form" ? (
             <>
               <p style={{ margin:"0 0 18px",fontSize:13,color:sub,lineHeight:1.6 }}>
-                Create a password to sign in without needing a magic link email.
-                Minimum 8 characters, include at least one letter and one number.
+                Crea una contraseña para acceder sin necesitar un enlace mágico por email.
+                Mínimo 8 caracteres, al menos una letra y un número.
               </p>
               {error && (
                 <div style={{ background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.18)",
@@ -1509,12 +1559,12 @@ function SecurityModal({ darkMode, onClose }) {
               )}
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
                 marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
-                New password
+                Nueva contraseña
               </label>
               <div style={{ position:"relative",marginBottom:12 }}>
                 <input type={showPw?"text":"password"} value={pw1}
                   onChange={e=>setPw1(e.target.value)}
-                  placeholder="Minimum 8 characters"
+                  placeholder="Mínimo 8 caracteres"
                   style={{ width:"100%",padding:"11px 42px 11px 12px",borderRadius:10,
                     border:`1.5px solid ${bd}`,fontSize:14,color:txt,background:inputBg,
                     boxSizing:"border-box",fontFamily:"inherit",outline:"none" }}/>
@@ -1526,22 +1576,67 @@ function SecurityModal({ darkMode, onClose }) {
               </div>
               <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
                 marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
-                Confirm password
+                Confirmar contraseña
               </label>
               <input type="password" value={pw2}
                 onChange={e=>setPw2(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&handleSave()}
-                placeholder="Repeat your password"
+                onKeyDown={e=>e.key==="Enter"&&handleRequestOtp()}
+                placeholder="Repite tu contraseña"
                 style={{ width:"100%",padding:"11px 12px",borderRadius:10,
                   border:`1.5px solid ${pw2&&pw1!==pw2?"rgba(255,59,48,0.5)":bd}`,
                   fontSize:14,color:txt,background:inputBg,
                   boxSizing:"border-box",fontFamily:"inherit",outline:"none",marginBottom:18 }}/>
-              <button onClick={handleSave} disabled={saving}
+              <button onClick={handleRequestOtp} disabled={sending}
+                style={{ width:"100%",padding:"13px",borderRadius:14,border:"none",
+                  cursor:sending?"not-allowed":"pointer",
+                  background:sending?"#c7d9f4":"linear-gradient(135deg,#0055cc,#0077ed)",
+                  color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
+                {sending ? "Enviando código…" : "Guardar contraseña"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ textAlign:"center",marginBottom:20 }}>
+                <div style={{ fontSize:32,marginBottom:10 }}>📧</div>
+                <p style={{ margin:"0 0 6px",fontSize:15,fontWeight:700,color:txt }}>Verifica tu identidad</p>
+                <p style={{ margin:0,fontSize:13,color:sub,lineHeight:1.6 }}>
+                  Hemos enviado un código de 6 dígitos a <strong>{authUser?.email}</strong>.
+                  Introdúcelo para confirmar el cambio de contraseña.
+                </p>
+              </div>
+              {error && (
+                <div style={{ background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.18)",
+                  borderRadius:10,padding:"9px 13px",marginBottom:14,fontSize:13,color:"#c0392b" }}>
+                  {error}
+                </div>
+              )}
+              <label style={{ display:"block",fontSize:11,fontWeight:600,color:sub,
+                marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" }}>
+                Código de verificación
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={e=>setOtp(e.target.value.replace(/\D/g,''))}
+                onKeyDown={e=>e.key==="Enter"&&handleVerifyAndSave()}
+                placeholder="123456"
+                style={{ width:"100%",padding:"14px 12px",borderRadius:10,textAlign:"center",
+                  border:`1.5px solid ${bd}`,fontSize:22,fontWeight:700,letterSpacing:"0.3em",
+                  color:txt,background:inputBg,boxSizing:"border-box",fontFamily:"monospace",
+                  outline:"none",marginBottom:18 }}/>
+              <button onClick={handleVerifyAndSave} disabled={saving}
                 style={{ width:"100%",padding:"13px",borderRadius:14,border:"none",
                   cursor:saving?"not-allowed":"pointer",
                   background:saving?"#c7d9f4":"linear-gradient(135deg,#0055cc,#0077ed)",
-                  color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s" }}>
-                {saving ? "Saving…" : "Save password"}
+                  color:"white",fontSize:14,fontWeight:700,transition:"all 0.2s",marginBottom:10 }}>
+                {saving ? "Verificando…" : "Verificar y guardar contraseña"}
+              </button>
+              <button onClick={()=>{setStep("form");setOtp("");setError("");}}
+                style={{ width:"100%",padding:"10px",borderRadius:14,border:`1px solid ${bd}`,
+                  background:"none",color:sub,fontSize:13,cursor:"pointer" }}>
+                ← Volver
               </button>
             </>
           )}
@@ -1592,6 +1687,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
 
   const PLAN_COLORS = { Trial:"#ff9500",Free:"#8e8e93",Mensual:"#0066cc",Trimestral:"#5856d6",Semestral:"#34c759",Anual:"#ff2d55" };
   const planColor = PLAN_COLORS[user?.plan] || "#0066cc";
+  const planLabel = (p) => ({ Trial:'Prueba', Free:'Gratuito' })[p] ?? p ?? 'Prueba';
 
   // ── SUB-MODALS ───────────────────────────────────────────────────────────
   if (showSecurity) return (
@@ -1621,11 +1717,11 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
           <p style={{ margin:"0 0 4px",fontSize:20,fontWeight:700,color:darkMode?"#e8eaf0":"#111827" }}>{user?.nombre}</p>
           <p style={{ margin:"0 0 10px",fontSize:13,color:"#8e8e93" }}>{user?.email}</p>
           <span style={{ fontSize:11,fontWeight:700,background:`${planColor}22`,color:planColor,padding:"4px 14px",borderRadius:99 }}>
-            {user?.plan || "Trial"}
+            {planLabel(user?.plan)}
           </span>
         </div>
         {[
-          [t.planActive, user?.plan || "Trial", planColor],
+          [t.planActive, planLabel(user?.plan), planColor],
           [t.memberSince, new Date().toLocaleDateString(lang==="en"?"en-US":"es-ES",{month:"long",year:"numeric"}), "#8e8e93"],
           ["Email", user?.email, "#8e8e93"],
         ].map(([label,val,color])=>(
@@ -1646,8 +1742,8 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         {[
           {v:"v7.0", date:"Abr 2026", title:"Settings premium completo", desc:"Billing interno, bug reports, legal, novedades y banner COT semanal."},
           {v:"v6.0", date:"Abr 2026", title:"Supabase Auth migrado",      desc:"Magic Link OTP, sesión real, eliminación de GAS y localStorage como auth."},
-          {v:"v5.0", date:"Abr 2026", title:"Intraday Execution Layer",   desc:"Motor de permiso operativo con selector de par, bias-alignment y breakdown."},
-          {v:"v4.0", date:"Abr 2026", title:"Institutional Bias Engine",  desc:"Score HTF -5 a +5 basado en COT. Gauge visual, desglose de factores."},
+          {v:"v5.0", date:"Abr 2026", title:"Capa de Ejecución Intradía",        desc:"Motor de permiso operativo con selector de par, alineación de sesgo y desglose."},
+          {v:"v4.0", date:"Abr 2026", title:"Motor de Sesgo Institucional", desc:"Score HTF -5 a +5 basado en COT. Gauge visual, desglose de factores."},
           {v:"v3.0", date:"Abr 2026", title:"Señales institucionales",    desc:"Motor de señales basado en Leveraged Money del CFTC TFF."},
           {v:"v2.0", date:"Abr 2026", title:"Vista cronológica",          desc:"Sparklines y evolución semanal por par de divisas."},
           {v:"v1.0", date:"Abr 2026", title:"COT Tracker lanzado",        desc:"Primera versión con soporte CSV del CFTC."},
@@ -1711,7 +1807,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 20px 0" }}>
           <div>
             <p style={{ margin:0,fontSize:18,fontWeight:700,color:darkMode?"#e8eaf0":"#111827",letterSpacing:"-0.3px" }}>Ajustes</p>
-            <p style={{ margin:0,fontSize:12,color:"#8e8e93" }}>{user?.nombre} · {user?.plan||"Trial"}</p>
+            <p style={{ margin:0,fontSize:12,color:"#8e8e93" }}>{user?.nombre} · {planLabel(user?.plan)}</p>
           </div>
           <button onClick={onClose}
             style={{ width:30,height:30,borderRadius:"50%",background:darkMode?"#263041":"#f0f4f8",border:"none",cursor:"pointer",color:"#8e8e93",fontSize:14 }}>✕</button>
@@ -1730,7 +1826,7 @@ function SettingsPanel({ user, darkMode, lang, onDarkMode, onLang, onLogout, onC
         <SectionTitle title={t.account}/>
         <Row icon="👤" label={t.profile} desc={user?.email} onPress={()=>setSection("profile")}/>
         <Row icon="🔑" label={lang==="en"?"Password":"Contraseña"} desc={lang==="en"?"Set or change password":"Configura tu contraseña"} onPress={()=>setShowSecurity(true)}/>
-        <Row icon="💳" label={t.billing} desc={user?.plan||"Trial"} onPress={()=>setShowBilling(true)}/>
+        <Row icon="💳" label={t.billing} desc={planLabel(user?.plan)} onPress={()=>setShowBilling(true)}/>
         <Row icon="⬆️" label={t.upgrade} desc={lang==="en"?"Get more features":"Accede a todas las funciones"} onPress={()=>setShowBilling(true)}/>
 
         {/* PREFERENCES */}
@@ -2412,8 +2508,8 @@ function buildMacroAnalysis(eventType, country) {
         ['↑ Sube','↑ Sube','↑ Sube'], // DÉBIL = inventario bajo = alcista WTI
         N(3),
         ['↓ Baja','↓ Baja','↓ Baja'], // FUERTE = inventario alto = bajista WTI
-        `Inventarios bajos reflejan mayor demanda o menor producción. Bullish para WTI/Brent. El CAD puede beneficiarse dada su correlación con el crudo.`,
-        `Inventarios altos sugieren exceso de oferta o debilidad de la demanda. Bearish para el petróleo y puede presionar el CAD.`);
+        `Inventarios bajos reflejan mayor demanda o menor producción. Alcista para WTI/Brent. El CAD puede beneficiarse dada su correlación con el crudo.`,
+        `Inventarios altos sugieren exceso de oferta o debilidad de la demanda. Bajista para el petróleo y puede presionar el CAD.`);
 
     case 'BOND_AUCTION': {
       const a = isUS?['US10Y','USD']:isEU?['DE10Y','EUR']:isGB?['UK10Y','GBP']:['US10Y','USD'];
@@ -3284,7 +3380,7 @@ function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
                           {/* Actual */}
                           <div style={{textAlign:'right',fontSize:12,fontWeight:hasAct?700:400,
                             color:hasAct?sColor:D.sub2,display:'flex',alignItems:'center',justifyContent:'flex-end'}}>
-                            {hasAct ? fmtVal(actualVal) : isPending ? (
+                            {hasAct ? fmtVal(actualVal) : isPending && !isPublished ? (
                               <span style={{fontSize:9,fontWeight:700,color:'#f59e0b',
                                 background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',
                                 borderRadius:6,padding:'2px 6px'}}>PEND.</span>
@@ -3425,17 +3521,17 @@ function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
                             <div style={{
                               background:hasAct
                                 ?(sColor===D.bull?'rgba(34,197,94,0.09)':sColor===D.bear?'rgba(239,68,68,0.09)':'rgba(245,158,11,0.07)')
-                                :isPending?'rgba(245,158,11,0.05)':D.card,
+                                :(isPending&&!isPublished)?'rgba(245,158,11,0.05)':D.card,
                               borderRadius:isMobile?10:14,padding:isMobile?'10px 12px':'14px 16px',boxShadow:'0 2px 10px rgba(0,0,0,0.15)',
                               border:`1px solid ${hasAct
                                 ?(sColor===D.bull?'rgba(34,197,94,0.35)':sColor===D.bear?'rgba(239,68,68,0.35)':'rgba(245,158,11,0.3)')
-                                :isPending?'rgba(245,158,11,0.25)':D.border}`}}>
+                                :(isPending&&!isPublished)?'rgba(245,158,11,0.25)':D.border}`}}>
                               <div style={{fontSize:9,fontWeight:700,color:D.sub2,letterSpacing:'0.08em',marginBottom:isMobile?4:8}}>ACTUAL</div>
                               {hasAct ? (
                                 <div style={{fontSize:isMobile?22:26,fontWeight:800,color:sColor,lineHeight:1}}>
                                   {fmtVal(actualVal)}
                                 </div>
-                              ) : isPending ? (
+                              ) : (isPending && !isPublished) ? (
                                 <div>
                                   {/* Badge principal */}
                                   <div style={{display:'inline-flex',alignItems:'center',gap:6,
@@ -3482,7 +3578,7 @@ function CalendarioTab({darkMode, T, biasArr, macroSignal}) {
                               ) : (
                                 <div style={{fontSize:isMobile?18:20,fontWeight:800,color:D.sub2,lineHeight:1}}>—</div>
                               )}
-                              {isPast&&!hasAct&&!isPending&&lastFetchTime&&(
+                              {isPast&&!hasAct&&!(isPending&&!isPublished)&&lastFetchTime&&(
                                 <div style={{fontSize:9,color:D.sub2,opacity:0.5,marginTop:6}}>
                                   FF: {lastFetchTime.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
                                 </div>
@@ -4834,18 +4930,16 @@ if (!authUser || forceResetMode) {
 
   // ── DASHBOARD ──────────────────────────────────────────────────────────────
   const TABS = [
-    {id:"resumen",       label:"Overview"},
-    {id:"calendario",    label:"Calendar"},
-    {id:"sesgos",        label:"COT Positioning"},
+    {id:"resumen",       label:"Resumen"},
+    {id:"intelligence",  label:"Inteligencia"},
+    {id:"sesgos",        label:"Posicionamiento COT"},
     {id:"macro",         label:"Macro"},
-    {id:"intelligence",  label:"Intelligence"},
-    {id:"crypto",        label:"Crypto"},
-    {id:"historico",     label:"Historical"},
-    {id:"importar",      label:"Data Sync"},
-    {id:"exportar",      label:"Export"},
-    {id:"institucional", label:"Institutional"},
-    {id:"recursos",      label:"Resources"},
-    {id:"cuenta",        label:"Settings"},
+    {id:"calendario",    label:"Calendario"},
+    {id:"historico",     label:"Histórico"},
+    {id:"exportar",      label:"Exportar"},
+    {id:"recursos",      label:"Recursos"},
+    {id:"importar",      label:"Datos"},
+    {id:"cuenta",        label:"Ajustes"},
   ];
   const buys=displayPairs.filter(p=>p.signal.signal==="buy").length;
   const sells=displayPairs.filter(p=>p.signal.signal==="sell").length;
@@ -4855,7 +4949,7 @@ if (!authUser || forceResetMode) {
 
   return (
     <div style={{fontFamily:"'Inter','SF Pro Text',Helvetica,sans-serif",background:_thm.bg,
-      minHeight:"100vh",overflowX:"hidden",maxWidth:"100vw",boxSizing:"border-box"}}>
+      minHeight:"100vh",overflowX:"clip",maxWidth:"100vw",boxSizing:"border-box"}}>
 
       {/* ── CREATE PASSWORD MODAL (first magic link login via ?setup=1) ── */}
       {/* FIX: was gated on !onboarding.show — but onboarding.show starts false */}
@@ -4974,8 +5068,40 @@ if (!authUser || forceResetMode) {
               </div>
             )}
 
-            {/* Right: source + avatar */}
+            {/* Right: Global Asset Selector + source + avatar */}
             <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              {/* ── GLOBAL ASSET SELECTOR ── */}
+              <div style={{position:"relative",flexShrink:0,display:"flex",alignItems:"center",gap:6,
+                background:_thm.card2,border:`1px solid ${_thm.accent}55`,borderRadius:8,
+                padding:"4px 8px 4px 10px",boxShadow:`0 0 0 1px ${_thm.accent}22`}}>
+                {!isMobile && <span style={{fontSize:9,fontWeight:800,color:_thm.accent,letterSpacing:"0.12em",whiteSpace:"nowrap"}}>ACTIVO</span>}
+                <select
+                  value={selectedPair}
+                  onChange={e=>{setSelectedPair(e.target.value);}}
+                  style={{
+                    padding:"2px 24px 2px 2px",
+                    borderRadius:4,
+                    border:"none",
+                    background:"transparent",
+                    color:_thm.txt,
+                    fontSize:12,
+                    fontWeight:800,
+                    cursor:"pointer",
+                    outline:"none",
+                    appearance:"none",
+                    WebkitAppearance:"none",
+                    backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat:"no-repeat",
+                    backgroundPosition:"right 2px center",
+                    letterSpacing:"0.04em",
+                    minWidth: isMobile ? 80 : 100,
+                  }}
+                >
+                  {["EUR/USD","GBP/USD","AUD/USD","NZD/USD","USD/JPY","USD/CAD","USD/CHF","USD Index"].map(p=>(
+                    <option key={p} value={p} style={{background:_thm.card,color:_thm.txt}}>{p}</option>
+                  ))}
+                </select>
+              </div>
               {source&&!isMobile&&<span style={{fontSize:10,color:_thm.sub,maxWidth:100,overflow:"hidden",
                 textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{source}</span>}
               <button onClick={()=>setShowSettings(true)} style={{width:28,height:28,borderRadius:"50%",
@@ -4995,8 +5121,8 @@ if (!authUser || forceResetMode) {
             `}</style>
             {TABS.map(t=>{
               const isActive=mainTab===t.id;
-              // Highlight Intelligence and Crypto tabs with subtle accent backgrounds
-              const isNew=t.id==="intelligence"||t.id==="crypto";
+              // Highlight Intelligence tab with subtle accent background
+              const isNew=t.id==="intelligence";
               return(
                 <button key={t.id} className="inst-tab" onClick={()=>setMainTab(t.id)} style={{
                   background:isNew&&!isActive?_thm.accent+"0a":"none",
@@ -5015,6 +5141,48 @@ if (!authUser || forceResetMode) {
 
       {/* ── COT WEEKLY BANNER ── */}
       <COTWeeklyBanner darkMode={darkMode} T={_thm}/>
+
+      {/* ── PAST DUE PAYMENT BANNER ── */}
+      {/* Shown when subscription payment failed but user is still in grace period */}
+      {(accessStatus?.status === 'past_due' || accessStatus?.reason === 'past_due_grace') && (
+        <div style={{
+          background: 'linear-gradient(90deg, #dc2626, #b91c1c)',
+          color: '#fff',
+          padding: '10px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          fontSize: 13,
+          fontWeight: 500,
+          zIndex: 9,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span>
+              <strong>Pago fallido.</strong> Tu acceso se mantendrá temporalmente durante el período de gracia.
+              Actualiza tu método de pago para evitar la interrupción del servicio.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowBillingApp(true)}
+            style={{
+              background: '#fff',
+              color: '#dc2626',
+              border: 'none',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            Gestionar pago
+          </button>
+        </div>
+      )}
 
       {/* ── TAB: RESUMEN (Overview) ── */}
       {mainTab==="resumen"&&(
@@ -5170,10 +5338,10 @@ if (!authUser || forceResetMode) {
             <div style={{marginBottom:16}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:'0.1em'}}>
-                  CONTEXT OPPORTUNITIES
+                  OPORTUNIDADES EN CONTEXTO
                 </span>
                 <span style={{flex:1,height:1,background:_thm.border}}/>
-                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>COT · STRUCTURAL CONTEXT · NOT ENTRY SIGNALS</span>
+                <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>COT · CONTEXTO ESTRUCTURAL · NO SON SEÑALES DE ENTRADA</span>
               </div>
               <TradeIdeas
                 fxPairs={fxPairs}
@@ -5261,7 +5429,7 @@ if (!authUser || forceResetMode) {
                     SESGO INSTITUCIONAL POR PAR
                   </span>
                   <span style={{flex:1,height:1,background:_thm.border}}/>
-                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>INSTITUTIONAL BIAS ENGINE · HTF · NO SEÑAL</span>
+                  <span style={{fontSize:9,color:_thm.sub2,letterSpacing:'0.05em',fontWeight:500}}>MOTOR DE SESGO INSTITUCIONAL · HTF · SIN SEÑAL</span>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':`repeat(${Math.min(top.length,3)},1fr)`,gap:10}}>
                   {top.map(({pair,bias})=>(
@@ -5669,7 +5837,7 @@ if (!authUser || forceResetMode) {
       {mainTab==="exportar"&&(
         <Suspense fallback={
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:200,color:_thm.sub,fontSize:13}}>
-            Loading export tools…
+            Cargando herramientas de exportación…
           </div>
         }>
           <ExportPanel
@@ -5700,21 +5868,21 @@ if (!authUser || forceResetMode) {
       {/* ── TAB: INTELLIGENCE (Multi-Agent System) ── */}
       {mainTab==="intelligence"&&(
         <>
+          {/* ── SECTION 1: GLOBAL INTELLIGENCE ── */}
           <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 20px 0 20px"}}>
-            <div style={{
-              marginBottom:12,padding:"10px 14px",
-              background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:8,
-              display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",
-            }}>
-              <div>
-                <span style={{fontSize:10,fontWeight:700,color:_thm.accent,letterSpacing:"0.1em"}}>
-                  INTELLIGENCE — DEEP ANALYSIS
-                </span>
-                <p style={{margin:"3px 0 0",fontSize:11,color:_thm.sub,lineHeight:1.5}}>
-                  This panel combines macro regime, COT positioning, execution signals, and cross-market context
-                  into a single institutional view. Use it for your weekly market review and setup selection.
-                </p>
-              </div>
+            {/* Section header */}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <span style={{fontSize:10,fontWeight:800,color:_thm.accent,letterSpacing:"0.1em"}}>
+                INTELIGENCIA GLOBAL
+              </span>
+              <span style={{
+                fontSize:8,fontWeight:700,letterSpacing:"0.08em",
+                color:"#22c55e",background:"rgba(34,197,94,0.1)",
+                border:"1px solid rgba(34,197,94,0.25)",
+                padding:"1px 6px",borderRadius:3,
+              }}>DATOS GLOBALES</span>
+              <span style={{flex:1,height:1,background:_thm.border}}/>
+              <span style={{fontSize:9,color:_thm.sub2}}>Macro · Régimen · Intermercado</span>
             </div>
             <MarketBriefingPanel
               priority={signalPriority}
@@ -5732,6 +5900,29 @@ if (!authUser || forceResetMode) {
               isMobile={isMobile}
             />
           </div>
+
+          {/* ── SECTION 2: ASSET INTELLIGENCE ── */}
+          <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 20px 0 20px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <span style={{fontSize:10,fontWeight:800,color:_thm.accent,letterSpacing:"0.1em"}}>
+                INTELIGENCIA DE ACTIVOS
+              </span>
+              <span style={{
+                fontSize:8,fontWeight:700,letterSpacing:"0.08em",
+                color:"#6366f1",background:"rgba(99,102,241,0.1)",
+                border:"1px solid rgba(99,102,241,0.25)",
+                padding:"1px 6px",borderRadius:3,
+              }}>PAIR DATA</span>
+              <span style={{
+                fontSize:11,fontWeight:700,
+                color:_thm.accent,background:_thm.accent+"15",
+                border:`1px solid ${_thm.accent}33`,
+                padding:"1px 8px",borderRadius:3,
+              }}>{selectedPair}</span>
+              <span style={{flex:1,height:1,background:_thm.border}}/>
+              <span style={{fontSize:9,color:_thm.sub2}}>COT · Posicionamiento · Convicción</span>
+            </div>
+          </div>
           <InstitutionalIntelligencePanel
             consensus={agentConsensus}
             darkMode={darkMode}
@@ -5739,32 +5930,6 @@ if (!authUser || forceResetMode) {
             isMobile={isMobile}
           />
         </>
-      )}
-
-      {/* ── TAB: CRYPTO INTELLIGENCE ── */}
-      {mainTab==="crypto"&&(
-        <CryptoIntelligencePanel
-          riskRegime={riskRegime}
-          macroSignal={macroSignal}
-          combinedData={combinedData}
-          sharedLiveVix={sharedLiveVix}
-          agentConsensus={agentConsensus}
-          darkMode={darkMode}
-          T={_thm}
-          isMobile={isMobile}
-        />
-      )}
-
-      {/* ── TAB: INSTITUCIONAL ── */}
-      {mainTab==="institucional"&&(
-        <div style={{maxWidth:1400,margin:"0 auto",padding:"16px 24px"}}>
-          <InstitutionalDashboard
-            pair={selectedPair}
-            cotBiasScore={biasArr.find(b=>b.pair===selectedPair)?.biasScore ?? null}
-            macroSignal={macroSignal}
-            T={_thm}
-          />
-        </div>
       )}
 
       {/* ── TAB: RECURSOS ── */}
@@ -5776,29 +5941,16 @@ if (!authUser || forceResetMode) {
       {mainTab==="cuenta"&&(
         <div style={{maxWidth:1500,margin:"0 auto",padding:"24px 32px"}}>
           <div style={{background:_thm.card,border:`1px solid ${_thm.border}`,borderRadius:8,padding:"24px"}}>
-            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:800,color:_thm.txt,letterSpacing:"-0.3px"}}>Account Settings</h2>
-            <p style={{margin:"0 0 20px",fontSize:11,color:_thm.sub}}>Manage your profile, subscription plan, and display preferences</p>
+            <h2 style={{margin:"0 0 6px",fontSize:14,fontWeight:800,color:_thm.txt,letterSpacing:"-0.3px"}}>Configuración de Cuenta</h2>
+            <p style={{margin:"0 0 20px",fontSize:11,color:_thm.sub}}>Gestiona tu perfil, plan de suscripción y preferencias de visualización</p>
             <button onClick={()=>setShowSettings(true)} style={{
               padding:"10px 20px",borderRadius:7,border:"none",cursor:"pointer",
               background:_thm.accent,color:"white",fontSize:12,fontWeight:700,letterSpacing:"0.02em",
-            }}>Open Settings Panel</button>
+            }}>Abrir Panel de Configuración</button>
           </div>
         </div>
       )}
 
-      {/* ── TRADE READINESS CHECKLIST ── */}
-      {profile && (
-        <TradeReadinessChecklist
-          events={sharedEvents}
-          pairsData={pairsData}
-          candles={liveCandles}
-          darkMode={darkMode}
-          T={_thm}
-          onScore={setTradeReadinessScore}
-          selectedPair={selectedPair}
-          onPairChange={setSelectedPair}
-        />
-      )}
 
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}

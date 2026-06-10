@@ -64,7 +64,7 @@ function MarketStatePanel({ result, darkMode, T, isMobile, pair }) {
             {result.alignmentScore}
           </span>
           <span style={{ fontSize: 7, color: T.sub2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Alignment
+            Alineación
           </span>
         </div>
       </div>
@@ -73,26 +73,26 @@ function MarketStatePanel({ result, darkMode, T, isMobile, pair }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
         {[
           {
-            label: 'Institutional',
-            value: result.institutionalBias === 'BULLISH' ? 'Bullish'
-                 : result.institutionalBias === 'BEARISH' ? 'Bearish' : 'Neutral',
+            label: 'Institucional',
+            value: result.institutionalBias === 'BULLISH' ? 'Alcista'
+                 : result.institutionalBias === 'BEARISH' ? 'Bajista' : 'Neutral',
             color: result.institutionalBias === 'BULLISH' ? '#22c55e'
                  : result.institutionalBias === 'BEARISH' ? '#ef4444' : '#6b7280',
           },
           {
-            label: 'Structure',
-            value: result.structureBias === 'BULLISH'     ? 'Bullish'
-                 : result.structureBias === 'BEARISH'     ? 'Bearish'
-                 : result.structureBias === 'COMPRESSION' ? 'Compressed'
-                 : result.structureBias === 'EXPANSION'   ? 'Expanding'
-                 : result.structureBias === 'RANGING'     ? 'Ranging'
-                 : 'No data',
+            label: 'Estructura',
+            value: result.structureBias === 'BULLISH'     ? 'Alcista'
+                 : result.structureBias === 'BEARISH'     ? 'Bajista'
+                 : result.structureBias === 'COMPRESSION' ? 'Comprimido'
+                 : result.structureBias === 'EXPANSION'   ? 'Expansión'
+                 : result.structureBias === 'RANGING'     ? 'Lateral'
+                 : 'Sin datos',
             color: result.structureBias === 'BULLISH'     ? '#22c55e'
                  : result.structureBias === 'BEARISH'     ? '#ef4444'
                  : result.structureBias === 'EXPANSION'   ? '#f97316' : '#6b7280',
           },
           {
-            label: 'Timing Phase',
+            label: 'Fase Táctica',
             value: result.timingLabel,
             color: result.timingState === 'EXPANSION'          ? '#22c55e'
                  : result.timingState === 'CONFIRMATION'       ? '#4ade80'
@@ -128,18 +128,18 @@ function MarketStatePanel({ result, darkMode, T, isMobile, pair }) {
 
       {/* Volatility + Crowding mini-badges */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 8, color: T.sub2, letterSpacing: '0.04em' }}>Context:</span>
+        <span style={{ fontSize: 8, color: T.sub2, letterSpacing: '0.04em' }}>Contexto:</span>
         {[
           {
             key: 'volatility',
-            label: `Volatility: ${result.volatilityLabel}`,
+            label: `Volatilidad: ${result.volatilityLabel}`,
             color: result.volatilityState === 'EXPANSION' ? '#f97316'
                  : result.volatilityState === 'ELEVATED'  ? '#f59e0b'
                  : result.volatilityState === 'NORMAL'    ? '#22c55e' : '#6b7280',
           },
           {
             key: 'crowding',
-            label: `Crowding: ${result.crowdingMeta.label}`,
+            label: `Posic. Masiva: ${result.crowdingMeta.label}`,
             color: result.crowdingMeta.color,
           },
         ].map(({ key, label, color }) => (
@@ -260,9 +260,9 @@ function MarketDecisionLayer({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: T.accent, boxShadow: `0 0 8px ${T.accent}`, flexShrink: 0 }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: T.sub, letterSpacing: '0.08em' }}>
-              MARKET DECISION LAYER
+              CAPA DE DECISIÓN DE MERCADO
             </span>
-            <TooltipInfo text="Institutional contextual interpretation. Fuses HTF structural bias (COT) with tactical momentum to generate a coherent narrative per pair. Not a signal — context and timing intelligence." align="left" />
+            <TooltipInfo text="Interpretación contextual institucional. Fusiona el sesgo estructural HTF (COT) con el momentum táctico para generar una narrativa coherente por par. No es una señal — es inteligencia de contexto y timing." align="left" />
           </div>
           <span style={{
             fontSize: 9, color: T.sub2, letterSpacing: '0.06em',
@@ -330,13 +330,13 @@ function MarketDecisionLayer({
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: isMacroBlocked ? '#ef4444' : '#f59e0b' }}>
               {isMacroBlocked
-                ? 'Macro risk elevated — analysis available for planning only'
-                : 'Execution conditions below threshold — await improvement'}
+                ? 'Riesgo macro elevado — análisis disponible solo para planificación'
+                : 'Condiciones de ejecución por debajo del umbral — esperar mejora'}
             </span>
             <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>
               {isMacroBlocked
-                ? 'Trade Readiness score blocked. Use this context for forward planning, not immediate execution.'
-                : 'Intraday Execution score below threshold. Institutional context remains valid for directional awareness.'}
+                ? 'Puntuación de preparación bloqueada. Usa este contexto para planificación futura, no para ejecución inmediata.'
+                : 'Puntuación de ejecución intradía por debajo del umbral. El contexto institucional sigue siendo válido para orientación direccional.'}
             </div>
           </div>
           <span style={{
@@ -403,7 +403,7 @@ function MarketDecisionLayer({
                       border: `1px solid ${isMacroBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
                       padding: '2px 6px', borderRadius: 99, letterSpacing: '0.05em',
                     }}>
-                      {isMacroBlocked ? '🚫 MACRO BLOCK' : '⚠️ AWAIT'}
+                      {isMacroBlocked ? '🚫 BLOQUEO MACRO' : '⚠️ ESPERAR'}
                     </span>
                   )}
                   {/* Alignment badge — color reflects UNCERTAINTY, not opportunity */}
@@ -423,7 +423,7 @@ function MarketDecisionLayer({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
                 <div style={{ background: detailBg, borderRadius: 8, padding: '8px 10px' }}>
                   <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>
-                    Institutional Bias
+                    Sesgo Institucional
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                     <span style={{ fontSize: 20, fontWeight: 900, color: biasColor, fontFamily: 'monospace', lineHeight: 1 }}>
@@ -436,7 +436,7 @@ function MarketDecisionLayer({
                 </div>
                 <div style={{ background: detailBg, borderRadius: 8, padding: '8px 10px' }}>
                   <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>
-                    {hasRealTac ? 'Tactical Pressure' : 'Flow Signal'}
+                    {hasRealTac ? 'Presión Táctica' : 'Señal de Flujo'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     {hasRealTac ? (
@@ -447,7 +447,7 @@ function MarketDecisionLayer({
                         <span style={{ fontSize: 10, fontWeight: 700, color: pairTac.color }}>{pairTac.label}</span>
                       </>
                     ) : (
-                      <span style={{ fontSize: 10, color: T.sub }}>Awaiting data</span>
+                      <span style={{ fontSize: 10, color: T.sub }}>Esperando datos</span>
                     )}
                   </div>
                 </div>
@@ -462,7 +462,7 @@ function MarketDecisionLayer({
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}>
                   <span style={{ fontSize: 8, fontWeight: 700, color: confluenceData.color, letterSpacing: '0.07em' }}>
-                    CONFLUENCE
+                    CONFLUENCIA
                   </span>
                   <div style={{ flex: 1, height: 3, background: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 99, overflow: 'hidden' }}>
                     <div style={{ width: `${confluenceData.confluenceScore}%`, height: '100%', background: confluenceData.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
@@ -489,10 +489,10 @@ function MarketDecisionLayer({
                   <span style={{ fontSize: 10, flexShrink: 0, marginTop: 1 }}>↔</span>
                   <div>
                     <span style={{ fontSize: 9, fontWeight: 700, color: decay.conflictLevel === 'severe' ? '#ef4444' : '#f97316' }}>
-                      {biasDir === 'bullish' ? 'Bullish' : 'Bearish'} HTF Bias · Tactical Pressure {pairTac.pressure}
+                      Sesgo {biasDir === 'bullish' ? 'Alcista' : 'Bajista'} HTF · Presión Táctica {pairTac.pressure === 'bullish' ? 'alcista' : pairTac.pressure === 'bearish' ? 'bajista' : 'neutral'}
                     </span>
                     <div style={{ fontSize: 9, color: T.sub, marginTop: 1, lineHeight: 1.4 }}>
-                      {pairTac.description ?? 'Short-term price action diverges from structural bias.'}
+                      {pairTac.description ?? 'La acción del precio a corto plazo diverge del sesgo estructural.'}
                     </div>
                   </div>
                 </div>
@@ -506,7 +506,7 @@ function MarketDecisionLayer({
                   userSelect: isPremium ? 'auto' : 'none',
                 }}>
                   <span style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-                    HTF · LTF Alignment
+                    HTF · LTF Alineación
                   </span>
                   <span style={{ fontSize: 22, fontWeight: 900, color: decay.color, fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: 1 }}>
                     {decay.score}
@@ -529,7 +529,7 @@ function MarketDecisionLayer({
                 userSelect: isPremium ? 'auto' : 'none',
               }}>
                 <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', marginBottom: 4, textTransform: 'uppercase' }}>
-                  Contextual Interpretation
+                  Interpretación Contextual
                 </div>
                 <p style={{ fontSize: 10, color: T.sub, lineHeight: 1.5, margin: 0 }}>
                   {narrative.primary}
@@ -543,7 +543,7 @@ function MarketDecisionLayer({
                 userSelect: isPremium ? 'auto' : 'none',
               }}>
                 <div style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', marginBottom: 5, textTransform: 'uppercase' }}>
-                  Execution Readiness
+                  Preparación para Ejecución
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{
@@ -599,7 +599,7 @@ function MarketDecisionLayer({
           </div>
         ))}
         <span style={{ fontSize: 8, color: T.sub2, marginLeft: 'auto', opacity: 0.7 }}>
-          Institutional context only · Not a trading signal
+          Solo contexto institucional · No es una señal de trading
         </span>
       </div>
 
@@ -613,10 +613,10 @@ function MarketDecisionLayer({
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: darkMode ? '#c8d0e0' : '#1e293b', marginBottom: 3 }}>
-              Full institutional context requires premium access
+              El contexto institucional completo requiere acceso premium
             </div>
             <div style={{ fontSize: 10, color: T.sub, lineHeight: 1.4 }}>
-              Narrative intelligence, alignment decay, and execution readiness are reserved for premium users.
+              La narrativa, el decay de alineación y la preparación para ejecución están reservados para usuarios premium.
             </div>
           </div>
           <button
@@ -628,7 +628,7 @@ function MarketDecisionLayer({
               whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(0,85,204,0.3)',
             }}
           >
-            Unlock full context
+            Desbloquear contexto completo
           </button>
         </div>
       )}

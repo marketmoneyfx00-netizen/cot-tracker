@@ -10,7 +10,6 @@
  *   Gold ↔ Bonds        (both safe havens — should move together in RISK_OFF)
  *   Equities ↔ Bonds    (inverse — flight to quality detector)
  *   Gold ↔ Real Yields  (inverse — key inflation/deflation signal)
- *   BTC ↔ DXY           (crypto inversely correlated to USD)
  *   Equities ↔ Oil      (demand-driven growth signal)
  *   Gold ↔ Equities     (divergence = macro uncertainty or regime transition)
  *
@@ -84,18 +83,6 @@ const RELATIONSHIPS = [
       aligned:   'Equities and oil aligned — demand-driven growth signal intact.',
       diverging: 'Equities sold but oil bid — supply shock or geopolitical factor lifting oil despite growth concern.',
       breakdown: 'Equities/Oil relationship broken — demand/supply dynamics completely decoupled.',
-    },
-  },
-  {
-    id:          'btc_dxy',
-    assetA:      { key: 'BTC',  label: 'BTC',  aliases: ['BITCOIN', 'BTC'] },
-    assetB:      { key: 'DXY',  label: 'DXY',  aliases: ['USD Index', 'DXY'] },
-    correlation: 'inverse',   // BTC historically inversely correlated to DXY
-    description: 'BTC / DXY',
-    insight:     {
-      aligned:   'BTC and DXY moving inversely — crypto macro relationship intact.',
-      diverging: 'BTC rising with DXY — unusual. Risk appetite for crypto decoupled from dollar. Idiosyncratic demand.',
-      breakdown: 'BTC/DXY correlation broken — crypto behaving independently of macro dollar dynamics.',
     },
   },
   {
@@ -205,17 +192,17 @@ function maybUpgradeToBreakdown(status, assetAData, assetBData) {
 // ─── SIGNAL CONFIG ───────────────────────────────────────────────────────────
 
 const STATUS_META = {
-  ALIGNED:   { color: '#22c55e', icon: '↔', label: 'ALIGNED',   priority: 1 },
-  DIVERGING: { color: '#f59e0b', icon: '⚡', label: 'DIVERGING', priority: 3 },
-  BREAKDOWN: { color: '#ef4444', icon: '⚠',  label: 'BREAKDOWN', priority: 4 },
-  NEUTRAL:   { color: '#8491a8', icon: '—',  label: 'NO DATA',   priority: 2 },
+  ALIGNED:   { color: '#22c55e', icon: '↔', label: 'ALINEADO',   priority: 1 },
+  DIVERGING: { color: '#f59e0b', icon: '⚡', label: 'DIVERGIENDO', priority: 3 },
+  BREAKDOWN: { color: '#ef4444', icon: '⚠',  label: 'RUPTURA',    priority: 4 },
+  NEUTRAL:   { color: '#8491a8', icon: '—',  label: 'SIN DATOS',  priority: 2 },
 };
 
 // ─── OVERALL INTERMARKET HEALTH ───────────────────────────────────────────────
 
 function computeOverallHealth(signals) {
   const active = signals.filter(s => s.status !== 'NEUTRAL');
-  if (!active.length) return { score: 50, label: 'INSUFFICIENT DATA', color: '#8491a8' };
+  if (!active.length) return { score: 50, label: 'DATOS INSUFICIENTES', color: '#8491a8' };
 
   const breakdowns = active.filter(s => s.status === 'BREAKDOWN').length;
   const diverging  = active.filter(s => s.status === 'DIVERGING').length;

@@ -13,7 +13,6 @@ import { fdClient }         from './client.js';
 import { fdCache }          from './cache/FDCache.js';
 import { adaptEquityBundle, adaptSnapshotBundle } from './adapters/equityAdapter.js';
 import { adaptEarnings }    from './adapters/earningsAdapter.js';
-import { adaptCryptoEtf }   from './adapters/cryptoAdapter.js';
 import { normalizePriceHistory } from './normalizers/fundamentalsNormalizer.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,7 +42,11 @@ export const fdService = {
       `equity:${ticker}`,
       () => fdClient.getEquity(ticker),
       (raw) => fdCache.setEquity(ticker, adaptEquityBundle(raw)),
-    ).then(raw => typeof raw?.ticker === 'string' ? raw : adaptEquityBundle(raw));
+    ).then(raw => {
+      // Distinguish already-adapted data (has source field) from raw API response
+      if (raw?.source === 'financial-datasets') return raw;
+      return adaptEquityBundle(raw);
+    });
   },
 
   /** Earnings history + quality signals */
@@ -100,17 +103,6 @@ export const fdService = {
     return raw;
   },
 
-  /** Crypto ETF basket (IBIT, ETHA, COIN, MSTR...) */
-  async getCryptoEtf() {
-    const hit = fdCache.getCryptoEtf();
-    if (hit) return hit.data;
-
-    const raw = await fdClient.getCryptoEtf();
-    const adapted = adaptCryptoEtf(raw);
-    if (adapted) fdCache.setCryptoEtf(adapted);
-    return adapted;
-  },
-
   /** Is the FD API available (circuit breaker not open) */
   isAvailable: () => fdClient.isAvailable(),
 
@@ -123,10 +115,7 @@ export const fdService = {
   /** Prefetch common data in background (call once on app mount) */
   async prefetch() {
     if (!fdClient.isAvailable()) return;
-    await Promise.allSettled([
-      this.getMacroBasket(),
-      this.getCryptoEtf(),
-    ]);
+    await this.getMacroBasket();
   },
 };
 

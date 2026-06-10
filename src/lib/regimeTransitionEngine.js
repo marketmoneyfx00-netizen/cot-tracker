@@ -46,13 +46,13 @@ export const TRANSITION_TYPES = {
 };
 
 export const TRANSITION_LABELS = {
-  STABLE:                   'Stable / Regime Holding',
-  IMPROVING_RISK_ON:        'Improving Risk-On',
-  DETERIORATING_RISK_ON:    'Deteriorating Risk-On',
-  EMERGING_STAGFLATION:     'Emerging Stagflation',
-  DISINFLATION_BREAKDOWN:   'Disinflation Breakdown',
-  LIQUIDITY_STRESS_BUILDUP: 'Liquidity Stress Build-Up',
-  MACRO_TRANSITION:         'Macro Transition / Mixed',
+  STABLE:                   'Estable / Régimen Consolidado',
+  IMPROVING_RISK_ON:        'Apetito por Riesgo Mejorando',
+  DETERIORATING_RISK_ON:    'Apetito por Riesgo Deteriorando',
+  EMERGING_STAGFLATION:     'Estanflación Emergente',
+  DISINFLATION_BREAKDOWN:   'Ruptura Desinflacionaria',
+  LIQUIDITY_STRESS_BUILDUP: 'Acumulación de Estrés de Liquidez',
+  MACRO_TRANSITION:         'Transición Macro / Mixto',
 };
 
 export const TRANSITION_COLORS = {
@@ -533,32 +533,32 @@ function buildKeyWatch(transitionType, regime, flows) {
 
   if (transitionType === 'IMPROVING_RISK_ON') {
     return equity?.conviction_trend === 'BUILDING'
-      ? 'Monitor equity conviction sustaining 3+ consecutive weeks of net long accumulation'
-      : 'Watch for equity positioning to shift from distribution to accumulation in COT data';
+      ? 'Monitorizar si la convicción en renta variable sostiene 3+ semanas consecutivas de acumulación neta larga'
+      : 'Vigilar si el posicionamiento en renta variable cambia de distribución a acumulación en datos COT';
   }
 
   if (transitionType === 'DETERIORATING_RISK_ON') {
     if (gold?.flow_state?.includes('ACCUMULATING_LONG'))
-      return 'Track whether gold net long continues building — confirms defensive rotation thesis';
-    return 'Monitor equity net long streak breaking and USD/gold divergence for full regime shift confirmation';
+      return 'Seguir si el neto largo en oro continúa creciendo — confirma la tesis de rotación defensiva';
+    return 'Monitorizar la ruptura de la racha neta larga en renta variable y la divergencia USD/oro para confirmación del cambio de régimen';
   }
 
   if (transitionType === 'EMERGING_STAGFLATION') {
-    return 'Watch for bond selling + gold + oil all accelerating simultaneously — triple confirmation needed';
+    return 'Vigilar venta de bonos + oro + petróleo acelerando simultáneamente — se requiere triple confirmación';
   }
 
   if (transitionType === 'DISINFLATION_BREAKDOWN') {
-    return 'Monitor whether bond net long positioning stabilizes or continues to unwind — determines reflation durability';
+    return 'Monitorizar si el posicionamiento neto largo en bonos se estabiliza o continúa deshaciendo — determina la durabilidad de la reflación';
   }
 
   if (transitionType === 'LIQUIDITY_STRESS_BUILDUP') {
-    return 'Track DXY positioning acceleration and whether gold selling continues (margin calls) vs recovers';
+    return 'Seguir la aceleración del posicionamiento en DXY y si la venta de oro continúa (margin calls) o se recupera';
   }
 
-  if (regime === 'RISK_ON') return 'Watch equity conviction streak and bond net positioning for early defensive rotation';
-  if (regime === 'RISK_OFF') return 'Monitor equity futures for early accumulation signals and gold exhaustion risk';
-  if (regime === 'STAGFLATION') return 'Track bond selling deceleration — key leading indicator of stagflation peak';
-  return 'Monitor cross-asset positioning convergence for regime clarity';
+  if (regime === 'RISK_ON') return 'Vigilar la racha de convicción en renta variable y el posicionamiento neto en bonos para señales tempranas de rotación defensiva';
+  if (regime === 'RISK_OFF') return 'Monitorizar futuros de renta variable para señales tempranas de acumulación y riesgo de agotamiento del oro';
+  if (regime === 'STAGFLATION') return 'Seguir la desaceleración de ventas de bonos — indicador líder clave del pico estanflacionario';
+  return 'Monitorizar la convergencia del posicionamiento entre activos para claridad de régimen';
 }
 
 export function transitionColor(type) {

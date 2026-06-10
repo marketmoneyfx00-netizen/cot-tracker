@@ -22,32 +22,32 @@ export const EARNINGS_REGIME = {
 
 const REGIME_META = {
   [EARNINGS_REGIME.BEAT_ACCELERATION]: {
-    color: '#22c55e', label: 'Beat Acceleration', score: 85,
-    drift: 'STRONG_POSITIVE', description: 'Accelerating positive EPS surprises — highest momentum state',
+    color: '#22c55e', label: 'Aceleración de Superaciones', score: 85,
+    drift: 'STRONG_POSITIVE', description: 'Sorpresas EPS positivas acelerando — estado de máximo momentum',
   },
   [EARNINGS_REGIME.STABLE_BEAT]: {
-    color: '#4ade80', label: 'Stable Beat', score: 70,
-    drift: 'MILD_POSITIVE', description: 'Consistent EPS beats with stable surprise magnitude',
+    color: '#4ade80', label: 'Superación Estable', score: 70,
+    drift: 'MILD_POSITIVE', description: 'Superaciones EPS consistentes con magnitud de sorpresa estable',
   },
   [EARNINGS_REGIME.BEAT_DECELERATION]: {
-    color: '#fbbf24', label: 'Beat Deceleration', score: 55,
-    drift: 'NEUTRAL', description: 'Still beating but surprise size shrinking — watch revisions',
+    color: '#fbbf24', label: 'Desaceleración de Superaciones', score: 55,
+    drift: 'NEUTRAL', description: 'Aún supera estimaciones pero la sorpresa se contrae — vigilar revisiones',
   },
   [EARNINGS_REGIME.TRANSITION]: {
-    color: '#f97316', label: 'Transition', score: 45,
-    drift: 'NEUTRAL', description: 'Mixed earnings signals — regime change likely in progress',
+    color: '#f97316', label: 'Transición', score: 45,
+    drift: 'NEUTRAL', description: 'Señales de resultados mixtas — cambio de régimen probablemente en curso',
   },
   [EARNINGS_REGIME.MISS_RECOVERY]: {
-    color: '#fb923c', label: 'Miss Recovery', score: 40,
-    drift: 'MILD_POSITIVE', description: 'Coming off misses; improving but not yet positive',
+    color: '#fb923c', label: 'Recuperación tras Decepciones', score: 40,
+    drift: 'MILD_POSITIVE', description: 'Saliendo de decepciones; mejorando pero aún no positivo',
   },
   [EARNINGS_REGIME.MISS_ACCELERATION]: {
-    color: '#ef4444', label: 'Miss Acceleration', score: 15,
-    drift: 'STRONG_NEGATIVE', description: 'Worsening EPS misses — elevated downside risk',
+    color: '#ef4444', label: 'Aceleración de Decepciones', score: 15,
+    drift: 'STRONG_NEGATIVE', description: 'Decepciones EPS empeorando — riesgo bajista elevado',
   },
   [EARNINGS_REGIME.INSUFFICIENT_DATA]: {
-    color: '#6b7280', label: 'Insufficient Data', score: 50,
-    drift: 'NEUTRAL', description: 'Not enough earnings history to classify regime',
+    color: '#6b7280', label: 'Datos Insuficientes', score: 50,
+    drift: 'NEUTRAL', description: 'Historial de resultados insuficiente para clasificar el régimen',
   },
 };
 

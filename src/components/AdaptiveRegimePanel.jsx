@@ -18,6 +18,7 @@
 
 import { useState } from 'react';
 import { Label, Dot } from './ui/InstitutionalMicro';
+import TooltipInfo from './TooltipInfo.jsx';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,10 @@ function ConvictionBar({ conviction, T }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-        <Label T={T}>Conviction</Label>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Label T={T}>Convicción</Label>
+          <TooltipInfo text="Escala 0–10 que refleja la cohesión entre agentes. 8–10 = señales muy alineadas, alta confianza. 5–7 = alineación parcial, proceder con cautela. Bajo 5 = señales mixtas, no operar." />
+        </span>
         <span style={{ fontSize: 9, fontWeight: 700, color, letterSpacing: '0.06em' }}>
           {conviction.level.toUpperCase()} ({conviction.score}/10)
         </span>
@@ -50,9 +54,9 @@ function ConvictionBar({ conviction, T }) {
 
 function MomentumBadge({ momentum, T }) {
   const cfg = {
-    accelerating: { color: T.green,  icon: '▲', label: 'ACCELERATING' },
-    decelerating: { color: T.orange, icon: '▼', label: 'DECELERATING' },
-    stable:       { color: T.sub,    icon: '→', label: 'STABLE'       },
+    accelerating: { color: T.green,  icon: '▲', label: 'ACELERANDO'   },
+    decelerating: { color: T.orange, icon: '▼', label: 'DESACELERANDO' },
+    stable:       { color: T.sub,    icon: '→', label: 'ESTABLE'       },
   }[momentum.direction] || { color: T.sub, icon: '—', label: 'NEUTRAL' };
 
   return (
@@ -119,7 +123,7 @@ function IntermarketRow({ signal, T, expanded }) {
             </span>
           </div>
         ) : (
-          <span style={{ fontSize: 9, color: T.sub2, flexShrink: 0 }}>No data</span>
+          <span style={{ fontSize: 9, color: T.sub2, flexShrink: 0 }}>Sin datos</span>
         )}
       </div>
     </div>
@@ -169,7 +173,7 @@ export default function AdaptiveRegimePanel({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Dot color={meta.color} pulse={meta.intensity === 'extreme'} />
-              <Label T={T}>Adaptive Regime</Label>
+              <Label T={T}>Régimen Adaptativo</Label>
             </div>
             <MomentumBadge momentum={momentum} T={T} />
           </div>
@@ -195,7 +199,10 @@ export default function AdaptiveRegimePanel({
 
           {/* Action bias */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Label T={T}>Recommended Posture</Label>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Label T={T}>Postura Recomendada</Label>
+              <TooltipInfo text="Orientación operativa derivada del régimen actual. AGRESIVO: contexto muy favorable, buscar setups activamente. MODERADO: contexto parcial, reducir tamaño. DEFENSIVO: evitar nuevas posiciones. NEUTRAL: esperar confirmación." />
+            </span>
             <span style={{
               fontSize: 10, fontWeight: 700, color: meta.color,
               background: meta.color + '15', border: `1px solid ${meta.color}33`,
@@ -214,7 +221,7 @@ export default function AdaptiveRegimePanel({
               borderRadius: 6,
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: T.amber, marginBottom: 3 }}>
-                ⚠ Positioning Exhaustion Detected
+                ⚠ Agotamiento de Posicionamiento Detectado
               </div>
               {exhaustion.extremePairs.slice(0, 2).map((p, i) => (
                 <div key={i} style={{ fontSize: 10, color: T.sub }}>
@@ -233,7 +240,7 @@ export default function AdaptiveRegimePanel({
               borderRadius: 6,
             }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: T.orange, marginBottom: 3 }}>
-                🔄 Regime Transition Risk: {transition.transitionRisk.toUpperCase()}
+                🔄 Riesgo de Transición de Régimen: {transition.transitionRisk.toUpperCase()}
               </div>
               {transition.signals.slice(0, 2).map((s, i) => (
                 <div key={i} style={{ fontSize: 10, color: T.sub, marginBottom: 2 }}>• {s}</div>
@@ -244,7 +251,10 @@ export default function AdaptiveRegimePanel({
           {/* Adaptive drivers */}
           {adaptiveDrivers.length > 0 && (
             <div>
-              <Label T={T}>Institutional Key Drivers</Label>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Label T={T}>Factores Clave Institucionales</Label>
+                <TooltipInfo text="Drivers identificados por los agentes que explican el régimen actual. Origen: posicionamiento COT, spreads de tipos y condiciones de liquidez. Interpretar como contexto de fondo, no como señales de entrada directas." />
+              </span>
               <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {adaptiveDrivers.map((d, i) => (
                   <li key={i} style={{
@@ -277,7 +287,10 @@ export default function AdaptiveRegimePanel({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <Dot color={health.color} />
-            <Label T={T}>Intermarket Correlation</Label>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Label T={T}>Correlación Intermercado</Label>
+              <TooltipInfo text="Mide la coherencia entre activos correlacionados (renta variable, bonos, USD, oro). ALINEADOS: todos apuntan en la misma dirección — señal más fiable. DIVERGENTES: señales mixtas — precaución. RUPTURA: correlación histórica rota — alto riesgo, evitar operar." />
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{
@@ -298,9 +311,9 @@ export default function AdaptiveRegimePanel({
             borderBottom: `1px solid ${T.border}`,
           }}>
             {[
-              { label: 'Aligned',   value: health.aligned   ?? 0, color: T.green  },
-              { label: 'Diverging', value: health.diverging  ?? 0, color: T.amber  },
-              { label: 'Breakdown', value: health.breakdowns ?? 0, color: T.red    },
+              { label: 'Alineados',  value: health.aligned   ?? 0, color: T.green  },
+              { label: 'Divergentes', value: health.diverging ?? 0, color: T.amber  },
+              { label: 'Ruptura',   value: health.breakdowns ?? 0, color: T.red    },
             ].map(({ label, value, color }) => (
               <div key={label} style={{
                 flex: 1, padding: '8px 0', textAlign: 'center',
@@ -345,7 +358,7 @@ export default function AdaptiveRegimePanel({
               border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0,
             }}
           >
-            {imExpanded ? '↑ Show less' : `↓ Show all ${signals.length} pairs + insights`}
+            {imExpanded ? '↑ Mostrar menos' : `↓ Ver todos los ${signals.length} pares + análisis`}
           </button>
           {hasDivergences && (
             <span style={{
@@ -353,7 +366,7 @@ export default function AdaptiveRegimePanel({
               background: T.amber + '15', border: `1px solid ${T.amber}33`,
               padding: '2px 8px', borderRadius: 99,
             }}>
-              {keyDivergences.length} DIVERGENCE{keyDivergences.length > 1 ? 'S' : ''}
+              {keyDivergences.length} DIVERGENCIA{keyDivergences.length > 1 ? 'S' : ''}
             </span>
           )}
         </div>
@@ -365,7 +378,10 @@ export default function AdaptiveRegimePanel({
             borderTop: `1px solid ${T.border}`,
             background: T.amber + '06',
           }}>
-            <Label T={T}>Key Divergence Signals</Label>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Label T={T}>Señales de Divergencia Clave</Label>
+              <TooltipInfo text="Divergencias detectadas entre activos correlacionados. Indican que la relación histórica se ha roto: por ejemplo, renta variable sube pero USD también sube (relación inversa normal). Las divergencias suelen preceder a reversiones o cambios de régimen. Cuantas más divergencias, mayor la incertidumbre." />
+            </span>
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 5 }}>
               {keyDivergences.slice(0, 3).map((d, i) => (
                 <div key={i} style={{

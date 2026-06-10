@@ -140,13 +140,18 @@ ALTER TABLE users_access     ENABLE ROW LEVEL SECURITY;
 -- No additional policies needed for service role — it bypasses RLS by default.
 
 -- Allow authenticated users to read their own payment + access data
-CREATE POLICY IF NOT EXISTS "users_read_own_payments"
+-- Uses auth_user_id = auth.uid() (UUID match) instead of email for stronger identity guarantees.
+-- Email-based policies are weak: email changes or capitalization mismatches can silently
+-- deny access or (theoretically) allow cross-account reads on email collision.
+DROP POLICY IF EXISTS "users_read_own_payments" ON payments;
+CREATE POLICY "users_read_own_payments"
   ON payments FOR SELECT
-  USING (auth.jwt() ->> 'email' = payer_email);
+  USING (auth_user_id = auth.uid());
 
-CREATE POLICY IF NOT EXISTS "users_read_own_access"
+DROP POLICY IF EXISTS "users_read_own_access" ON users_access;
+CREATE POLICY "users_read_own_access"
   ON users_access FOR SELECT
-  USING (auth.jwt() ->> 'email' = email);
+  USING (auth_user_id = auth.uid());
 
 -- ── central_bank_rates table ─────────────────────────────────────────────────
 -- Stores historical central bank policy rate observations fetched from FRED.

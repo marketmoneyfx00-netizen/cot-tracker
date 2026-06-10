@@ -55,7 +55,7 @@ export default function DropZone({
       const { hasTFF, hasLegacy, isCFTC } = detectCotFormat(text);
 
       if (!isCFTC && !hasTFF && !hasLegacy) {
-        setFormatError('Este archivo no parece ser un informe CFTC. Descarga el archivo TFF Combined desde la web del CFTC.');
+        setFormatError('Este archivo no parece ser un informe CFTC. Descarga el archivo TFF Combined desde la web del CFTC (enlace abajo).');
         return;
       }
       onFile(text, file.name);

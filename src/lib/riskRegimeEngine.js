@@ -21,12 +21,12 @@
 // ── REGIME METADATA ───────────────────────────────────────────────────────────
 
 export const REGIME_LABELS = {
-  RISK_ON:          'Risk-On Expansion',
-  RISK_OFF:         'Risk-Off / Defensive',
-  STAGFLATION:      'Stagflationary Pressure',
-  DISINFLATION:     'Disinflationary Repricing',
-  LIQUIDITY_STRESS: 'Liquidity Stress',
-  TRANSITIONAL:     'Transitional / Mixed',
+  RISK_ON:          'Expansión Risk-On',
+  RISK_OFF:         'Risk-Off / Defensivo',
+  STAGFLATION:      'Presión Estanflacionaria',
+  DISINFLATION:     'Reajuste Desinflacionario',
+  LIQUIDITY_STRESS: 'Estrés de Liquidez',
+  TRANSITIONAL:     'Transición / Mixto',
 };
 
 export const REGIME_COLORS = {
@@ -40,29 +40,29 @@ export const REGIME_COLORS = {
 
 const REGIME_DESCRIPTIONS = {
   RISK_ON:
-    'Institutional flows reflect a risk-on posture: equity positioning is bid, bond selling ' +
-    'pressure indicates rising yield tolerance, and demand-side commodity positioning supports ' +
-    'the growth narrative.',
+    'Los flujos institucionales reflejan una postura risk-on: el posicionamiento en renta variable ' +
+    'está comprado, la presión vendedora en bonos indica mayor tolerancia al rendimiento y el ' +
+    'posicionamiento en materias primas por el lado de la demanda respalda la narrativa de crecimiento.',
   RISK_OFF:
-    'Multi-asset positioning reflects defensive institutional behavior: equity exposure is ' +
-    'being reduced, fixed income is absorbing safe-haven demand, and gold positioning reinforces ' +
-    'the risk-aversion signal.',
+    'El posicionamiento multi-activo refleja un comportamiento institucional defensivo: la exposición ' +
+    'a renta variable se está reduciendo, la renta fija absorbe la demanda de refugio seguro y el ' +
+    'posicionamiento en oro refuerza la señal de aversión al riesgo.',
   STAGFLATION:
-    'Positioning is consistent with a stagflationary environment: bond selling pressure implies ' +
-    'rising inflation premium in yields, while simultaneous energy and gold accumulation reflects ' +
-    'supply-driven inflation with deteriorating growth.',
+    'El posicionamiento es coherente con un entorno estanflacionario: la presión vendedora en bonos ' +
+    'implica una prima de inflación creciente en los rendimientos, mientras que la acumulación ' +
+    'simultánea de energía y oro refleja inflación de costes con deterioro del crecimiento.',
   DISINFLATION:
-    'Institutional positioning reflects a disinflationary regime: fixed income is bid ' +
-    '(falling yield expectations), energy positioning is soft, and the demand structure ' +
-    'suggests growth moderation without acute inflation pressure.',
+    'El posicionamiento institucional refleja un régimen desinflacionario: la renta fija está comprada ' +
+    '(expectativas de tipos a la baja), el posicionamiento en energía es débil y la estructura de ' +
+    'demanda sugiere moderación del crecimiento sin presión inflacionaria aguda.',
   LIQUIDITY_STRESS:
-    'Cross-asset positioning signals acute liquidity stress: forced de-risking across asset ' +
-    'classes with USD demand elevated — consistent with margin-call dynamics or systemic ' +
-    'funding pressure.',
+    'El posicionamiento multi-activo señala estrés de liquidez agudo: reducción de riesgo forzada ' +
+    'en todas las clases de activos con la demanda de USD elevada — coherente con dinámicas de ' +
+    'margin call o presión sistémica de financiación.',
   TRANSITIONAL:
-    'Cross-asset COT positioning does not yet establish a dominant macro regime. Signals are ' +
-    'mixed or insufficient to classify with confidence. Monitor for directional convergence ' +
-    'across equities, bonds, and commodity markets.',
+    'El posicionamiento COT multi-activo aún no establece un régimen macro dominante. Las señales ' +
+    'son mixtas o insuficientes para clasificar con confianza. Monitorizar convergencia direccional ' +
+    'en renta variable, bonos y mercados de materias primas.',
 };
 
 // ── SIGNAL EXTRACTION ─────────────────────────────────────────────────────────
@@ -190,32 +190,32 @@ function buildKeyDrivers(regime, eq, bnd, gld, oil, usd, available) {
   const d = [];
 
   if (regime === 'RISK_ON') {
-    if (eq  === 'bullish') d.push('Leveraged Money building net long equity exposure across index futures');
-    if (bnd === 'bearish') d.push('Bond futures net short — rising yield tolerance consistent with growth optimism');
-    if (oil === 'bullish') d.push('Energy positioning reflects demand-side confidence');
-    if (usd === 'bearish') d.push('Dollar softness supports flows into risk-sensitive assets');
+    if (eq  === 'bullish') d.push('Leveraged Money construyendo exposición neta larga en futuros de índices');
+    if (bnd === 'bearish') d.push('Futuros de bonos neto corto — mayor tolerancia al rendimiento coherente con optimismo de crecimiento');
+    if (oil === 'bullish') d.push('Posicionamiento en energía refleja confianza en la demanda');
+    if (usd === 'bearish') d.push('Debilidad del dólar respalda flujos hacia activos de riesgo');
   } else if (regime === 'RISK_OFF') {
-    if (eq  === 'bearish') d.push('Institutional equity exposure deteriorating or net short');
-    if (bnd === 'bullish') d.push('Fixed income absorbing safe-haven demand — net long bond positioning elevated');
-    if (gld === 'bullish') d.push('Gold accumulation confirms haven demand from Leveraged Money');
-    if (usd === 'bullish') d.push('Dollar positioning reflects defensive capital concentration');
+    if (eq  === 'bearish') d.push('Exposición institucional en renta variable deteriorándose o neta corta');
+    if (bnd === 'bullish') d.push('Renta fija absorbiendo demanda de refugio seguro — posicionamiento neto largo elevado');
+    if (gld === 'bullish') d.push('Acumulación de oro confirma demanda de refugio por parte de Leveraged Money');
+    if (usd === 'bullish') d.push('Posicionamiento en dólar refleja concentración defensiva de capital');
   } else if (regime === 'STAGFLATION') {
-    if (bnd === 'bearish') d.push('Bond selling pressure signals rising inflation premium in yield curve');
-    if (gld === 'bullish') d.push('Institutional gold accumulation consistent with inflation hedge positioning');
-    if (oil === 'bullish') d.push('Energy net longs reflect supply-driven cost-push inflation expectations');
-    if (eq  === 'bearish') d.push('Equity selling consistent with margin compression under stagflationary conditions');
+    if (bnd === 'bearish') d.push('Presión vendedora en bonos señala prima de inflación creciente en la curva de rendimientos');
+    if (gld === 'bullish') d.push('Acumulación institucional de oro coherente con posicionamiento en cobertura de inflación');
+    if (oil === 'bullish') d.push('Largos netos en energía reflejan expectativas de inflación de costes por el lado de la oferta');
+    if (eq  === 'bearish') d.push('Venta de renta variable coherente con compresión de márgenes en condiciones estanflacionarias');
   } else if (regime === 'DISINFLATION') {
-    if (bnd === 'bullish') d.push('Bond buying signals institutional expectation of declining yields');
-    if (oil === 'bearish') d.push('Energy net shorts reflect demand softness and deflationary commodity pressure');
-    if (gld === 'bearish') d.push('Gold positioning implies reduced inflation premium in institutional portfolios');
+    if (bnd === 'bullish') d.push('Compra de bonos señala expectativa institucional de rendimientos a la baja');
+    if (oil === 'bearish') d.push('Cortos netos en energía reflejan debilidad de demanda y presión deflacionaria en materias primas');
+    if (gld === 'bearish') d.push('Posicionamiento en oro implica reducción de prima de inflación en carteras institucionales');
   } else if (regime === 'LIQUIDITY_STRESS') {
-    if (usd === 'bullish') d.push('Dollar positioning strongly net long — consistent with funding demand or dollar squeeze');
-    if (eq  === 'bearish') d.push('Equity futures net short signals forced institutional de-risking');
-    d.push('Cross-asset de-risking pattern consistent with margin-call or redemption-driven selling');
+    if (usd === 'bullish') d.push('Posicionamiento en dólar fuertemente neto largo — coherente con demanda de financiación o squeeze del USD');
+    if (eq  === 'bearish') d.push('Futuros de renta variable neto corto señala reducción de riesgo institucional forzada');
+    d.push('Patrón de reducción de riesgo multi-activo coherente con ventas forzadas por margin call o redenciones');
   }
 
   if (available < 3) {
-    d.push('Note: fewer than 3 asset classes available — regime confidence is limited');
+    d.push('Nota: menos de 3 clases de activos disponibles — confianza en el régimen limitada');
   }
 
   return d.slice(0, 4);

@@ -56,15 +56,15 @@ export function computeConfidenceDecay({ biasScore, biasDir, tacState }) {
 
   // ── No tactical data ─────────────────────────────────────────────────────────
   if (!tacPressure || tacPressure === 'insufficient') {
-    if (biasAbs >= 3.5) return buildDecay(78, 'moderate_alignment', 'Institutional Conviction');
-    if (biasAbs >= 1.5) return buildDecay(62, 'moderate_alignment', 'Institutional Bias');
-    return buildDecay(38, 'weak_alignment', 'Awaiting Confirmation');
+    if (biasAbs >= 3.5) return buildDecay(78, 'moderate_alignment', 'Convicción Institucional');
+    if (biasAbs >= 1.5) return buildDecay(62, 'moderate_alignment', 'Sesgo Institucional');
+    return buildDecay(38, 'weak_alignment', 'Esperando Confirmación');
   }
 
   // ── No institutional edge ────────────────────────────────────────────────────
   if (!hasBias) {
-    if (tacPressure === 'neutral') return buildDecay(30, 'weak_alignment', 'No Directional Edge');
-    return buildDecay(42, 'weak_alignment', 'Tactical Signal Only');
+    if (tacPressure === 'neutral') return buildDecay(30, 'weak_alignment', 'Sin Ventaja Direccional');
+    return buildDecay(42, 'weak_alignment', 'Solo Señal Táctica');
   }
 
   // ── Both layers available — compute alignment ─────────────────────────────
@@ -79,7 +79,7 @@ export function computeConfidenceDecay({ biasScore, biasDir, tacState }) {
     if (tacMktState === 'expansion' || tacMktState === 'recovery_phase') score += 5;
     score = Math.min(97, score);
     const level = score >= 80 ? 'high_alignment' : 'moderate_alignment';
-    const label = score >= 80 ? 'High Alignment'  : 'Moderate Alignment';
+    const label = score >= 80 ? 'Alineación Alta'  : 'Alineación Moderada';
     return buildDecay(score, level, label);
   }
 
@@ -89,14 +89,14 @@ export function computeConfidenceDecay({ biasScore, biasDir, tacState }) {
     if (tacMktState === 'tactical_breakdown')      score -= 10;
     if (tacMktState === 'corrective_phase')        score -= 5;
     score = Math.max(5, score);
-    if (score <= 18) return buildDecay(score, 'structural_conflict', 'Structural Conflict');
-    if (score <= 32) return buildDecay(score, 'weak_alignment',      'Alignment Deteriorating');
-    return              buildDecay(score, 'weak_alignment',           'Weak Alignment');
+    if (score <= 18) return buildDecay(score, 'structural_conflict', 'Conflicto Estructural');
+    if (score <= 32) return buildDecay(score, 'weak_alignment',      'Alineación Deteriorando');
+    return              buildDecay(score, 'weak_alignment',           'Alineación Débil');
   }
 
   // ── Partial (one direction, other neutral) ───────────────────────────────
   const score = Math.min(65, 42 + biasAbs * 4);
-  return buildDecay(score, 'moderate_alignment', 'Moderate Alignment');
+  return buildDecay(score, 'moderate_alignment', 'Alineación Moderada');
 }
 
 /**

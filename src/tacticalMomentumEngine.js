@@ -24,8 +24,8 @@ export function computeTacticalMomentum(candles) {
       direction:      null,
       pressure:       'insufficient',
       marketState:    null,
-      label:          'Insufficient Price Data',
-      description:    'Need more live price candles to assess tactical state.',
+      label:          'Datos de Precio Insuficientes',
+      description:    'Se necesitan más velas de precio en vivo para evaluar el estado táctico.',
       color:          '#6b7280',
       velocity:       null,
       pctChange:      null,
@@ -39,7 +39,7 @@ export function computeTacticalMomentum(candles) {
   if (n < MIN_CANDLES) {
     return {
       direction: null, pressure: 'insufficient', marketState: null,
-      label: 'Insufficient Price Data', description: null, color: '#6b7280',
+      label: 'Datos de Precio Insuficientes', description: null, color: '#6b7280',
       velocity: null, pctChange: null, volatilityFlag: false,
     };
   }
@@ -82,65 +82,65 @@ export function computeTacticalMomentum(candles) {
 
   if (dir === 'bearish' && velocity === 'fast' && consistency > 0.5) {
     marketState = 'tactical_breakdown';
-    label       = 'Tactical Breakdown';
+    label       = 'Ruptura Táctica';
     pressure    = 'bearish';
-    description = 'Aggressive bearish momentum active. Directional pressure accelerating lower.';
+    description = 'Momentum bajista agresivo activo. Presión direccional acelerando a la baja.';
     color       = '#ef4444';
 
   } else if (dir === 'bearish' && volatilityFlag) {
     marketState = 'volatility_expansion';
-    label       = 'Volatility Expansion';
+    label       = 'Expansión de Volatilidad';
     pressure    = 'bearish';
-    description = 'Range expanding with downward bias. Elevated uncertainty in short-term price action.';
+    description = 'Rango expandiéndose con sesgo bajista. Incertidumbre elevada en la acción del precio a corto plazo.';
     color       = '#f97316';
 
   } else if (dir === 'bearish' && (velocity === 'fast' || velocity === 'moderate')) {
     marketState = 'corrective_phase';
-    label       = 'Corrective Phase';
+    label       = 'Fase Correctiva';
     pressure    = 'bearish';
-    description = 'Bearish price pressure active. Pullback or correction underway.';
+    description = 'Presión de precio bajista activa. Retroceso o corrección en curso.';
     color       = '#f97316';
 
   } else if (dir === 'bearish') {
     marketState = 'pullback_active';
-    label       = 'Pullback Phase';
+    label       = 'Fase de Retroceso';
     pressure    = 'bearish';
-    description = 'Mild bearish drift. Monitoring for stabilization.';
+    description = 'Deriva bajista leve. Monitorizando estabilización.';
     color       = '#f59e0b';
 
   } else if (dir === 'bullish' && velocity === 'fast' && consistency > 0.5) {
     marketState = 'expansion';
-    label       = 'Expansion Phase';
+    label       = 'Fase de Expansión';
     pressure    = 'bullish';
-    description = 'Strong bullish momentum. Directional pressure accelerating higher.';
+    description = 'Momentum alcista fuerte. Presión direccional acelerando al alza.';
     color       = '#22c55e';
 
   } else if (dir === 'bullish' && volatilityFlag) {
     marketState = 'volatility_expansion';
-    label       = 'Volatility Expansion';
+    label       = 'Expansión de Volatilidad';
     pressure    = 'bullish';
-    description = 'Range expanding with upward bias. Elevated momentum in short-term price action.';
+    description = 'Rango expandiéndose con sesgo alcista. Momentum elevado en la acción del precio a corto plazo.';
     color       = '#f59e0b';
 
   } else if (dir === 'bullish' && velocity === 'moderate') {
     marketState = 'trend_continuation';
-    label       = 'Trend Continuation';
+    label       = 'Continuación de Tendencia';
     pressure    = 'bullish';
-    description = 'Moderate bullish pressure. Structural continuation context developing.';
+    description = 'Presión alcista moderada. Contexto de continuación estructural desarrollándose.';
     color       = '#4ade80';
 
   } else if (dir === 'bullish') {
     marketState = 'recovery_phase';
-    label       = 'Recovery Attempt';
+    label       = 'Intento de Recuperación';
     pressure    = 'bullish';
-    description = 'Mild bullish drift. Building base — monitoring for conviction increase.';
+    description = 'Deriva alcista leve. Construyendo base — monitorizando aumento de convicción.';
     color       = '#86efac';
 
   } else {
     marketState = 'compression';
-    label       = 'Compression';
+    label       = 'Compresión';
     pressure    = 'neutral';
-    description = 'No clear directional momentum. Price in range — awaiting catalyst.';
+    description = 'Sin momentum direccional claro. Precio en rango — aguardando catalizador.';
     color       = '#6b7280';
   }
 

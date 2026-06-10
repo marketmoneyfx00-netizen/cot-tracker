@@ -23,10 +23,10 @@ const SCOPES = [
     id:          'pair',
     level:       'BÁSICO',
     levelColor:  '#60a5fa',
-    title:       'Selected Assets',
-    subtitle:    'Per-asset institutional analysis',
-    desc:        'Export one or more assets. Each selected asset becomes a row in CSV or an object in JSON.',
-    features:    ['Multi-asset selection', 'Bias score + label', 'Execution permission', 'COT divergence', 'Weekly flow'],
+    title:       'Activos Seleccionados',
+    subtitle:    'Análisis institucional por activo',
+    desc:        'Exporta uno o varios activos. Cada activo seleccionado se convierte en una fila CSV o un objeto JSON.',
+    features:    ['Selección multi-activo', 'Score de sesgo + etiqueta', 'Permiso de ejecución', 'Divergencia COT', 'Flujo semanal'],
     formats:     ['csv', 'json'],
     premium:     false,
     icon:        <PairIcon />,
@@ -35,10 +35,10 @@ const SCOPES = [
     id:          'snapshot',
     level:       'AVANZADO',
     levelColor:  '#a78bfa',
-    title:       'Full Market Snapshot',
-    subtitle:    'Complete institutional overview',
-    desc:        'Complete institutional market overview for comparative analysis.',
-    features:    ['All pairs in one file', 'Market overview counts', 'Regime + trend state', 'Macro context'],
+    title:       'Snapshot de Mercado Completo',
+    subtitle:    'Visión institucional completa',
+    desc:        'Visión institucional completa del mercado para análisis comparativo.',
+    features:    ['Todos los pares en un archivo', 'Resumen global de mercado', 'Estado de régimen + tendencia', 'Contexto macro'],
     formats:     ['csv', 'json'],
     premium:     false,
     icon:        <SnapshotIcon />,
@@ -47,34 +47,34 @@ const SCOPES = [
     id:          'raw',
     level:       'POWER USER',
     levelColor:  '#f59e0b',
-    title:       'Raw Institutional Data',
-    subtitle:    'Full layers + history + engine outputs',
-    desc:        'Advanced JSON export for automation and quantitative analysis.',
-    features:    ['All engine layers + deltas', 'Weekly COT history', 'V2 engine internals', 'Carry + confluence + macro'],
+    title:       'Datos Institucionales Raw',
+    subtitle:    'Capas completas + historial + salidas de motor',
+    desc:        'Exportación JSON avanzada para automatización y análisis cuantitativo.',
+    features:    ['Todas las capas del motor + deltas', 'Historial COT semanal', 'Internos del motor V2', 'Carry + confluencia + macro'],
     formats:     ['json'],
     premium:     true,
     icon:        <RawIcon />,
   },
   {
     id:          'visual',
-    level:       'REPORT',
+    level:       'INFORME',
     levelColor:  '#10b981',
-    title:       'Visual Report',
-    subtitle:    'Styled XLSX, HTML & PDF exports',
-    desc:        'Professional branded reports with charts, narratives and formatted tables.',
-    features:    ['XLSX with 3 styled sheets', 'HTML institutional report', 'PDF via browser print', 'Auto-generated narratives'],
+    title:       'Informe Visual',
+    subtitle:    'Exportaciones XLSX, HTML y PDF con estilo',
+    desc:        'Informes profesionales con tablas formateadas, narrativas y datos institucionales.',
+    features:    ['XLSX con 3 hojas con estilo', 'Informe HTML institucional', 'PDF vía impresión del navegador', 'Narrativas generadas automáticamente'],
     formats:     ['xlsx', 'html', 'pdf'],
     premium:     true,
     icon:        <VisualIcon />,
   },
   {
     id:          'intelligence',
-    level:       'INTELLIGENCE',
+    level:       'INTELIGENCIA',
     levelColor:  '#a78bfa',
-    title:       'Intelligence Briefing',
-    subtitle:    'Agent consensus + regime + intermarket',
-    desc:        'Institutional intelligence package: adaptive regime, multi-agent consensus, intermarket health, and priority signals. Telegram-ready text included.',
-    features:    ['Telegram-ready briefing text', 'Agent consensus JSON', 'Adaptive regime export', 'Intermarket signal health', 'Priority signal ranking'],
+    title:       'Briefing de Inteligencia',
+    subtitle:    'Consenso de agentes + régimen + intermercado',
+    desc:        'Paquete de inteligencia institucional: régimen adaptativo, consenso multi-agente, salud de intermercado y señales prioritarias.',
+    features:    ['Texto para Telegram listo', 'JSON de consenso de agentes', 'Exportación de régimen adaptativo', 'Salud de señal intermercado', 'Ranking de señales prioritarias'],
     formats:     ['telegram', 'json'],
     premium:     false,
     icon:        <IntelligenceIcon />,
@@ -171,12 +171,12 @@ function SearchIcon() {
 // ── PRIMITIVES ────────────────────────────────────────────────────────────────
 
 const FORMAT_DESC = {
-  csv:      'Spreadsheet-ready',
-  json:     'For automation',
-  xlsx:     'Best for Excel',
-  html:     'Best for reports',
-  pdf:      'Best for sharing',
-  telegram: 'Copy & paste to Telegram',
+  csv:      'Listo para hoja de cálculo',
+  json:     'Para automatización',
+  xlsx:     'Ideal para Excel',
+  html:     'Ideal para informes',
+  pdf:      'Ideal para compartir',
+  telegram: 'Copiar y pegar en Telegram',
 };
 
 function estimateExportSize(count, format) {
@@ -365,7 +365,7 @@ function MultiAssetSelector({ assets, selected, onChange, T, darkMode }) {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search assets..."
+            placeholder="Buscar activos..."
             style={{
               width:        '100%',
               padding:      '6px 10px 6px 28px',
@@ -398,7 +398,7 @@ function MultiAssetSelector({ assets, selected, onChange, T, darkMode }) {
             transition:   'color 0.15s, border-color 0.15s',
           }}
         >
-          {allSelected ? 'Clear All' : 'Select All'}
+          {allSelected ? 'Limpiar Todo' : 'Seleccionar Todo'}
         </button>
 
         {/* Count badge */}
@@ -410,7 +410,7 @@ function MultiAssetSelector({ assets, selected, onChange, T, darkMode }) {
           minWidth:   72,
           textAlign:  'right',
         }}>
-          {selected.length} selected
+          {selected.length} seleccionado{selected.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -546,7 +546,7 @@ function MultiAssetSelector({ assets, selected, onChange, T, darkMode }) {
               background:   T.card2,
               border:       `1px solid ${T.border}`,
             }}>
-              +{hiddenCount} more
+              +{hiddenCount} más
             </span>
           )}
         </div>
@@ -648,7 +648,7 @@ function ScopeCard({ scope, selected, onClick, isPremium, T, darkMode }) {
           color:      '#f59e0b',
           display:    'flex', alignItems: 'center', gap: 4,
         }}>
-          <LockIcon /> Premium feature — upgrade to unlock
+          <LockIcon /> Función Premium — actualiza para desbloquear
         </div>
       )}
     </button>
@@ -661,13 +661,13 @@ function ExportButton({ onClick, loading, done, disabled, scope, format, selecte
   const isPairScope  = scope?.id === 'pair';
   const multiAsset   = isPairScope && selectedCount > 1;
 
-  const actionLabel  = format === 'pdf'  ? 'Open PDF Preview'
-                     : format === 'xlsx' ? 'Export Excel Report'
-                     : format === 'html' ? 'Export HTML Report'
-                     : multiAsset        ? `Export ${selectedCount} assets`
-                     : 'Export Institutional Data';
+  const actionLabel  = format === 'pdf'  ? 'Abrir Vista Previa PDF'
+                     : format === 'xlsx' ? 'Exportar Informe Excel'
+                     : format === 'html' ? 'Exportar Informe HTML'
+                     : multiAsset        ? `Exportar ${selectedCount} activos`
+                     : 'Exportar Datos Institucionales';
 
-  const label = loading ? 'Generating...' : done ? 'Downloaded' : actionLabel;
+  const label = loading ? 'Generando...' : done ? 'Descargado' : actionLabel;
   const color = done ? '#22c55e' : scope?.levelColor ?? T.accent;
 
   return (
@@ -729,15 +729,15 @@ function SnapshotStatus({ biasArr, fxPairs, macroSignal, selectedCount, T, darkM
   const cftcDate = dates[0] ?? null;
 
   const items = [
-    { label: 'Pairs',       value: `${biasArr?.length ?? 0}` },
+    { label: 'Pares',          value: `${biasArr?.length ?? 0}` },
     selectedCount != null
-      ? { label: 'Selected', value: `${selectedCount}`, accent: true }
+      ? { label: 'Seleccionados', value: `${selectedCount}`, accent: true }
       : null,
-    { label: 'CFTC Report', value: cftcDate ?? '—' },
+    { label: 'Informe CFTC', value: cftcDate ?? '—' },
     macroSignal?.bias
       ? { label: 'Macro', value: macroSignal.bias.replace(/_/g, ' ') }
       : null,
-    { label: 'Status', value: 'Active', dot: true },
+    { label: 'Estado', value: 'Activo', dot: true },
   ].filter(Boolean);
 
   return (
@@ -770,7 +770,7 @@ function SnapshotStatus({ biasArr, fxPairs, macroSignal, selectedCount, T, darkM
         </div>
       ))}
       <div style={{ marginLeft: 'auto', fontSize: 10, color: T.sub }}>
-        COT Tracker · Institutional Data Export
+        COT Tracker · Exportación Institucional
       </div>
     </div>
   );
@@ -1028,9 +1028,9 @@ export default function ExportPanel({
         setTimeout(() => setStatus('idle'), 3000);
 
       } catch (e) {
-        console.error('[ExportPanel]', e);
+        console.error('[ExportPanel] Export failed:', e?.message ?? e);
         setStatus('error');
-        setTimeout(() => setStatus('idle'), 2500);
+        setTimeout(() => setStatus('idle'), 3500);
       }
     }, 0);
   }, [
@@ -1052,11 +1052,11 @@ export default function ExportPanel({
         }}>
           <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.3 }}>⬡</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
-            No snapshot available
+            Sin datos disponibles para exportar
           </div>
           <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6, maxWidth: 380, marginInline: 'auto' }}>
-            The export system requires COT data to be loaded.
-            Await the automatic Friday sync or upload a CFTC file manually from the Sync tab.
+            El sistema de exportación requiere datos COT cargados.
+            Espera la sincronización automática del viernes o sube un archivo CFTC manualmente desde la pestaña Datos.
           </p>
         </div>
       </div>
@@ -1083,7 +1083,7 @@ export default function ExportPanel({
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: T.txt, letterSpacing: '-0.4px', lineHeight: 1.2 }}>
-            Institutional Data Export
+            Exportación de Datos Institucionales
           </h2>
           <span style={{
             fontSize: 9, fontWeight: 700, color: T.sub,
@@ -1092,14 +1092,14 @@ export default function ExportPanel({
           }}>v2.0</span>
         </div>
         <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.6, maxWidth: 560 }}>
-          Professional-grade export system for advanced traders. Access and exploit institutional positioning data in CSV or JSON.
+          Sistema de exportación profesional para traders avanzados. Accede y explota datos de posicionamiento institucional en CSV o JSON.
         </p>
       </div>
 
       {/* ── Scope selector ── */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.08em', marginBottom: 10 }}>
-          EXPORT SCOPE
+          TIPO DE EXPORTACIÓN
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {SCOPES.map(s => (
@@ -1126,7 +1126,7 @@ export default function ExportPanel({
           borderRadius: 12,
         }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.08em', marginBottom: 10 }}>
-            SELECT ASSETS
+            SELECCIONAR ACTIVOS
           </div>
           <MultiAssetSelector
             assets={assetsList}
@@ -1137,7 +1137,7 @@ export default function ExportPanel({
           />
           {noneSelected && (
             <p style={{ margin: '10px 0 0', fontSize: 11, color: '#f59e0b' }}>
-              Select at least one asset to export.
+              Selecciona al menos un activo para exportar.
             </p>
           )}
         </div>
@@ -1158,7 +1158,7 @@ export default function ExportPanel({
         {/* Format toggle */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <label style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
-            FORMAT
+            FORMATO
           </label>
           <FormatToggle
             options={availableFormats}
@@ -1177,12 +1177,12 @@ export default function ExportPanel({
         {/* Scope description */}
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em', marginBottom: 5 }}>
-            DESCRIPTION
+            DESCRIPCIÓN
           </div>
           <p style={{ margin: 0, fontSize: 11, color: T.sub, lineHeight: 1.5 }}>
             {activeScopeMeta?.desc}
             {scope === 'raw' && !isPremium && (
-              <span style={{ color: '#f59e0b', fontWeight: 600 }}> — Premium only.</span>
+              <span style={{ color: '#f59e0b', fontWeight: 600 }}> — Solo Premium.</span>
             )}
           </p>
         </div>
@@ -1191,7 +1191,7 @@ export default function ExportPanel({
         {sizeEstimate && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: T.sub, letterSpacing: '0.07em' }}>
-              EST. SIZE
+              TAM. EST.
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, color: T.txt }}>
               {sizeEstimate}
@@ -1213,16 +1213,16 @@ export default function ExportPanel({
           <span style={{ fontSize: 20, flexShrink: 0 }}>📡</span>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', marginBottom: 4 }}>
-              Intelligence Briefing — Agent Consensus + Regime + Intermarket
+              Briefing de Inteligencia — Consenso de Agentes + Régimen + Intermercado
             </div>
             <p style={{ margin: 0, fontSize: 11, color: T.sub, lineHeight: 1.55 }}>
               {activeFormat === 'telegram'
-                ? 'Downloads a .txt file optimized for Telegram. Bold markers use Telegram MarkdownV2 syntax. Copy the file contents and paste directly into any Telegram chat or channel.'
-                : 'Downloads a structured JSON envelope with all agent scores, adaptive regime state, intermarket health, and priority signals. Use for dashboards, automations, or further analysis.'}
+                ? 'Descarga un archivo .txt optimizado para Telegram. Los marcadores en negrita usan sintaxis MarkdownV2 de Telegram. Copia el contenido y pégalo directamente en cualquier chat o canal de Telegram.'
+                : 'Descarga un sobre JSON estructurado con todos los scores de agentes, estado de régimen adaptativo, salud del intermercado y señales prioritarias.'}
             </p>
             {!agentConsensus && (
               <p style={{ margin: '6px 0 0', fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>
-                ⚠ Agent consensus not yet available — upload COT data and await macro signal to activate.
+                ⚠ Consenso de agentes no disponible — sube datos COT y espera la señal macro para activar.
               </p>
             )}
           </div>
@@ -1249,7 +1249,7 @@ export default function ExportPanel({
                 letterSpacing: '0.05em', whiteSpace: 'nowrap',
               }}
             >
-              {copied ? '✓ Copied!' : '⎘ Copy to Clipboard'}
+              {copied ? '✓ ¡Copiado!' : '⎘ Copiar al Portapapeles'}
             </button>
           )}
         </div>
@@ -1270,18 +1270,18 @@ export default function ExportPanel({
         <div>
           {lastTime && status !== 'loading' && lastFilename && (
             <div style={{ fontSize: 11, color: T.sub }}>
-              Last export: <span style={{ color: '#22c55e', fontWeight: 600 }}>{lastTime}</span>
+              Última exportación: <span style={{ color: '#22c55e', fontWeight: 600 }}>{lastTime}</span>
               {' · '}{lastFilename}
             </div>
           )}
           {status === 'error' && (
-            <div style={{ fontSize: 11, color: '#ef4444' }}>Export failed — check console for details.</div>
+            <div style={{ fontSize: 11, color: '#ef4444' }}>Error al exportar — intenta de nuevo o revisa los datos cargados.</div>
           )}
           {!lastTime && (
             <div style={{ fontSize: 11, color: T.sub2 }}>
               {scope === 'pair'
-                ? `${selectedSymbols.length} asset${selectedSymbols.length !== 1 ? 's' : ''} selected · ${activeFormat.toUpperCase()}`
-                : 'Download raw positioning and layer metrics.'}
+                ? `${selectedSymbols.length} activo${selectedSymbols.length !== 1 ? 's' : ''} seleccionado${selectedSymbols.length !== 1 ? 's' : ''} · ${activeFormat.toUpperCase()}`
+                : 'Descarga métricas de posicionamiento y capas del motor.'}
             </div>
           )}
         </div>
@@ -1310,13 +1310,13 @@ export default function ExportPanel({
         gap:        12,
       }}>
         <p style={{ margin: 0, fontSize: 10, color: T.sub2, lineHeight: 1.6, maxWidth: 440 }}>
-          All exported data reflects the current snapshot state of the COT Tracker engine suite.
-          Export is for analytical use only and does not constitute financial advice.
-          Source: CFTC · Traders in Financial Futures.
+          Todos los datos exportados reflejan el estado actual del sistema de motores de COT Tracker.
+          La exportación es solo para uso analítico y no constituye asesoramiento financiero.
+          Fuente: CFTC · Traders en Futuros Financieros.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: T.sub2, letterSpacing: '0.08em' }}>COT TRACKER</span>
-          <span style={{ fontSize: 9, color: T.sub2 }}>Institutional Export System v2.0</span>
+          <span style={{ fontSize: 9, color: T.sub2 }}>Sistema de Exportación Institucional v2.0</span>
         </div>
       </div>
     </div>

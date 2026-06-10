@@ -1,7 +1,7 @@
 // ESM — convertido desde CJS (package.json tiene "type":"module")
-import { getYields }        from './getYields.js';
-import { calculateSpreads } from './calculateSpreads.js';
-import { buildMacroSignal } from './buildMacroSignal.js';
+import { getYields }        from '../_lib/macro/getYields.js';
+import { calculateSpreads } from '../_lib/macro/calculateSpreads.js';
+import { buildMacroSignal } from '../_lib/macro/buildMacroSignal.js';
 import { verifyAuth }       from '../_lib/auth-middleware.js';
 import { applyRateLimit }   from '../_lib/ratelimit.js';
 

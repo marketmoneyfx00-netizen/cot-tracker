@@ -47,8 +47,8 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
     return signalPriority.signals.slice(0, 2);
   }, [signalPriority]);
 
-  const convLabel = conviction.level === 'high'   ? 'HIGH'
-                  : conviction.level === 'medium' ? 'MED' : 'LOW';
+  const convLabel = conviction.level === 'high'   ? 'ALTA'
+                  : conviction.level === 'medium' ? 'MED' : 'BAJA';
   const convColor = conviction.level === 'high'   ? T.green
                   : conviction.level === 'medium' ? T.amber : T.sub;
 
@@ -74,9 +74,9 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
             display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4,
           }}>
             <span style={{ fontSize: 9, fontWeight: 700, color: T.sub, letterSpacing: '0.1em' }}>
-              MARKET REGIME
+              RÉGIMEN DE MERCADO
             </span>
-            <TooltipInfo text="The adaptive regime classifies the current macro environment across 9 states based on COT positioning, yield spreads, and VIX. It determines what strategies and position sizes are appropriate right now." />
+            <TooltipInfo text="El régimen adaptativo clasifica el entorno macro actual en 9 estados basándose en el posicionamiento COT, spreads de rendimiento y VIX. Determina qué estrategias y tamaños de posición son apropiados en este momento." />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{
@@ -89,12 +89,12 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
               background: convColor + '18', border: `1px solid ${convColor}33`,
               padding: '2px 7px', borderRadius: 99, letterSpacing: '0.06em',
             }}>
-              {convLabel} CONVICTION
+              {convLabel} CONVICCIÓN
             </span>
           </div>
           {posture && (
             <div style={{ fontSize: 10, color: T.sub, marginTop: 4, letterSpacing: '0.02em' }}>
-              Posture: <span style={{ color: T.txt, fontWeight: 600 }}>{posture}</span>
+              Postura: <span style={{ color: T.txt, fontWeight: 600 }}>{posture}</span>
             </div>
           )}
         </div>
@@ -108,12 +108,12 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <span style={{ fontSize: 9, fontWeight: 700, color: T.sub, letterSpacing: '0.1em' }}>
-              TOP SIGNALS
+              SEÑALES PRINCIPALES
             </span>
-            <TooltipInfo text="The two highest-priority signals active right now. Critical (P1) signals require immediate attention. For the full ranked signal list, open the Intelligence tab." />
+            <TooltipInfo text="Las dos señales de mayor prioridad activas en este momento. Las señales críticas (P1) requieren atención inmediata. Para ver la lista completa de señales clasificadas, abre la pestaña Inteligencia." />
           </div>
           {topSignals.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 11, color: T.sub2 }}>No critical signals — conditions are within normal range.</p>
+            <p style={{ margin: 0, fontSize: 11, color: T.sub2 }}>Sin señales críticas — las condiciones están dentro del rango normal.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {topSignals.map((s, i) => {
@@ -167,9 +167,9 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
                 letterSpacing: '0.03em',
               }}
             >
-              Full Analysis →
+              Análisis Completo →
             </button>
-            <span style={{ fontSize: 9, color: T.sub2, textAlign: 'right' }}>Intelligence tab</span>
+            <span style={{ fontSize: 9, color: T.sub2, textAlign: 'right' }}>pestaña Inteligencia</span>
           </div>
         )}
       </div>
@@ -186,7 +186,7 @@ export default function OverviewSummaryStrip({ adaptiveRegime, signalPriority, T
               cursor: 'pointer', letterSpacing: '0.03em',
             }}
           >
-            Open Intelligence for Full Analysis →
+            Abrir Inteligencia para Análisis Completo →
           </button>
         </div>
       )}

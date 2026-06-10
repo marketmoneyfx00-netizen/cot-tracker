@@ -39,17 +39,17 @@ function normBias(score) {
 }
 
 function strengthLabel(score) {
-  if (score == null) return 'Unknown';
+  if (score == null) return 'Desconocido';
   const s = Math.abs(score);
-  if (s >= 80) return 'Extreme';
-  if (s >= 65) return 'High';
-  if (s >= 40) return 'Medium';
-  return 'Low';
+  if (s >= 80) return 'Extremo';
+  if (s >= 65) return 'Alto';
+  if (s >= 40) return 'Medio';
+  return 'Bajo';
 }
 
 function dirLabel(direction) {
-  if (direction === 'bullish') return 'Long';
-  if (direction === 'bearish') return 'Short';
+  if (direction === 'bullish') return 'Largo';
+  if (direction === 'bearish') return 'Corto';
   return 'Neutral';
 }
 
@@ -61,13 +61,13 @@ function colorState(score) {
 }
 
 function signalLabel(score) {
-  if (score >= 75) return 'Strong Bullish';
-  if (score >= 62) return 'Bullish';
-  if (score >= 52) return 'Slight Bullish';
+  if (score >= 75) return 'Alcista Fuerte';
+  if (score >= 62) return 'Alcista';
+  if (score >= 52) return 'Ligeramente Alcista';
   if (score >= 48) return 'Neutral';
-  if (score >= 38) return 'Slight Bearish';
-  if (score >= 25) return 'Bearish';
-  return 'Strong Bearish';
+  if (score >= 38) return 'Ligeramente Bajista';
+  if (score >= 25) return 'Bajista';
+  return 'Bajista Fuerte';
 }
 
 function fmtK(n) {
@@ -156,7 +156,7 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
   return [
     // ── 1. Institutional Bias ─────────────────────────────────────────────
     {
-      name:           'Institutional Bias',
+      name:           'Sesgo Institucional',
       value:          biasVal,
       signal:         bias.label ?? signalLabel(biasVal),
       strength:       strengthLabel(biasVal),
@@ -171,12 +171,12 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
 
     // ── 2. Intraday Execution ─────────────────────────────────────────────
     {
-      name:           'Intraday Execution',
+      name:           'Ejecución Intradía',
       value:          execVal,
-      signal:         exec?.permission?.label ?? 'N/A',
+      signal:         exec?.permission?.label ?? 'N/D',
       strength:       strengthLabel(execVal),
-      direction:      exec?.permission?.label === 'FAVORABLE' ? 'Active'
-                    : exec?.permission?.label === 'IMPROVING' ? 'Wait' : 'Avoid',
+      direction:      exec?.permission?.label === 'FAVORABLE' ? 'Activo'
+                    : exec?.permission?.label === 'IMPROVING' ? 'Esperar' : 'Evitar',
       previous_value: null,
       delta_value:    null,
       delta_percent:  null,
@@ -187,13 +187,13 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
 
     // ── 3. COT Divergence ─────────────────────────────────────────────────
     {
-      name:           'COT Divergence',
+      name:           'Divergencia COT',
       value:          divVal,
       signal:         div.state ?? 'NEUTRAL',
-      strength:       div.state === 'EXHAUSTION'       ? 'High'
-                    : div.state?.includes('DIVERGENCE') ? 'Medium' : 'Low',
-      direction:      div.state?.includes('BULLISH')   ? 'Long'
-                    : div.state?.includes('BEARISH')   ? 'Short' : 'Wait',
+      strength:       div.state === 'EXHAUSTION'       ? 'Alto'
+                    : div.state?.includes('DIVERGENCE') ? 'Medio' : 'Bajo',
+      direction:      div.state?.includes('BULLISH')   ? 'Largo'
+                    : div.state?.includes('BEARISH')   ? 'Corto' : 'Esperar',
       previous_value: null,
       delta_value:    null,
       delta_percent:  null,
@@ -205,11 +205,11 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
 
     // ── 4. CFTC Positioning ───────────────────────────────────────────────
     {
-      name:           'CFTC Positioning',
+      name:           'Posicionamiento CFTC',
       value:          cotNet,
-      signal:         cotNet != null ? (cotNet > 0 ? 'Net Long' : cotNet < 0 ? 'Net Short' : 'Neutral') : 'N/A',
-      strength:       cotNet != null ? strengthLabel(Math.min(100, Math.abs(cotNet) / 1500)) : 'Unknown',
-      direction:      cotNet != null ? (cotNet > 0 ? 'Long' : cotNet < 0 ? 'Short' : 'Neutral') : 'Neutral',
+      signal:         cotNet != null ? (cotNet > 0 ? 'Neto Largo' : cotNet < 0 ? 'Neto Corto' : 'Neutral') : 'N/D',
+      strength:       cotNet != null ? strengthLabel(Math.min(100, Math.abs(cotNet) / 1500)) : 'Desconocido',
+      direction:      cotNet != null ? (cotNet > 0 ? 'Largo' : cotNet < 0 ? 'Corto' : 'Neutral') : 'Neutral',
       previous_value: prevCotNet,
       delta_value:    cotDelta,
       delta_percent:  cotDeltaPct,
@@ -225,9 +225,9 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
 
     // ── 5. Signal Confluence ──────────────────────────────────────────────
     {
-      name:           'Signal Confluence',
+      name:           'Confluencia de Señales',
       value:          conf.confluenceScore ?? conf.score ?? null,
-      signal:         conf.label ?? 'N/A',
+      signal:         conf.label ?? 'N/D',
       strength:       strengthLabel(conf.confluenceScore ?? conf.score),
       direction:      dirLabel(bias.direction),
       previous_value: null,
@@ -246,11 +246,11 @@ export function buildLayersArray(biasEntry, pairRow, exec) {
 
     // ── 6. Weekly Flow ────────────────────────────────────────────────────
     {
-      name:           'Weekly Institutional Flow',
+      name:           'Flujo Institucional Semanal',
       value:          weeklyChg,
-      signal:         weeklyChg != null ? (weeklyChg > 0 ? 'Accumulation' : weeklyChg < 0 ? 'Distribution' : 'Neutral') : 'N/A',
-      strength:       weeklyChg != null ? strengthLabel(Math.min(100, Math.abs(weeklyChg) / 500)) : 'Unknown',
-      direction:      weeklyChg != null ? (weeklyChg > 0 ? 'Long' : weeklyChg < 0 ? 'Short' : 'Neutral') : 'Neutral',
+      signal:         weeklyChg != null ? (weeklyChg > 0 ? 'Acumulación' : weeklyChg < 0 ? 'Distribución' : 'Neutral') : 'N/D',
+      strength:       weeklyChg != null ? strengthLabel(Math.min(100, Math.abs(weeklyChg) / 500)) : 'Desconocido',
+      direction:      weeklyChg != null ? (weeklyChg > 0 ? 'Largo' : weeklyChg < 0 ? 'Corto' : 'Neutral') : 'Neutral',
       previous_value: prevWeeklyChg,
       delta_value:    (weeklyChg != null && prevWeeklyChg != null) ? weeklyChg - prevWeeklyChg : null,
       delta_percent:  null,
@@ -310,26 +310,26 @@ function buildSummaryRow(pairRow, biasEntry, exec, opts = {}) {
 
   // Market regime derived from market_state + divergence
   const regime = (() => {
-    if (biasEntry.state === 'distribution') return 'Reversal Risk';
-    if (biasEntry.state === 'expansion')    return 'Trend Expansion';
-    if (biasEntry.state === 'building')     return 'Building Momentum';
-    if (div.state === 'EXHAUSTION')         return 'Exhaustion Risk';
-    if (div.state?.includes('DIVERGENCE')) return 'Pullback Potential';
-    return 'Compression';
+    if (biasEntry.state === 'distribution') return 'Riesgo de Reversión';
+    if (biasEntry.state === 'expansion')    return 'Expansión de Tendencia';
+    if (biasEntry.state === 'building')     return 'Momentum en Construcción';
+    if (div.state === 'EXHAUSTION')         return 'Riesgo de Agotamiento';
+    if (div.state?.includes('DIVERGENCE')) return 'Potencial de Retroceso';
+    return 'Compresión';
   })();
 
   // Trend state from signal + bias
   const trendState = (() => {
     const s = signal.signal;
     const lvl = signal.strength ?? 0;
-    if (s === 'buy'  && lvl >= 3) return 'Strong Swing Bullish';
-    if (s === 'buy'  && lvl >= 2) return 'Swing Bullish';
-    if (s === 'buy')               return 'Mild Bullish';
-    if (s === 'sell' && lvl >= 3) return 'Strong Swing Bearish';
-    if (s === 'sell' && lvl >= 2) return 'Swing Bearish';
-    if (s === 'sell')              return 'Mild Bearish';
-    if (s === 'indecision')        return 'Transitional';
-    return 'Neutral / Wait';
+    if (s === 'buy'  && lvl >= 3) return 'Swing Alcista Fuerte';
+    if (s === 'buy'  && lvl >= 2) return 'Swing Alcista';
+    if (s === 'buy')               return 'Ligeramente Alcista';
+    if (s === 'sell' && lvl >= 3) return 'Swing Bajista Fuerte';
+    if (s === 'sell' && lvl >= 2) return 'Swing Bajista';
+    if (s === 'sell')              return 'Ligeramente Bajista';
+    if (s === 'indecision')        return 'Transicional';
+    return 'Neutral / Esperar';
   })();
 
   const summary = [
@@ -352,7 +352,7 @@ function buildSummaryRow(pairRow, biasEntry, exec, opts = {}) {
     divergence_score:           round((div.strength ?? 0) * 100, 1),
     divergence_label:           div.state ?? 'NEUTRAL',
     flow_score:                 latest.levChgNet ?? null,
-    flow_label:                 (latest.levChgNet ?? 0) > 0 ? 'Accumulation' : (latest.levChgNet ?? 0) < 0 ? 'Distribution' : 'Neutral',
+    flow_label:                 (latest.levChgNet ?? 0) > 0 ? 'Acumulación' : (latest.levChgNet ?? 0) < 0 ? 'Distribución' : 'Neutral',
 
     market_regime:              regime,
     trend_state:                trendState,
@@ -394,8 +394,8 @@ function buildMarketOverview(biasArr) {
     : null;
 
   const globalBias = avgBias != null
-    ? (avgBias > 0.5 ? 'Bullish Tilt' : avgBias < -0.5 ? 'Bearish Tilt' : 'Neutral')
-    : 'N/A';
+    ? (avgBias > 0.5 ? 'Inclinación Alcista' : avgBias < -0.5 ? 'Inclinación Bajista' : 'Neutral')
+    : 'N/D';
 
   return {
     total_pairs:     biasArr.length,
@@ -782,17 +782,34 @@ export function buildHTMLExport(biasArr, fxPairs, opts = {}) {
 
 /**
  * Opens the HTML report in a new window and triggers window.print().
- * Caller should call this directly (requires browser context).
+ * Uses Blob URL to avoid document.write() cross-browser issues.
  */
 export function openPDFPrint(biasArr, fxPairs, opts = {}) {
-  const html = generateHTMLReport(biasArr, fxPairs, opts);
-  const win  = window.open('', '_blank');
-  if (!win) return false;
-  win.document.write(html);
-  win.document.close();
-  // Give the browser a frame to render before triggering print
-  win.onload = () => win.print();
-  return true;
+  try {
+    const html = generateHTMLReport(biasArr, fxPairs, opts);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const win  = window.open(url, '_blank');
+    if (!win) {
+      // Fallback: pop-up blocked — download instead
+      const a = document.createElement('a');
+      a.href = url; a.download = buildFilename('visual', null, 'html');
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 300);
+      return true;
+    }
+    // Auto-trigger print dialog once the report finishes loading
+    win.addEventListener('load', () => {
+      setTimeout(() => { win.print(); }, 300);
+    });
+    // Revoke after reasonable delay
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── MULTI-PAIR EXPORT ─────────────────────────────────────────────────────────
@@ -944,11 +961,6 @@ export function buildIntelligenceExport(opts = {}) {
           quality: ag.agents?.intraday?.quality,
           signals: ag.agents?.intraday?.signals ?? [],
         },
-        crypto: {
-          score:          ag.agents?.cryptoFlow?.score,
-          crypto_regime:  ag.agents?.cryptoFlow?.cryptoRegime,
-          signals:        ag.agents?.cryptoFlow?.signals ?? [],
-        },
       },
       conditions: {
         best:  ag.conditions?.best ?? [],
@@ -1094,7 +1106,6 @@ export function buildTelegramBriefing(opts = {}) {
     if (a.macro)      lines.push(`• Macro ${a.macro.score}/100 — ${a.macro.usdBias?.replace(/_/g, ' ') ?? '—'}`);
     if (a.liquidity)  lines.push(`• Liquidity ${a.liquidity.score}/100 — ${a.liquidity.condition ?? '—'}`);
     if (a.intraday)   lines.push(`• Intraday ${a.intraday.score}/100 — ${a.intraday.quality ?? '—'}`);
-    if (a.cryptoFlow) lines.push(`• Crypto ${a.cryptoFlow.score}/100 — ${a.cryptoFlow.cryptoRegime?.replace(/_/g, '-') ?? '—'}`);
     lines.push('');
   }
 

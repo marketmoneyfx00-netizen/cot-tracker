@@ -20,7 +20,6 @@ const TTL = {
   equity:      6 * 3_600_000, // 6 h — full equity bundle
   company:     24 * 3_600_000,// 24 h — company facts
   macroBasket: 2 * 60_000,    // 2 min — macro snapshot basket
-  cryptoEtf:   2 * 60_000,    // 2 min — crypto ETF basket
 };
 
 class FDCache {
@@ -73,8 +72,6 @@ class FDCache {
   setEquity(ticker, data)      { return this.set(`equity:${ticker}`,      data, TTL.equity);      }
   setCompany(ticker, data)     { return this.set(`company:${ticker}`,     data, TTL.company);     }
   setMacroBasket(data)         { return this.set('macro-basket',          data, TTL.macroBasket); }
-  setCryptoEtf(data)           { return this.set('crypto-etf',            data, TTL.cryptoEtf);   }
-
   getSnapshot(ticker)          { return this.get(`snapshot:${ticker}`);    }
   getPrices(ticker)            { return this.get(`prices:${ticker}`);      }
   getEarnings(ticker)          { return this.get(`earnings:${ticker}`);    }
@@ -82,7 +79,6 @@ class FDCache {
   getEquity(ticker)            { return this.get(`equity:${ticker}`);      }
   getCompany(ticker)           { return this.get(`company:${ticker}`);     }
   getMacroBasket()             { return this.get('macro-basket');          }
-  getCryptoEtf()               { return this.get('crypto-etf');            }
 
   // ── Invalidation ──────────────────────────────────────────────────────────
 

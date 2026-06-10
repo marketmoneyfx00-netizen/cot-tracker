@@ -120,7 +120,7 @@ function buildBiasBarChart(biasArr) {
 
   return `
     <svg width="${labelW + chartW + 50}" height="${totalH}" xmlns="http://www.w3.org/2000/svg">
-      <text x="${midX}" y="4" text-anchor="middle" fill="${PALETTE.sub2}" font-size="8" font-family="sans-serif">Bias Score (−5 to +5)</text>
+      <text x="${midX}" y="4" text-anchor="middle" fill="${PALETTE.sub2}" font-size="8" font-family="sans-serif">Puntuación de Sesgo (−5 a +5)</text>
       ${rows.join('')}
     </svg>
   `;
@@ -152,7 +152,7 @@ function buildDonutChart(bull, bear, neutral) {
   const neutPath  = neutA  > gap * 2 ? `<path d="${arcPath(s3, e3, r)}" stroke="${PALETTE.neutral}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>` : '';
 
   const pctBull = Math.round((bull / total) * 100);
-  const dominant = bull > bear ? 'BULLISH' : bear > bull ? 'BEARISH' : 'NEUTRAL';
+  const dominant = bull > bear ? 'ALCISTA' : bear > bull ? 'BAJISTA' : 'NEUTRAL';
   const domColor = bull > bear ? PALETTE.bull : bear > bull ? PALETTE.bear : PALETTE.neutral;
 
   return `
@@ -160,12 +160,12 @@ function buildDonutChart(bull, bear, neutral) {
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${PALETTE.card2}" stroke-width="${sw}"/>
       ${bullPath}${bearPath}${neutPath}
       <text x="${cx}" y="${cy - 5}" text-anchor="middle" fill="${domColor}" font-size="11" font-weight="bold" font-family="sans-serif">${dominant}</text>
-      <text x="${cx}" y="${cy + 10}" text-anchor="middle" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">${pctBull}% Long Bias</text>
+      <text x="${cx}" y="${cy + 10}" text-anchor="middle" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">${pctBull}% Sesgo Largo</text>
       <!-- Legend -->
       <circle cx="135" cy="24" r="5" fill="${PALETTE.bull}"/>
-      <text x="143" y="28" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">Bull: ${bull}</text>
+      <text x="143" y="28" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">Alcista: ${bull}</text>
       <circle cx="135" cy="44" r="5" fill="${PALETTE.bear}"/>
-      <text x="143" y="48" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">Bear: ${bear}</text>
+      <text x="143" y="48" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">Bajista: ${bear}</text>
       <circle cx="135" cy="64" r="5" fill="${PALETTE.neutral}"/>
       <text x="143" y="68" fill="${PALETTE.sub}" font-size="9" font-family="sans-serif">Neutral: ${neutral}</text>
     </svg>
@@ -268,17 +268,45 @@ function buildCSS() {
     .print-btn:hover { background: #1d4ed8; }
 
     @media print {
-      html, body { background: #fff !important; color: #111 !important; }
-      .cover, .card, .pair-section, .chart-box, .stat-cell, .layer-cell { background: #f8f9fa !important; border-color: #dee2e6 !important; color: #111 !important; }
-      .cover::before { display: none; }
+      @page { margin: 0; size: A4; }
+      html, body {
+        background: #fff !important;
+        color: #111 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body { padding: 10mm 10mm; }
+      .page { padding: 0; max-width: 100%; }
       .print-btn { display: none !important; }
-      .page { padding: 12px 16px; max-width: 100%; }
-      .cover-title, .pair-name, .stat-value, .layer-value { color: #111 !important; }
-      .cover-subtitle, .stat-desc, .stat-label, .card-title, .layer-name, .narrative-text, .layer-signal, .macro-label, .footer-text { color: #555 !important; }
+
+      /* Light backgrounds */
+      .cover, .card, .pair-section, .chart-box, .stat-cell, .layer-cell, .macro-bar { background: #f4f6f9 !important; border-color: #d0d7e3 !important; }
+      .summary-text { background: #eef2ff !important; border-left-color: #2563eb !important; color: #1e293b !important; }
+      thead th { background: #e8edf4 !important; color: #555 !important; border-color: #d0d7e3 !important; }
+      .cover::before { display: none; }
+
+      /* Text readability */
+      .cover-title, .pair-name, .stat-value, .layer-value, .pair-label { color: #111 !important; }
+      .cover-subtitle, .stat-desc, .stat-label, .card-title, .layer-name,
+      .narrative-text, .layer-signal, .macro-label, .macro-value,
+      .footer-text, .cover-meta-label, .chart-title { color: #444 !important; }
+      .cover-brand, .cover-meta-value { color: #2563eb !important; }
+
+      /* Table sizing */
       table { font-size: 10px; }
-      thead th, .cover-brand, .cover-meta-label { color: #666 !important; background: #eee !important; }
-      summary-text { border-left-color: #2563eb !important; background: #f0f4ff !important; color: #333 !important; }
-      @page { margin: 15mm 12mm; }
+      tbody td { padding: 6px 8px; }
+
+      /* ── PAGE BREAK RULES ──
+         Only avoid breaks on small atomic blocks.
+         Large cards intentionally flow across pages to avoid whitespace gaps. */
+      .stat-cell      { page-break-inside: avoid; break-inside: avoid; }
+      .layer-cell     { page-break-inside: avoid; break-inside: avoid; }
+      .macro-bar      { page-break-inside: avoid; break-inside: avoid; }
+      .macro-item     { page-break-inside: avoid; break-inside: avoid; }
+      .summary-text   { page-break-inside: avoid; break-inside: avoid; }
+      .pair-section-header { page-break-after: avoid; break-after: avoid; }
+      .card-title     { page-break-after: avoid; break-after: avoid; }
+      tbody tr        { page-break-inside: avoid; break-inside: avoid; }
     }
   `;
 }
@@ -289,7 +317,7 @@ function buildMarketTable(biasArr, execMap) {
   const rows = biasArr.map(b => {
     const dir   = b.bias?.direction ?? b.direction ?? 'neutral';
     const score = round(b.bias?.score ?? b.score, 1) ?? 0;
-    const label = b.bias?.label ?? (dir === 'bullish' ? 'Bullish' : dir === 'bearish' ? 'Bearish' : 'Neutral');
+    const label = b.bias?.label ?? (dir === 'bullish' ? 'Alcista' : dir === 'bearish' ? 'Bajista' : 'Neutral');
     const exec  = execMap?.[b.pair];
     const execS = exec?.score;
     const execL = exec?.permission?.label ?? '—';
@@ -333,13 +361,13 @@ function buildMarketTable(biasArr, execMap) {
     <table>
       <thead>
         <tr>
-          <th>Pair</th>
-          <th style="min-width:130px;">Bias Score</th>
-          <th>Signal</th>
-          <th>Execution</th>
-          <th>Divergence</th>
+          <th>Par</th>
+          <th style="min-width:130px;">Puntuación de Sesgo</th>
+          <th>Señal</th>
+          <th>Ejecución</th>
+          <th>Divergencia</th>
           <th>Z-Score</th>
-          <th>Confluence</th>
+          <th>Confluencia</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -350,10 +378,10 @@ function buildMarketTable(biasArr, execMap) {
 // ── ASSET CLASS LABEL ─────────────────────────────────────────────────────────
 
 const CAT_META = {
-  fx:          { label: 'FX — Currency Pairs',         icon: '💱', color: '#2563eb', readingType: 'Carry / USD Regime' },
-  index:       { label: 'Equity Indices',               icon: '📈', color: '#22c55e', readingType: 'Risk Appetite' },
-  bonds:       { label: 'Fixed Income — Bond Futures',  icon: '🏛️', color: '#60a5fa', readingType: 'Rate Expectations' },
-  commodities: { label: 'Commodities',                  icon: '🛢️', color: '#f59e0b', readingType: 'Inflation / Demand' },
+  fx:          { label: 'FX — Pares de Divisas',           icon: '💱', color: '#2563eb', readingType: 'Carry / Régimen USD' },
+  index:       { label: 'Índices de Renta Variable',        icon: '📈', color: '#22c55e', readingType: 'Apetito de Riesgo' },
+  bonds:       { label: 'Renta Fija — Futuros de Bonos',   icon: '🏛️', color: '#60a5fa', readingType: 'Expectativas de Tipos' },
+  commodities: { label: 'Materias Primas',                  icon: '🛢️', color: '#f59e0b', readingType: 'Inflación / Demanda' },
 };
 
 // Asset-class-specific reading banner (displayed above pair section)
@@ -363,28 +391,28 @@ function buildAssetReadingBanner(cat, biasEntry) {
 
   const READINGS = {
     fx: {
-      bullish: 'Long base currency — Leveraged Money net long, carry-aligned',
-      bearish: 'Short base currency — Leveraged Money net short, carry pressure',
-      neutral: 'No dominant FX directional bias from Leveraged Money',
+      bullish: 'Largo divisa base — Leveraged Money neto largo, carry alineado',
+      bearish: 'Corto divisa base — Leveraged Money neto corto, presión de carry',
+      neutral: 'Sin sesgo direccional FX dominante desde Leveraged Money',
     },
     index: {
-      bullish: 'Risk-On — institutional equity risk appetite expanding',
-      bearish: 'Risk-Off — institutional de-risking in equity futures',
-      neutral: 'Neutral equity positioning — no dominant directional signal',
+      bullish: 'Risk-On — apetito institucional por renta variable en expansión',
+      bearish: 'Risk-Off — derisking institucional en futuros de renta variable',
+      neutral: 'Posicionamiento en renta variable neutral — sin señal direccional dominante',
     },
     bonds: {
-      bullish: 'Rate-decline expectation — fixed income accumulation (duration bid)',
-      bearish: 'Rate-rise expectation — bond selling, inflation premium in yields',
-      neutral: 'No dominant rate expectation signal from Leveraged Money',
+      bullish: 'Expectativa de bajada de tipos — acumulación de renta fija (duration bid)',
+      bearish: 'Expectativa de subida de tipos — venta de bonos, prima de inflación en yields',
+      neutral: 'Sin señal dominante de expectativa de tipos desde Leveraged Money',
     },
     commodities: {
-      bullish: 'Commodity bid — demand-side confidence or inflation hedge accumulation',
-      bearish: 'Commodity selling — demand softness or disinflation positioning',
-      neutral: 'No dominant commodity directional signal',
+      bullish: 'Demanda de materias primas — confianza de demanda o cobertura de inflación',
+      bearish: 'Venta de materias primas — debilidad de demanda o posicionamiento desinflacionario',
+      neutral: 'Sin señal direccional dominante en materias primas',
     },
   };
 
-  const reading = READINGS[cat]?.[dir] ?? 'No signal available';
+  const reading = READINGS[cat]?.[dir] ?? 'Sin señal disponible';
   const dirColor = dir === 'bullish' ? PALETTE.bull : dir === 'bearish' ? PALETTE.bear : PALETTE.neutral;
 
   return `
@@ -406,7 +434,7 @@ function buildAssetGroupHeader(cat) {
       <span style="font-size:18px;">${meta.icon}</span>
       <div>
         <div style="font-size:14px;font-weight:800;color:${PALETTE.txt};letter-spacing:-0.3px;">${esc(meta.label)}</div>
-        <div style="font-size:10px;color:${PALETTE.sub};margin-top:1px;">CFTC Leveraged Money Positioning</div>
+        <div style="font-size:10px;color:${PALETTE.sub};margin-top:1px;">Posicionamiento CFTC Leveraged Money</div>
       </div>
     </div>
   `;
@@ -457,15 +485,15 @@ function buildRatesSection(ratesData) {
 
   return `
     <div class="card">
-      <div class="card-title">Central Bank Rates &amp; Carry Differentials</div>
+      <div class="card-title">Tipos de Bancos Centrales &amp; Diferenciales de Carry</div>
       ${bankStances ? `
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${bankStances}</div>
       ` : ''}
       ${carryRows ? `
-        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">TOP CARRY DIFFERENTIALS</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">TOP DIFERENCIALES DE CARRY</div>
         <table>
           <thead><tr>
-            <th>Pair</th><th>Base CB / Rate</th><th>Quote CB / Rate</th><th>Diff</th><th>Carry Direction</th>
+            <th>Par</th><th>BC Base / Tipo</th><th>BC Cotizada / Tipo</th><th>Diferencial</th><th>Dirección Carry</th>
           </tr></thead>
           <tbody>${carryRows}</tbody>
         </table>
@@ -488,7 +516,7 @@ function buildConvictionBadge(conviction) {
   const barW = Math.max(2, score);
   return `
     <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px;">
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;">CONVICTION</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;">CONVICCIÓN</div>
       <div style="background:${PALETTE.card2};border-radius:4px;height:8px;width:80px;overflow:hidden;">
         <div style="height:100%;width:${barW}%;background:${color};border-radius:4px;transition:width 0.3s;"></div>
       </div>
@@ -510,9 +538,9 @@ function buildHorizonTags(horizon) {
   };
   return `
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px;">
-      ${tag('Tactical', horizon.tactical?.view)}
-      ${tag('Swing',    horizon.swing?.view)}
-      ${tag('Macro',    horizon.macro?.view)}
+      ${tag('Táctico', horizon.tactical?.view)}
+      ${tag('Swing',   horizon.swing?.view)}
+      ${tag('Macro',   horizon.macro?.view)}
     </div>`;
 }
 
@@ -546,31 +574,31 @@ function buildPriorityMatrixSection(matrix) {
   return `
   <div style="background:${PALETTE.card};border:1px solid ${PALETTE.border};border-radius:8px;padding:20px 24px;margin-bottom:20px;">
     <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:14px;">
-      DECISION PRIORITY MATRIX
+      MATRIZ DE PRIORIDAD DE DECISIÓN
     </div>
 
     ${topRows ? `
-    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">TOP OPPORTUNITIES</div>
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">MEJORES OPORTUNIDADES</div>
     <table style="font-size:10px;width:100%;margin-bottom:16px;">
       <thead><tr>
-        <th style="text-align:left;">ASSET</th>
+        <th style="text-align:left;">ACTIVO</th>
         <th style="text-align:left;">DIR</th>
-        <th style="text-align:left;">CONVICTION</th>
+        <th style="text-align:left;">CONVICCIÓN</th>
         <th style="text-align:left;">SWING</th>
         <th style="text-align:left;">MACRO</th>
-        <th style="text-align:left;">CONFIRMING FACTORS</th>
+        <th style="text-align:left;">FACTORES CONFIRMADORES</th>
       </tr></thead>
       <tbody>${topRows}</tbody>
     </table>` : ''}
 
     ${crowdedRows ? `
-    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:8px;">CROWDED / FADE RISK</div>
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:8px;">OPERACIONES SATURADAS / RIESGO FADE</div>
     <table style="font-size:10px;width:100%;">
       <thead><tr>
-        <th style="text-align:left;">ASSET</th>
+        <th style="text-align:left;">ACTIVO</th>
         <th style="text-align:left;">DIR</th>
         <th style="text-align:left;">Z-SCORE</th>
-        <th colspan="3" style="text-align:left;">WARNING</th>
+        <th colspan="3" style="text-align:left;">ADVERTENCIA</th>
       </tr></thead>
       <tbody>${crowdedRows}</tbody>
     </table>` : ''}
@@ -592,14 +620,14 @@ function buildScenarioBlock(enriched) {
 
   return `
     <div style="margin-top:18px;border-top:1px solid ${PALETTE.border};padding-top:16px;">
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:12px;">SCENARIOS &amp; CONCLUSION</div>
-      ${row('Primary', PALETTE.bull, scenario_main)}
-      ${row('Alternative', PALETTE.amber, scenario_alt)}
-      ${row('Invalidation', PALETTE.bear, invalidation)}
-      ${rates_reading ? row('Rates / Carry', PALETTE.purple, rates_reading) : ''}
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:12px;">ESCENARIOS Y CONCLUSIÓN</div>
+      ${row('Principal', PALETTE.bull, scenario_main)}
+      ${row('Alternativo', PALETTE.amber, scenario_alt)}
+      ${row('Invalidación', PALETTE.bear, invalidation)}
+      ${rates_reading ? row('Tipos / Carry', PALETTE.purple, rates_reading) : ''}
       ${conclusion ? `
         <div style="margin-top:12px;background:${PALETTE.card2};border-left:3px solid ${PALETTE.accent};padding:10px 14px;border-radius:4px;">
-          <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:5px;">OPERATIONAL CONCLUSION</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:5px;">CONCLUSIÓN OPERACIONAL</div>
           <div style="font-size:10.5px;color:${PALETTE.txt};line-height:1.55;">${esc(conclusion)}</div>
         </div>` : ''}
     </div>`;
@@ -614,12 +642,12 @@ function buildFlowStateTag(fp) {
     ? ` · Vel: ${fp.positioning_velocity > 0 ? '+' : ''}${Math.round(fp.positioning_velocity / 1000)}K`
     : '';
   const exh   = fp.exhaustion_probability != null && fp.exhaustion_probability >= 40
-    ? ` · Exhaust: ${fp.exhaustion_probability}%`
+    ? ` · Agotamiento: ${fp.exhaustion_probability}%`
     : '';
   return `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     <span style="background:${color}20;border:1px solid ${color};color:${color};border-radius:4px;padding:2px 8px;font-size:9.5px;font-weight:700;letter-spacing:0.05em;">${esc(fp.flow_state_label ?? fp.flow_state)}</span>
-    ${fp.conviction_trend && fp.conviction_trend !== 'UNKNOWN' ? `<span style="color:${PALETTE.sub};font-size:9px;">Conv. Trend: <b style="color:${fp.conviction_trend === 'BUILDING' ? PALETTE.bull : fp.conviction_trend === 'FADING' || fp.conviction_trend === 'REVERSING' ? PALETTE.bear : PALETTE.neutral};">${fp.conviction_trend}</b></span>` : ''}
-    ${fp.structural_strength != null ? `<span style="color:${PALETTE.sub};font-size:9px;">Str. Strength: <b style="color:${fp.structural_strength >= 70 ? PALETTE.bull : fp.structural_strength >= 40 ? PALETTE.amber : PALETTE.bear};">${fp.structural_strength}</b></span>` : ''}
+    ${fp.conviction_trend && fp.conviction_trend !== 'UNKNOWN' ? `<span style="color:${PALETTE.sub};font-size:9px;">Tendencia Conv.: <b style="color:${fp.conviction_trend === 'BUILDING' ? PALETTE.bull : fp.conviction_trend === 'FADING' || fp.conviction_trend === 'REVERSING' ? PALETTE.bear : PALETTE.neutral};">${fp.conviction_trend === 'BUILDING' ? 'EN ALZA' : fp.conviction_trend === 'FADING' ? 'DEBILITANDO' : fp.conviction_trend === 'REVERSING' ? 'REVIRTIENDO' : fp.conviction_trend}</b></span>` : ''}
+    ${fp.structural_strength != null ? `<span style="color:${PALETTE.sub};font-size:9px;">Fuerza Estructural: <b style="color:${fp.structural_strength >= 70 ? PALETTE.bull : fp.structural_strength >= 40 ? PALETTE.amber : PALETTE.bear};">${fp.structural_strength}</b></span>` : ''}
     <span style="color:${PALETTE.sub2};font-size:9px;font-family:monospace;">${vel}${exh}</span>
   </div>`;
 }
@@ -637,7 +665,7 @@ function buildRegimeTransitionSection(regimeTransition) {
 
   const confirmHtml = (regimeTransition.confirmation_signals ?? []).length
     ? `<div style="margin-top:12px;">
-        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:6px;">CONFIRMATION SIGNALS</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:6px;">SEÑALES DE CONFIRMACIÓN</div>
         <ul style="margin:0;padding:0 0 0 14px;list-style:disc;">
           ${regimeTransition.confirmation_signals.map(s => `<li style="font-size:10.5px;color:${PALETTE.sub};line-height:1.55;margin-bottom:3px;">${esc(s)}</li>`).join('')}
         </ul>
@@ -646,7 +674,7 @@ function buildRegimeTransitionSection(regimeTransition) {
 
   const deterHtml = (regimeTransition.deterioration_signals ?? []).length
     ? `<div style="margin-top:10px;">
-        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:6px;">RISK WATCH</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.amber};text-transform:uppercase;margin-bottom:6px;">SEÑALES DE ALERTA</div>
         <ul style="margin:0;padding:0 0 0 14px;list-style:disc;">
           ${regimeTransition.deterioration_signals.map(s => `<li style="font-size:10.5px;color:${PALETTE.amber};line-height:1.55;margin-bottom:3px;">${esc(s)}</li>`).join('')}
         </ul>
@@ -659,20 +687,20 @@ function buildRegimeTransitionSection(regimeTransition) {
   return `
   <div class="card" style="border-left:3px solid ${tColor};">
     <div class="card-title" style="color:${tColor};">
-      Regime Transition · ${esc(regimeTransition.transition_label)}
+      Transición de Régimen · ${esc(regimeTransition.transition_label)}
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
-      <span style="font-size:9px;color:${PALETTE.sub};">Velocity: <b style="color:${vel === 'RAPID' ? PALETTE.bear : vel === 'MODERATE' ? PALETTE.amber : PALETTE.sub};">${esc(vel)}</b></span>
-      <span style="font-size:9px;color:${PALETTE.sub};">Stability: <b style="color:${stab >= 65 ? PALETTE.bull : stab >= 40 ? PALETTE.amber : PALETTE.bear};">${stab}</b>/100</span>
-      <span style="font-size:9px;color:${PALETTE.sub};">Confidence Trend: <b style="color:${cTrend === 'IMPROVING' ? PALETTE.bull : cTrend === 'DETERIORATING' ? PALETTE.bear : PALETTE.neutral};">${esc(cTrend)}</b></span>
-      ${emerging ? `<span style="font-size:9px;color:${PALETTE.sub};">Emerging Regime: <b style="color:${PALETTE.amber};">${esc(emerging)}</b></span>` : ''}
-      <span style="font-size:9px;color:${PALETTE.sub};">Coverage: <b>${esc(regimeTransition.signal_coverage)}</b> (${regimeTransition.available_key_assets} key assets)</span>
+      <span style="font-size:9px;color:${PALETTE.sub};">Velocidad: <b style="color:${vel === 'RAPID' ? PALETTE.bear : vel === 'MODERATE' ? PALETTE.amber : PALETTE.sub};">${vel === 'RAPID' ? 'RÁPIDA' : vel === 'MODERATE' ? 'MODERADA' : vel === 'SLOW' ? 'LENTA' : esc(vel)}</b></span>
+      <span style="font-size:9px;color:${PALETTE.sub};">Estabilidad: <b style="color:${stab >= 65 ? PALETTE.bull : stab >= 40 ? PALETTE.amber : PALETTE.bear};">${stab}</b>/100</span>
+      <span style="font-size:9px;color:${PALETTE.sub};">Tendencia de Confianza: <b style="color:${cTrend === 'IMPROVING' ? PALETTE.bull : cTrend === 'DETERIORATING' ? PALETTE.bear : PALETTE.neutral};">${cTrend === 'IMPROVING' ? 'MEJORANDO' : cTrend === 'DETERIORATING' ? 'DETERIORANDO' : esc(cTrend)}</b></span>
+      ${emerging ? `<span style="font-size:9px;color:${PALETTE.sub};">Régimen Emergente: <b style="color:${PALETTE.amber};">${esc(emerging)}</b></span>` : ''}
+      <span style="font-size:9px;color:${PALETTE.sub};">Cobertura: <b>${esc(regimeTransition.signal_coverage)}</b> (${regimeTransition.available_key_assets} activos clave)</span>
     </div>
     ${confirmHtml}
     ${deterHtml}
     ${timeline?.key_watch ? `
     <div style="margin-top:12px;background:${PALETTE.card2};border-radius:6px;padding:10px 12px;border-left:2px solid ${PALETTE.accent};">
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:4px;">KEY WATCH</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.06em;color:${PALETTE.accent};text-transform:uppercase;margin-bottom:4px;">PUNTO CLAVE A VIGILAR</div>
       <div style="font-size:10.5px;color:${PALETTE.sub};line-height:1.5;">${esc(timeline.key_watch)}</div>
     </div>` : ''}
   </div>`;
@@ -695,11 +723,11 @@ function buildIntermarketStabilitySection(stability) {
         const sevColor = b.severity === 'CRITICAL' ? PALETTE.bear : b.severity === 'SEVERE' ? '#f97316'
           : b.severity === 'MODERATE' ? PALETTE.amber : PALETTE.sub;
         return `<div style="margin-bottom:10px;padding:8px 12px;background:${PALETTE.card2};border-radius:6px;border-left:2px solid ${sevColor};">
-          <div style="font-size:9.5px;font-weight:700;color:${sevColor};margin-bottom:3px;">${esc(b.severity)} · ${esc(b.type?.replace(/_/g, ' '))}</div>
+          <div style="font-size:9.5px;font-weight:700;color:${sevColor};margin-bottom:3px;">${b.severity === 'CRITICAL' ? 'CRÍTICO' : b.severity === 'SEVERE' ? 'SEVERO' : b.severity === 'MODERATE' ? 'MODERADO' : esc(b.severity)} · ${esc(b.type?.replace(/_/g, ' '))}</div>
           <div style="font-size:10px;color:${PALETTE.sub};line-height:1.5;">${esc(b.interpretation)}</div>
         </div>`;
       }).join('')
-    : `<div style="font-size:10.5px;color:${PALETTE.sub};">No significant cross-asset correlation anomalies detected.</div>`;
+    : `<div style="font-size:10.5px;color:${PALETTE.sub};">No se detectaron anomalías de correlación cross-asset significativas.</div>`;
 
   const obsHtml = (stability.observations ?? []).length
     ? `<div style="margin-top:10px;"><ul style="margin:0;padding:0 0 0 14px;list-style:disc;">${stability.observations.map(o => `<li style="font-size:10.5px;color:${PALETTE.sub};line-height:1.55;margin-bottom:3px;">${esc(o)}</li>`).join('')}</ul></div>`
@@ -707,18 +735,18 @@ function buildIntermarketStabilitySection(stability) {
 
   return `
   <div class="card" style="border-left:3px solid ${scoreColor};">
-    <div class="card-title" style="color:${PALETTE.txt};">Intermarket Stability</div>
+    <div class="card-title" style="color:${PALETTE.txt};">Estabilidad Intermercado</div>
     <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">
-      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Stability Score</div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Puntuación de Estabilidad</div>
         <div style="font-size:20px;font-weight:800;color:${scoreColor};">${score}<span style="font-size:11px;color:${PALETTE.sub};">/100</span></div></div>
-      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Regime Coherence</div>
-        <div style="font-size:14px;font-weight:700;color:${cohColor};">${esc(coh)}</div></div>
-      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Structural Integrity</div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Coherencia de Régimen</div>
+        <div style="font-size:14px;font-weight:700;color:${cohColor};">${coh === 'HIGH' ? 'ALTA' : coh === 'MODERATE' ? 'MODERADA' : coh === 'LOW' ? 'BAJA' : esc(coh)}</div></div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Integridad Estructural</div>
         <div style="font-size:14px;font-weight:700;color:${strInt >= 70 ? PALETTE.bull : strInt >= 40 ? PALETTE.amber : PALETTE.bear};">${strInt}/100</div></div>
-      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Coverage</div>
+      <div><div style="font-size:9px;color:${PALETTE.sub};text-transform:uppercase;letter-spacing:0.06em;">Cobertura</div>
         <div style="font-size:14px;font-weight:700;color:${PALETTE.sub};">${esc(stability.signal_coverage)}</div></div>
     </div>
-    ${bkdns.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">ANOMALY DETECTIONS (${bkdns.length})</div>` : ''}
+    ${bkdns.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">ANOMALÍAS DETECTADAS (${bkdns.length})</div>` : ''}
     ${breakdownHtml}
     ${obsHtml}
   </div>`;
@@ -727,12 +755,12 @@ function buildIntermarketStabilitySection(stability) {
 function buildPairSection(b, pairRow, exec, T, cat, enriched, conviction, horizon, flowPersistence) {
   const dir     = b.bias?.direction ?? b.direction ?? 'neutral';
   const score   = round(b.bias?.score ?? b.score, 1) ?? 0;
-  const label   = b.bias?.label ?? (dir === 'bullish' ? 'Bullish' : dir === 'bearish' ? 'Bearish' : 'Neutral');
+  const label   = b.bias?.label ?? (dir === 'bullish' ? 'Alcista' : dir === 'bearish' ? 'Bajista' : 'Neutral');
   const badgeClass = dir === 'bullish' ? 'badge-bull' : dir === 'bearish' ? 'badge-bear' : 'badge-neut';
   const assetCat = cat ?? pairRow?.cat ?? 'fx';
 
   // Use enriched headline as narrative when available, otherwise fall back to generatePairNarrative
-  const narrative = enriched?.institutional ?? generatePairNarrative(pairRow, b, exec) ?? 'No narrative available for this pair.';
+  const narrative = enriched?.institutional ?? generatePairNarrative(pairRow, b, exec) ?? 'No hay narrativa disponible para este par.';
 
   const layers = buildLayersArray(b, pairRow, exec);
 
@@ -784,10 +812,10 @@ function buildPairSection(b, pairRow, exec, T, cat, enriched, conviction, horizo
 
       ${weekRows ? `
         <div style="margin-top:14px;">
-          <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">COT WEEKLY HISTORY (LAST 4 REPORTS)</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">HISTORIAL SEMANAL COT (ÚLTIMOS 4 INFORMES)</div>
           <table style="font-size:10px;">
             <thead><tr>
-              <th>Date</th><th>Lev. Net</th><th>Wk Change</th><th>% Long</th>
+              <th>Fecha</th><th>Neto Lev.</th><th>Cambio Sem.</th><th>% Largo</th>
             </tr></thead>
             <tbody>${weekRows}</tbody>
           </table>
@@ -814,7 +842,7 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
     ratesData   = null,
   } = opts;
 
-  if (!biasArr?.length) return '<html><body><p>No data available.</p></body></html>';
+  if (!biasArr?.length) return '<html><body><p>No hay datos disponibles.</p></body></html>';
 
   // fxPairs here may be allPairsArr when cross-asset is active
   const pairMap  = Object.fromEntries((fxPairs ?? []).map(p => [p.pair, p]));
@@ -841,7 +869,7 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   const execSummary = generateExecutiveSummary({ biasArr, macroSignal, cotDate: cftcD, snapshotDate: today, regime: riskRegime, crossAssetCtx });
 
   const avgBias = biasArr.reduce((s, b) => s + (b.bias?.score ?? b.score ?? 0), 0) / biasArr.length;
-  const globalBias = avgBias > 0.3 ? 'Bullish Tilt' : avgBias < -0.3 ? 'Bearish Tilt' : 'Neutral';
+  const globalBias = avgBias > 0.3 ? 'Sesgo Alcista' : avgBias < -0.3 ? 'Sesgo Bajista' : 'Neutral';
 
   const biasBarChartSVG = buildBiasBarChart(biasArr);
   const donutSVG        = buildDonutChart(bull, bear, neut);
@@ -944,10 +972,10 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   const ratesSection = buildRatesSection(ratesData, riskRegime);
 
   const macroBarItems = [
-    { label: 'Macro Signal',   value: macroSignal?.bias?.replace(/_/g, ' ') ?? '—' },
-    { label: 'Confidence',     value: macroSignal?.confidence != null ? `${macroSignal.confidence}/10` : '—' },
-    sentimentData?.fg  != null ? { label: 'Fear/Greed', value: String(sentimentData.fg) } : null,
-    sentimentData?.vix != null ? { label: 'VIX',        value: String(sentimentData.vix) } : null,
+    { label: 'Señal Macro',    value: macroSignal?.bias?.replace(/_/g, ' ') ?? '—' },
+    { label: 'Confianza',      value: macroSignal?.confidence != null ? `${macroSignal.confidence}/10` : '—' },
+    sentimentData?.fg  != null ? { label: 'Miedo/Codicia', value: String(sentimentData.fg) } : null,
+    sentimentData?.vix != null ? { label: 'VIX',           value: String(sentimentData.vix) } : null,
   ].filter(Boolean).map(item => `
     <div class="macro-item">
       <div class="macro-label">${esc(item.label)}</div>
@@ -956,11 +984,11 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   `).join('');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>COT Tracker — Institutional Report · ${today}</title>
+  <title>COT Tracker — Informe Institucional · ${today}</title>
   <style>${buildCSS()}</style>
 </head>
 <body>
@@ -968,28 +996,28 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
 
   <!-- COVER -->
   <div class="cover">
-    <div class="cover-brand">COT Tracker · Institutional Intelligence</div>
-    <div class="cover-title">Institutional Positioning Report</div>
-    <div class="cover-subtitle">CFTC Commitment of Traders · Leveraged Money Analysis · Multi-Asset Institutional Positioning</div>
+    <div class="cover-brand">COT Tracker · Inteligencia Institucional</div>
+    <div class="cover-title">Informe de Posicionamiento Institucional</div>
+    <div class="cover-subtitle">CFTC Commitment of Traders · Análisis de Leveraged Money · Posicionamiento Institucional Multi-Activo</div>
     <div class="cover-meta">
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Snapshot Date</div>
+        <div class="cover-meta-label">Fecha del Informe</div>
         <div class="cover-meta-value">${esc(today)}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">CFTC Report</div>
+        <div class="cover-meta-label">Informe CFTC</div>
         <div class="cover-meta-value">${esc(cftcD)}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Pairs Tracked</div>
+        <div class="cover-meta-label">Pares Analizados</div>
         <div class="cover-meta-value">${biasArr.length}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Market Regime</div>
+        <div class="cover-meta-label">Régimen de Mercado</div>
         <div class="cover-meta-value" style="color:${PALETTE.accent};">${esc(regime)}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Global Bias</div>
+        <div class="cover-meta-label">Sesgo Global</div>
         <div class="cover-meta-value" style="color:${avgBias > 0.3 ? PALETTE.bull : avgBias < -0.3 ? PALETTE.bear : PALETTE.neutral};">${esc(globalBias)}</div>
       </div>
     </div>
@@ -998,25 +1026,25 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   <!-- MARKET OVERVIEW STATS -->
   <div class="overview-grid">
     <div class="stat-cell">
-      <div class="stat-label">Pairs Analyzed</div>
+      <div class="stat-label">Pares Analizados</div>
       <div class="stat-value acc">${biasArr.length}</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-label">Bullish Bias</div>
+      <div class="stat-label">Sesgo Alcista</div>
       <div class="stat-value bull">${bull}</div>
-      <div class="stat-desc">${Math.round((bull / biasArr.length) * 100)}% of pairs</div>
+      <div class="stat-desc">${Math.round((bull / biasArr.length) * 100)}% de pares</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-label">Bearish Bias</div>
+      <div class="stat-label">Sesgo Bajista</div>
       <div class="stat-value bear">${bear}</div>
-      <div class="stat-desc">${Math.round((bear / biasArr.length) * 100)}% of pairs</div>
+      <div class="stat-desc">${Math.round((bear / biasArr.length) * 100)}% de pares</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">Neutral</div>
       <div class="stat-value neut">${neut}</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-label">Market Regime</div>
+      <div class="stat-label">Régimen de Mercado</div>
       <div class="stat-value" style="font-size:13px;color:${PALETTE.accent};line-height:1.3;margin-top:2px;">${esc(regime)}</div>
     </div>
   </div>
@@ -1028,12 +1056,12 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
   ${riskRegime?.regime ? `
   <div class="card" style="border-left:3px solid ${esc(riskRegime.color ?? '#8491a8')};">
     <div class="card-title" style="color:${esc(riskRegime.color ?? PALETTE.accent)};">
-      Macro Regime · ${esc(regimeNarrative.headline)}
+      Régimen Macro · ${esc(regimeNarrative.headline)}
     </div>
     <div class="summary-text">${esc(regimeNarrative.body)}</div>
     ${regimeNarrative.keyDrivers?.length ? `
     <div style="margin-top:14px;">
-      <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">CROSS-ASSET DRIVERS</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:${PALETTE.sub};text-transform:uppercase;margin-bottom:8px;">FACTORES CROSS-ASSET</div>
       <ul style="margin:0;padding:0 0 0 16px;list-style:disc;">
         ${regimeNarrative.keyDrivers.map(d => `<li style="font-size:11px;color:${PALETTE.sub};line-height:1.6;margin-bottom:4px;">${esc(d)}</li>`).join('')}
       </ul>
@@ -1042,25 +1070,25 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
 
   <!-- EXECUTIVE SUMMARY -->
   <div class="card">
-    <div class="card-title">Executive Summary</div>
+    <div class="card-title">Resumen Ejecutivo</div>
     <div class="summary-text">${esc(execSummary)}</div>
   </div>
 
   <!-- CHARTS -->
   <div class="charts-row">
     <div class="chart-box" style="flex:2;min-width:320px;">
-      <div class="chart-title">Institutional Bias Distribution</div>
+      <div class="chart-title">Distribución de Sesgo Institucional</div>
       ${biasBarChartSVG}
     </div>
     <div class="chart-box" style="flex:1;min-width:200px;">
-      <div class="chart-title">Market Sentiment Breakdown</div>
+      <div class="chart-title">Desglose de Sentimiento de Mercado</div>
       ${donutSVG}
     </div>
   </div>
 
   <!-- MARKET TABLE -->
   <div class="card">
-    <div class="card-title">Full Market Overview</div>
+    <div class="card-title">Visión Global del Mercado</div>
     ${marketTableHTML}
   </div>
 
@@ -1078,30 +1106,39 @@ export function generateHTMLReport(biasArr, fxPairs, opts = {}) {
 
   <!-- PER-ASSET DETAILS — GROUPED BY ASSET CLASS -->
   <div class="card" style="padding:20px 22px;">
-    <div class="card-title">Asset-by-Asset Institutional Analysis</div>
-    <p style="font-size:10.5px;color:${PALETTE.sub};margin:0;">Leveraged Money positioning, bias scores, divergence signals and weekly flow — grouped by asset class.</p>
+    <div class="card-title">Análisis Institucional por Activo</div>
+    <p style="font-size:10.5px;color:${PALETTE.sub};margin:0;">Posicionamiento Leveraged Money, puntuaciones de sesgo, señales de divergencia y flujo semanal — agrupados por clase de activo.</p>
   </div>
   ${groupedPairSections}
 
   <!-- FOOTER -->
   <div class="footer">
     <p class="footer-text">
-      Data source: CFTC · Traders in Financial Futures (TFF). This report was generated automatically by COT Tracker's institutional analysis engine. All data reflects positioning as of the latest CFTC release. Past positioning does not guarantee future price direction. Not financial advice.
+      Fuente de datos: CFTC · Traders in Financial Futures (TFF). Este informe fue generado automáticamente por el motor de análisis institucional de COT Tracker. Todos los datos reflejan el posicionamiento a la fecha del último informe CFTC. El posicionamiento pasado no garantiza la dirección futura del precio. No es asesoramiento financiero.
     </p>
     <div class="footer-brand">
       COT TRACKER<br/>
-      Institutional Export System v2.0<br/>
-      <span style="font-weight:400;">Generated ${new Date().toUTCString()}</span>
+      Sistema de Exportación Institucional v2.0<br/>
+      <span style="font-weight:400;">Generado ${new Date().toUTCString()}</span>
     </div>
   </div>
 
 </div>
 
 <!-- PRINT / PDF BUTTON -->
-<button class="print-btn" onclick="window.print()">
+<button class="print-btn" id="printBtn">
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 4V1.5h8V4M3 10.5H1.5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H11M3 7.5h8v5H3v-5z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  Print / Save as PDF
+  Imprimir / Guardar como PDF
 </button>
+
+<script>
+(function() {
+  var btn = document.getElementById('printBtn');
+  if (btn) {
+    btn.addEventListener('click', function() { window.print(); });
+  }
+})();
+</script>
 
 </body>
 </html>`;

@@ -10,6 +10,17 @@ let _cache   = null;
 let _cacheTs = 0;
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+// ── Stance computation (on-the-fly, not relying on stored stance_label) ───────
+function computeStanceFromRates(rate, prevRate) {
+  if (prevRate == null) return { score: 0, label: 'Neutral' };
+  const bps = Math.round((rate - prevRate) * 100);
+  if (bps >= 75)  return { score: 5,  label: 'Extremadamente Restrictivo' };
+  if (bps >= 25)  return { score: 3,  label: 'Restrictivo' };
+  if (bps === 0)  return { score: 0,  label: 'Neutral' };
+  if (bps >= -50) return { score: -3, label: 'Expansivo' };
+  return              { score: -5, label: 'Expansivo Agresivo' };
+}
+
 // ── Freshness engine (TAREA 0.2) ─────────────────────────────────────────────
 // Computes LIVE / DELAYED / STALE / ERROR based on minutes since last DB write.
 function freshnessStatus(fetched_at) {
@@ -124,6 +135,14 @@ export default async function handler(req, res) {
 
     latestRates[bankId] = parseFloat(latest.rate);
 
+    // Compute stance from the last row where rate actually changed (not a hold snapshot)
+    const lastRealChange = [...rows].reverse().find(
+      r => r.previous_rate != null && Math.abs(parseFloat(r.rate) - parseFloat(r.previous_rate)) >= 0.005
+    );
+    const computedStance = lastRealChange
+      ? computeStanceFromRates(parseFloat(lastRealChange.rate), parseFloat(lastRealChange.previous_rate))
+      : { score: 0, label: 'Neutral' };
+
     const history = rows.map(r => ({
       d: r.decision_date.slice(0, 7),
       r: parseFloat(r.rate),
@@ -151,10 +170,10 @@ export default async function handler(req, res) {
       rateLow:      latest.rate_low    != null ? parseFloat(latest.rate_low)  : parseFloat(latest.rate),
       rateMid:      latest.rate_mid    != null ? parseFloat(latest.rate_mid)  : parseFloat(latest.rate),
       rateHigh:     latest.rate_high   != null ? parseFloat(latest.rate_high) : parseFloat(latest.rate),
-      // Hawkish / Dovish stance (TAREA 1.1)
-      stanceScore:  latest.stance_score  ?? 0,
-      stanceLabel:  latest.stance_label  ?? 'Neutral',
-      changeBps:    latest.change_bps    ?? 0,
+      // Hawkish / Dovish stance — computed from last real rate change, not stored nullable field
+      stanceScore:  computedStance.score,
+      stanceLabel:  computedStance.label,
+      changeBps:    lastRealChange ? Math.round((parseFloat(lastRealChange.rate) - parseFloat(lastRealChange.previous_rate)) * 100) : 0,
       // Freshness (TAREA 0.2)
       freshness:    freshnessStatus(latest.fetched_at),
       fetchedAt:    latest.fetched_at,
@@ -165,6 +184,31 @@ export default async function handler(req, res) {
 
   // ── Interest Rate Differential Engine (TAREA 1.2) ─────────────────────────
   const pairs = buildDifferentials(latestRates, banks);
+
+  // Persist differentials to pair_rate_differentials (fire-and-forget)
+  const diffRows = pairs
+    .filter(p => p.base_rate != null && p.quote_rate != null)
+    .map(p => ({
+      pair:            p.pair,
+      base_currency:   p.base_currency,
+      quote_currency:  p.quote_currency,
+      base_bank:       p.base_bank,
+      quote_bank:      p.quote_bank,
+      base_rate:       p.base_rate,
+      quote_rate:      p.quote_rate,
+      rate_diff_bps:   p.rate_diff_bps,
+      carry_direction: p.carry_direction,
+      carry_score:     p.carry_score,
+      updated_at:      new Date().toISOString(),
+    }));
+  if (diffRows.length) {
+    supabaseAdmin
+      .from('pair_rate_differentials')
+      .upsert(diffRows, { onConflict: 'pair' })
+      .then(({ error: uErr }) => {
+        if (uErr) console.error('[rates] pair_rate_differentials upsert error:', uErr.message);
+      });
+  }
 
   const payload = {
     timestamp: new Date().toISOString(),

@@ -40,7 +40,7 @@ export function computeConfluenceScore({
       confluenceScore: 0,
       policyAlignment: 'neutral',
       carryAlignment:  'neutral',
-      label:  'No Directional Confluence',
+      label:  'Sin Confluencia Direccional',
       color:  '#6b7280',
       details: { cot: 0, carry: 0, macro: 0, policy: 0, crowding: 0 },
     };
@@ -138,10 +138,10 @@ export function computeConfluenceScore({
   const confluenceScore = Math.max(0, Math.min(100, score));
 
   let label, color;
-  if (confluenceScore >= 70)      { label = 'High Confluence';      color = '#22c55e'; }
-  else if (confluenceScore >= 45) { label = 'Moderate Confluence';  color = '#f59e0b'; }
-  else if (confluenceScore >= 20) { label = 'Low Confluence';       color = '#f97316'; }
-  else                            { label = 'No Confluence';        color = '#6b7280'; }
+  if (confluenceScore >= 70)      { label = 'Confluencia Alta';     color = '#22c55e'; }
+  else if (confluenceScore >= 45) { label = 'Confluencia Moderada'; color = '#f59e0b'; }
+  else if (confluenceScore >= 20) { label = 'Confluencia Baja';     color = '#f97316'; }
+  else                            { label = 'Sin Confluencia';      color = '#6b7280'; }
 
   return { confluenceScore, policyAlignment, carryAlignment, label, color, details };
 }

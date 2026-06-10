@@ -151,13 +151,13 @@ function _computePolymarketConf(pair) {
 
 // ─── LABEL MAP ────────────────────────────────────────────────────────────────
 function getLabel(score) {
-  if (score >= 4)          return 'Strong Bullish Bias';
-  if (score >= 2)          return 'Bullish Bias';
-  if (score === 1)         return 'Slight Bullish Edge';
-  if (score === 0)         return 'Neutral / Range';
-  if (score >= -2)         return 'Slight Bearish Edge';
-  if (score >= -4)         return 'Bearish Bias';
-  return                          'Strong Bearish Bias';
+  if (score >= 4)          return 'Sesgo Alcista Fuerte';
+  if (score >= 2)          return 'Sesgo Alcista';
+  if (score === 1)         return 'Ligera Ventaja Alcista';
+  if (score === 0)         return 'Neutral / Rango';
+  if (score >= -2)         return 'Ligera Ventaja Bajista';
+  if (score >= -4)         return 'Sesgo Bajista';
+  return                          'Sesgo Bajista Fuerte';
 }
 
 function getDirection(score) {
@@ -177,13 +177,13 @@ function getSemanticState(score) {
 
 // ─── RECOMMENDATION ENGINE ───────────────────────────────────────────────────
 function getRecommendation(score) {
-  if (score >= 4)  return 'Strong bullish structural edge. Long bias preferred — confirm tactical context before acting.';
-  if (score >= 2)  return 'Bullish structural bias. Favorable for longs — await tactical alignment and price structure.';
-  if (score === 1) return 'Slight bullish structural edge. Monitor for tactical confirmation before positioning.';
-  if (score === 0) return 'No structural directional edge. Await COT confirmation and price structure.';
-  if (score >= -2) return 'Slight bearish structural edge. Monitor for tactical confirmation before positioning.';
-  if (score >= -4) return 'Bearish structural bias. Favorable for shorts — await tactical alignment and price structure.';
-  return                  'Strong bearish structural edge. Short bias preferred — confirm tactical context before acting.';
+  if (score >= 4)  return 'Ventaja estructural alcista fuerte. Sesgo largo preferido — confirmar contexto táctico antes de actuar.';
+  if (score >= 2)  return 'Sesgo estructural alcista. Favorable para largos — esperar alineación táctica y estructura de precio.';
+  if (score === 1) return 'Ligera ventaja estructural alcista. Monitorizar confirmación táctica antes de posicionarse.';
+  if (score === 0) return 'Sin ventaja direccional estructural. Esperar confirmación COT y estructura de precio.';
+  if (score >= -2) return 'Ligera ventaja estructural bajista. Monitorizar confirmación táctica antes de posicionarse.';
+  if (score >= -4) return 'Sesgo estructural bajista. Favorable para cortos — esperar alineación táctica y estructura de precio.';
+  return                  'Ventaja estructural bajista fuerte. Sesgo corto preferido — confirmar contexto táctico antes de actuar.';
 }
 
 // ─── COLOR HELPER (for UI use) ────────────────────────────────────────────────
@@ -215,28 +215,28 @@ const V2_MAX_RAW = 8.5;
 
 // ─── V2 LABEL MAP ─────────────────────────────────────────────────────────────
 function getLabelV2(score) {
-  if (score >= 4)    return 'Strong Bullish Edge';
-  if (score >= 1.5)  return 'Moderate Bullish Bias';
-  if (score > -1.5)  return 'Neutral / Divergence';
-  if (score > -4)    return 'Moderate Bearish Bias';
-  return                   'Strong Bearish Edge';
+  if (score >= 4)    return 'Ventaja Alcista Fuerte';
+  if (score >= 1.5)  return 'Sesgo Alcista Moderado';
+  if (score > -1.5)  return 'Neutral / Divergencia';
+  if (score > -4)    return 'Sesgo Bajista Moderado';
+  return                   'Ventaja Bajista Fuerte';
 }
 
 // ─── V2 RECOMMENDATION ────────────────────────────────────────────────────────
 function getRecommendationV2(score) {
   if (score >= 4)
-    return 'Strong bullish structural edge. Long bias preferred — confirm tactical context and price structure before acting.';
+    return 'Ventaja estructural alcista fuerte. Sesgo largo preferido — confirmar contexto táctico y estructura de precio antes de actuar.';
 
   if (score >= 1.5)
-    return 'Moderate bullish structural bias. Favorable for longs — await tactical alignment before positioning.';
+    return 'Sesgo estructural alcista moderado. Favorable para largos — esperar alineación táctica antes de posicionarse.';
 
   if (score > -1.5)
-    return 'No structural directional edge. Await COT confirmation and price structure.';
+    return 'Sin ventaja direccional estructural. Esperar confirmación COT y estructura de precio.';
 
   if (score > -4)
-    return 'Moderate bearish structural bias. Favorable for shorts — await tactical alignment before positioning.';
+    return 'Sesgo estructural bajista moderado. Favorable para cortos — esperar alineación táctica antes de posicionarse.';
 
-  return 'Strong bearish structural edge. Short bias preferred — confirm tactical context and price structure before acting.';
+  return 'Ventaja estructural bajista fuerte. Sesgo corto preferido — confirmar contexto táctico y estructura de precio antes de actuar.';
 }
 
 // ─── V2 SCORING ENGINE ────────────────────────────────────────────────────────
@@ -535,7 +535,7 @@ export function computeZScoreExtremes(currentNet, weeklyNets) {
     : [];
 
   if (series.length < 4 || typeof currentNet !== 'number') {
-    return { zscore: 0, percentile: 50, state: 'NORMAL', label: 'Insufficient history' };
+    return { zscore: 0, percentile: 50, state: 'NORMAL', label: 'Historial insuficiente' };
   }
 
   const n    = series.length;
@@ -548,11 +548,11 @@ export function computeZScoreExtremes(currentNet, weeklyNets) {
   const percentile = Math.round((below / n) * 100);
 
   let state, label;
-  if (zscore > 2)       { state = 'EXTREME_LONG';  label = 'Extreme Long — Reversal Risk'; }
-  else if (zscore < -2) { state = 'EXTREME_SHORT'; label = 'Extreme Short — Reversal Risk'; }
-  else if (zscore > 1)  { state = 'ELEVATED_LONG'; label = 'Elevated Long Positioning'; }
-  else if (zscore < -1) { state = 'ELEVATED_SHORT';label = 'Elevated Short Positioning'; }
-  else                  { state = 'NORMAL';         label = 'Normal Positioning Range'; }
+  if (zscore > 2)       { state = 'EXTREME_LONG';  label = 'Largo Extremo — Riesgo de Reversión'; }
+  else if (zscore < -2) { state = 'EXTREME_SHORT'; label = 'Corto Extremo — Riesgo de Reversión'; }
+  else if (zscore > 1)  { state = 'ELEVATED_LONG'; label = 'Posicionamiento Largo Elevado'; }
+  else if (zscore < -1) { state = 'ELEVATED_SHORT';label = 'Posicionamiento Corto Elevado'; }
+  else                  { state = 'NORMAL';         label = 'Rango Normal de Posicionamiento'; }
 
   return { zscore, percentile, state, label };
 }

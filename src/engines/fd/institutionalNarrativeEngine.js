@@ -17,27 +17,27 @@ import { fmtPct } from '../../services/financialDatasets/normalizers/metricNorma
 // ── Sentence templates ────────────────────────────────────────────────────────
 
 const POSITIONING = {
-  bullish:  'Asset Managers remain net long',
-  bearish:  'Asset Managers are rotating short',
-  neutral:  'positioning is mixed',
-  extreme_long:  'positioning is at extreme long levels',
-  extreme_short: 'positioning is at extreme short levels',
+  bullish:  'los gestores de activos mantienen posición neta larga',
+  bearish:  'los gestores de activos están rotando a corto',
+  neutral:  'el posicionamiento es mixto',
+  extreme_long:  'el posicionamiento está en niveles extremos largos',
+  extreme_short: 'el posicionamiento está en niveles extremos cortos',
 };
 
 const EARNINGS_TEMPLATES = {
-  BEAT_ACCELERATION:  'earnings momentum is accelerating with consecutive beats',
-  STABLE_BEAT:        'earnings quality is solid with consistent beats',
-  BEAT_DECELERATION:  'earnings beat streak is showing deceleration',
-  MISS_ACCELERATION:  'earnings deterioration is worsening — miss momentum building',
-  MISS_RECOVERY:      'earnings showing early recovery signals from recent misses',
-  TRANSITION:         'earnings in transition — regime shift likely underway',
+  BEAT_ACCELERATION:  'el momentum de resultados se está acelerando con sorpresas positivas consecutivas',
+  STABLE_BEAT:        'la calidad de resultados es sólida con sorpresas positivas consistentes',
+  BEAT_DECELERATION:  'la racha de sorpresas positivas muestra desaceleración',
+  MISS_ACCELERATION:  'el deterioro de resultados empeora — momentum de decepciones en construcción',
+  MISS_RECOVERY:      'los resultados muestran señales tempranas de recuperación tras decepciones recientes',
+  TRANSITION:         'los resultados están en transición — probable cambio de régimen en marcha',
   INSUFFICIENT_DATA:  null,
 };
 
 const EQUITY_TEMPLATES = {
-  bullish: (score) => `equity fundamentals are strong (${score}/100 quality score)`,
-  neutral: (score) => `equity fundamentals are mixed (${score}/100 quality score)`,
-  bearish: (score) => `equity fundamentals show stress (${score}/100 quality score)`,
+  bullish: (score) => `los fundamentales de renta variable son sólidos (puntuación de calidad ${score}/100)`,
+  neutral: (score) => `los fundamentales de renta variable son mixtos (puntuación de calidad ${score}/100)`,
+  bearish: (score) => `los fundamentales de renta variable muestran tensión (puntuación de calidad ${score}/100)`,
 };
 
 // ── Divergence detection ──────────────────────────────────────────────────────
@@ -45,15 +45,15 @@ const EQUITY_TEMPLATES = {
 function detectDivergences(inputs) {
   const divergences = [];
 
-  const { cotBias, equityIntel, earningsRegime, stressEngine, cryptoLayer, macroContext } = inputs;
+  const { cotBias, equityIntel, earningsRegime, stressEngine, macroContext } = inputs;
 
   // COT long but equity fundamentals weak
   if (cotBias?.direction === 'bullish' && equityIntel?.compositeScore != null && equityIntel.compositeScore < 40) {
     divergences.push({
       type: 'COT_EQUITY_DIVERGENCE',
       severity: 'HIGH',
-      description: `Asset Managers positioned long but equity fundamentals score only ${equityIntel.compositeScore}/100`,
-      implication: 'Potential positioning unwind risk as fundamentals erode',
+      description: `Gestores de activos posicionados largos pero fundamentales de renta variable puntúan solo ${equityIntel.compositeScore}/100`,
+      implication: 'Riesgo potencial de deshacimiento de posición a medida que los fundamentales se erosionan',
     });
   }
 
@@ -62,8 +62,8 @@ function detectDivergences(inputs) {
     divergences.push({
       type: 'POSITIONING_EARNINGS_DIVERGENCE',
       severity: 'HIGH',
-      description: 'Long positioning persists despite accelerating earnings misses',
-      implication: 'Earnings momentum will likely pressure positioning adjustment',
+      description: 'El posicionamiento largo persiste a pesar de las decepciones de resultados en aceleración',
+      implication: 'El momentum de resultados presionará probablemente un ajuste en el posicionamiento',
     });
   }
 
@@ -72,18 +72,8 @@ function detectDivergences(inputs) {
     divergences.push({
       type: 'STRESS_REGIME_DIVERGENCE',
       severity: 'MEDIUM',
-      description: 'Balance sheet stress elevated in risk-on environment',
-      implication: 'Credit risk may be underpriced — watch HY spreads',
-    });
-  }
-
-  // Crypto risk-on but DXY strengthening
-  if (cryptoLayer?.riskSignal?.regime === 'RISK_ON' && macroContext?.dxyTrend === 'RISING') {
-    divergences.push({
-      type: 'CRYPTO_DXY_DIVERGENCE',
-      severity: 'MEDIUM',
-      description: 'Crypto demand signals risk-on while DXY is strengthening',
-      implication: 'Potential crypto-specific demand not aligned with broader risk sentiment',
+      description: 'Estrés de balance elevado en entorno de risk-on',
+      implication: 'El riesgo crediticio puede estar infravalorado — vigila los diferenciales HY',
     });
   }
 
@@ -92,8 +82,8 @@ function detectDivergences(inputs) {
     divergences.push({
       type: 'GROWTH_VALUATION_DIVERGENCE',
       severity: 'LOW',
-      description: 'Strong earnings momentum but elevated valuation multiples',
-      implication: 'High bar for continued multiple expansion — execution risk elevated',
+      description: 'Sólido momentum de resultados pero múltiplos de valoración elevados',
+      implication: 'Listón alto para continuar la expansión de múltiplos — riesgo de ejecución elevado',
     });
   }
 
@@ -103,7 +93,7 @@ function detectDivergences(inputs) {
 // ── Primary narrative builder ─────────────────────────────────────────────────
 
 function buildPrimaryNarrative(inputs) {
-  const { cotBias, equityIntel, earningsRegime, stressEngine, cryptoLayer, pair } = inputs;
+  const { cotBias, equityIntel, earningsRegime, stressEngine, pair } = inputs;
 
   const sentences = [];
 
@@ -111,7 +101,7 @@ function buildPrimaryNarrative(inputs) {
   if (cotBias?.direction && pair) {
     const posLabel = POSITIONING[cotBias.direction] ?? POSITIONING.neutral;
     sentences.push(
-      `In ${pair}, institutional positioning shows ${posLabel} with a bias score of ${cotBias.score ?? 'N/A'}.`
+      `En ${pair}, ${posLabel} con una puntuación de sesgo de ${cotBias.score ?? 'N/D'}.`
     );
   }
 
@@ -119,9 +109,9 @@ function buildPrimaryNarrative(inputs) {
   if (equityIntel?.compositeScore != null) {
     const dir = equityIntel.direction;
     const tmpl = EQUITY_TEMPLATES[dir] ?? EQUITY_TEMPLATES.neutral;
-    sentences.push(`Underlying ${tmpl(equityIntel.compositeScore)}`
+    sentences.push(`Subyacente: ${tmpl(equityIntel.compositeScore)}`
       + (equityIntel.fundamentals?.revenueGrowth != null
-        ? ` with revenue growth at ${fmtPct(equityIntel.fundamentals.revenueGrowth)}.`
+        ? ` con crecimiento de ingresos del ${fmtPct(equityIntel.fundamentals.revenueGrowth)}.`
         : '.'));
   }
 
@@ -129,31 +119,21 @@ function buildPrimaryNarrative(inputs) {
   if (earningsRegime?.regime && earningsRegime.regime !== 'INSUFFICIENT_DATA') {
     const earningsTmpl = EARNINGS_TEMPLATES[earningsRegime.regime];
     if (earningsTmpl) {
-      sentences.push(`Corporate ${earningsTmpl}` +
+      sentences.push(`Corporativo: ${earningsTmpl}` +
         (earningsRegime.drift?.direction === 'STRONG_POSITIVE'
-          ? ' — positive post-earnings drift expected.'
+          ? ' — se espera deriva positiva post-resultados.'
           : earningsRegime.drift?.direction === 'STRONG_NEGATIVE'
-          ? ' — elevated downside drift risk.'
+          ? ' — riesgo de deriva bajista elevado.'
           : '.'));
-    }
-  }
-
-  // Crypto macro signal
-  if (cryptoLayer?.riskSignal?.regime) {
-    const cRegime = cryptoLayer.riskSignal.regime;
-    if (cRegime === 'RISK_ON') {
-      sentences.push(`Crypto institutional demand is ${cryptoLayer.institutional?.label?.toLowerCase() ?? 'positive'}, supporting a risk-on backdrop for risk assets.`);
-    } else if (cRegime === 'RISK_OFF') {
-      sentences.push(`Synchronized crypto and equity selling signals risk-off pressure across asset classes.`);
     }
   }
 
   // Balance sheet health
   if (stressEngine?.stressScore != null) {
     if (stressEngine.stressScore > 65) {
-      sentences.push(`Balance sheet stress is ${stressEngine.level?.label?.toLowerCase() ?? 'elevated'} — heightened credit risk warrants defensive positioning.`);
+      sentences.push(`El estrés del balance es ${stressEngine.level?.label?.toLowerCase() ?? 'elevado'} — el riesgo crediticio elevado exige posicionamiento defensivo.`);
     } else if (stressEngine.stressScore < 25) {
-      sentences.push(`Balance sheet health is strong, providing structural support for the thesis.`);
+      sentences.push(`La salud del balance es sólida, proporcionando soporte estructural a la tesis.`);
     }
   }
 
@@ -179,11 +159,11 @@ function extractRiskFactors(inputs) {
   }
 
   if (earningsRegime?.regime === 'MISS_ACCELERATION') {
-    risks.push({ factor: 'Earnings miss momentum', value: `${earningsRegime.summary?.streak} consecutive misses`, source: 'earnings' });
+    risks.push({ factor: 'Momentum de decepciones en resultados', value: `${earningsRegime.summary?.streak} decepciones consecutivas`, source: 'earnings' });
   }
 
   if (macroContext?.yieldEnv === 'HIGH') {
-    risks.push({ factor: 'High yield environment compresses multiples', value: null, source: 'macro' });
+    risks.push({ factor: 'Entorno de tipos altos comprime múltiplos', value: null, source: 'macro' });
   }
 
   return risks.slice(0, 5);
@@ -192,13 +172,13 @@ function extractRiskFactors(inputs) {
 // ── Positioning summary ───────────────────────────────────────────────────────
 
 function buildPositioningSummary(inputs) {
-  const { cotBias, equityIntel, earningsRegime, cryptoLayer } = inputs;
+  const { cotBias, equityIntel, earningsRegime } = inputs;
 
   const signals = [];
 
   if (cotBias?.direction) {
     signals.push({
-      label: 'COT Positioning',
+      label: 'Posicionamiento COT',
       value: cotBias.direction.toUpperCase(),
       weight: 'HIGH',
       color: cotBias.direction === 'bullish' ? '#22c55e' : cotBias.direction === 'bearish' ? '#ef4444' : '#fbbf24',
@@ -207,7 +187,7 @@ function buildPositioningSummary(inputs) {
 
   if (equityIntel?.direction) {
     signals.push({
-      label: 'Equity Fundamentals',
+      label: 'Fundamentales de Renta Variable',
       value: equityIntel.direction.toUpperCase(),
       weight: 'HIGH',
       color: equityIntel.direction === 'bullish' ? '#22c55e' : equityIntel.direction === 'bearish' ? '#ef4444' : '#fbbf24',
@@ -216,19 +196,10 @@ function buildPositioningSummary(inputs) {
 
   if (earningsRegime?.regime && earningsRegime.regime !== 'INSUFFICIENT_DATA') {
     signals.push({
-      label: 'Earnings Regime',
+      label: 'Régimen de Resultados',
       value: earningsRegime.label,
       weight: 'MEDIUM',
       color: earningsRegime.color,
-    });
-  }
-
-  if (cryptoLayer?.riskSignal?.regime) {
-    signals.push({
-      label: 'Crypto Risk Signal',
-      value: cryptoLayer.riskSignal.regime,
-      weight: 'LOW',
-      color: cryptoLayer.riskSignal.regime === 'RISK_ON' ? '#22c55e' : cryptoLayer.riskSignal.regime === 'RISK_OFF' ? '#ef4444' : '#fbbf24',
     });
   }
 
@@ -245,7 +216,7 @@ function buildPositioningSummary(inputs) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * @param {object} inputs - { cotBias, equityIntel, earningsRegime, stressEngine, cryptoLayer, macroContext, pair }
+ * @param {object} inputs - { cotBias, equityIntel, earningsRegime, stressEngine, macroContext, pair }
  * @returns {object} InstitutionalNarrative
  */
 export function generateInstitutionalNarrative(inputs) {
