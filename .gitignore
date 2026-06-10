@@ -27,3 +27,16 @@ dist-ssr
 .env
 .env.local
 .env.production
+
+# Claude Code worktrees and internal files
+.claude/worktrees/
+.claude/launch.json
+
+# Temp / scratch files
+*.~lock.*
+test.txt
+test_chart*.png
+docx_brand_unpacked/
+brand_voice_text.txt
+*.docx
+*.zip
