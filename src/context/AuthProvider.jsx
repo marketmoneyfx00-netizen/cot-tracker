@@ -156,7 +156,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     console.log('[AUTH] INIT listener');
 
+    // Safety timeout: if auth never resolves (iOS Safari Web Locks freeze,
+    // slow networks, Supabase init hang), unblock the loading screen after 10s.
+    const safetyTimer = setTimeout(() => {
+      if (loading) {
+        console.warn('[AUTH] Safety timeout — forcing loading=false');
+        setLoading(false);
+      }
+    }, 10_000);
+
     const unsubscribe = listenAuthChanges((event, newSession) => {
+      clearTimeout(safetyTimer);
       console.log('[AUTH EVENT]', event);
 
       const authUser = newSession?.user ?? null;
@@ -196,6 +206,7 @@ export function AuthProvider({ children }) {
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubscribe?.();
     };
   }, []); // EMPTY DEPS — registered once, lives forever
