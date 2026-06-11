@@ -875,6 +875,19 @@ export function buildMultiPairJSON(selectedPairs, biasArr, fxPairs, opts = {}) {
   };
 }
 
+// ── AGENT COVERAGE ─────────────────────────────────────────────────────────────
+// Counts how many of the IIS agents returned real data vs. confidence:'unavailable'.
+// Risk Manager and agents without a 'confidence' field (liquidity, intraday) are
+// counted as valid — they always evaluate regardless of COT/macro data availability.
+function computeAgentCoverage(agents = {}) {
+  const keys = ['cot', 'macro', 'liquidity', 'intraday', 'riskManager'];
+  const total = keys.filter(k => agents[k] != null).length || keys.length;
+  const unavailable = keys.filter(k => agents[k]?.confidence === 'unavailable').length;
+  const valid = total - unavailable;
+  const pct = total > 0 ? Math.round((valid / total) * 100) : 0;
+  return { valid, unavailable, total, pct };
+}
+
 // ── INTELLIGENCE EXPORTS (AGENT CONSENSUS + REGIME + INTERMARKET) ─────────────
 
 /**
@@ -966,6 +979,7 @@ export function buildIntelligenceExport(opts = {}) {
         best:  ag.conditions?.best ?? [],
         avoid: ag.conditions?.avoid ?? [],
       },
+      coverage: computeAgentCoverage(ag.agents ?? {}),
     } : null,
 
     intermarket: im ? {
@@ -1087,7 +1101,7 @@ export function buildTelegramBriefing(opts = {}) {
     }[ar.regime] ?? '⬡';
 
     lines.push(`${regEmoji} *REGIME: ${ar.meta?.label?.toUpperCase() ?? ar.regime}*`);
-    lines.push(`Conviction: ${conv} (${ar.conviction?.score ?? 0}/10) | Momentum: ${mom}`);
+    lines.push(`Conviction: ${conv} (${ar.conviction?.score ?? 'N/D'}/10) | Momentum: ${mom}`);
     lines.push(`Action Bias: ${bias}`);
     if (ar.transition?.isPending) {
       lines.push(`🔄 Transition Risk: ${ar.transition.transitionRisk?.toUpperCase() ?? 'PENDING'}`);
@@ -1103,9 +1117,13 @@ export function buildTelegramBriefing(opts = {}) {
     const a = agentConsensus.agents;
     lines.push('*Agent Scores:*');
     if (a.cot)        lines.push(`• COT ${a.cot.score}/100 (${a.cot.confidence?.toUpperCase() ?? '?'}) — ${a.cot.direction?.toUpperCase() ?? '—'}`);
-    if (a.macro)      lines.push(`• Macro ${a.macro.score}/100 — ${a.macro.usdBias?.replace(/_/g, ' ') ?? '—'}`);
+    if (a.macro)      lines.push(`• Macro ${a.macro.score}/100 (${a.macro.confidence?.toUpperCase() ?? '?'}) — ${a.macro.usdBias?.replace(/_/g, ' ') ?? '—'}`);
     if (a.liquidity)  lines.push(`• Liquidity ${a.liquidity.score}/100 — ${a.liquidity.condition ?? '—'}`);
     if (a.intraday)   lines.push(`• Intraday ${a.intraday.score}/100 — ${a.intraday.quality ?? '—'}`);
+
+    // ── Coverage — how many agents returned real data vs. unavailable ────────
+    const coverage = computeAgentCoverage(a);
+    lines.push(`• Coverage: ${coverage.valid}/${coverage.total} agents (${coverage.pct}%)${coverage.unavailable > 0 ? ` — ${coverage.unavailable} unavailable` : ''}`);
     lines.push('');
   }
 
@@ -1113,7 +1131,7 @@ export function buildTelegramBriefing(opts = {}) {
   if (intermarket?.health) {
     const im = intermarket;
     const hEmoji = (im.health.breakdowns ?? 0) > 0 ? '🔴' : (im.health.diverging ?? 0) > 0 ? '⚠️' : '✅';
-    lines.push(`${hEmoji} *INTERMARKET: ${im.health.label?.toUpperCase() ?? '—'} (${im.health.score ?? 0}/100)*`);
+    lines.push(`${hEmoji} *INTERMARKET: ${im.health.label?.toUpperCase() ?? '—'} (${im.health.score != null ? `${im.health.score}/100` : 'N/D'})*`);
     lines.push(`Aligned: ${im.health.aligned ?? 0} | Diverging: ${im.health.diverging ?? 0} | Breakdown: ${im.health.breakdowns ?? 0}`);
     if (im.keyDivergences?.length) {
       im.keyDivergences.slice(0, 2).forEach(d => lines.push(`• ${d}`));
@@ -1123,7 +1141,7 @@ export function buildTelegramBriefing(opts = {}) {
 
   // ── Macro context ────────────────────────────────────────────────────────
   if (macroSignal?.bias) {
-    lines.push(`🌍 *MACRO:* ${macroSignal.bias.replace(/_/g, ' ')} | Conf: ${macroSignal.confidence ?? 0}/10`);
+    lines.push(`🌍 *MACRO:* ${macroSignal.bias.replace(/_/g, ' ')} | Conf: ${macroSignal.confidence != null ? `${macroSignal.confidence}/10` : 'N/D'}`);
     if (macroSignal.drivers?.[0]) lines.push(`• ${macroSignal.drivers[0]}`);
     lines.push('');
   }

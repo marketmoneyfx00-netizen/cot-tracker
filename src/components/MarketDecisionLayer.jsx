@@ -197,8 +197,8 @@ function MarketDecisionLayer({
   }, [biasArr, selectedPair, tacStateMap, tacState, macroSignal, sentimentData]);
 
   // ── Per-pair data ────────────────────────────────────────────────────────
-  // Single source of truth: use biasArr (already computed with macroConfidence,
-  // real price change, carry, and z-score) — no re-derivation from fxPairs.
+  // Single source of truth: biasArr is pre-computed with macro/carry confidence,
+  // real price change, and z-score. No re-derivation from fxPairs needed.
   const pairData = useMemo(() => {
     return (biasArr ?? []).map(entry => {
       if (!entry?.bias) return null;
@@ -409,12 +409,12 @@ function MarketDecisionLayer({
                   {/* Alignment badge — color reflects UNCERTAINTY, not opportunity */}
                   <span style={{
                     fontSize: 9, fontWeight: 700,
-                    color: decay.color,
-                    background: `${decay.color}14`,
-                    border: `1px solid ${decay.color}30`,
+                    color: decay._fallback ? T.sub2 : decay.color,
+                    background: decay._fallback ? `${T.sub2}14` : `${decay.color}14`,
+                    border: `1px solid ${decay._fallback ? T.sub2 : decay.color}30`,
                     padding: '2px 8px', borderRadius: 99, letterSpacing: '0.04em', whiteSpace: 'nowrap',
                   }}>
-                    {decay.label.toUpperCase()}
+                    {decay._fallback ? `${decay.label.toUpperCase()} (SIN DATOS LTF)` : decay.label.toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -508,16 +508,29 @@ function MarketDecisionLayer({
                   <span style={{ fontSize: 8, fontWeight: 700, color: T.sub2, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                     HTF · LTF Alineación
                   </span>
-                  <span style={{ fontSize: 22, fontWeight: 900, color: decay.color, fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: 1 }}>
-                    {decay.score}
-                  </span>
+                  {decay._fallback ? (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: T.sub2, fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+                      DATOS TÁCTICOS INSUFICIENTES
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 22, fontWeight: 900, color: decay.color, fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: 1 }}>
+                      {decay.score}
+                    </span>
+                  )}
                 </div>
                 <div style={{ height: 4, background: T.border, borderRadius: 99, overflow: 'hidden', filter: isPremium ? 'none' : 'blur(3px)' }}>
-                  <div style={{
-                    width: `${decay.score}%`, height: '100%', borderRadius: 99,
-                    background: `linear-gradient(90deg, #ef4444 0%, #f59e0b 40%, ${decay.score >= 75 ? '#22c55e' : '#f59e0b'} 100%)`,
-                    transition: 'width 0.8s ease',
-                  }} />
+                  {decay._fallback ? (
+                    <div style={{
+                      width: '100%', height: '100%', borderRadius: 99,
+                      background: `repeating-linear-gradient(45deg, ${T.border}, ${T.border} 4px, ${T.sub2}33 4px, ${T.sub2}33 8px)`,
+                    }} />
+                  ) : (
+                    <div style={{
+                      width: `${decay.score}%`, height: '100%', borderRadius: 99,
+                      background: `linear-gradient(90deg, #ef4444 0%, #f59e0b 40%, ${decay.score >= 75 ? '#22c55e' : '#f59e0b'} 100%)`,
+                      transition: 'width 0.8s ease',
+                    }} />
+                  )}
                 </div>
               </div>
 

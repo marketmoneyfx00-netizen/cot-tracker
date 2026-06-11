@@ -56,6 +56,7 @@ import { usePolymarketEventMonitor } from './polymarket/hooks/usePolymarketEvent
 const ExportPanel = lazy(() => import('./components/ExportPanel.jsx'));
 import ResourcesTab from './components/ResourcesTab.jsx';
 import { computeRiskRegime } from './lib/riskRegimeEngine.js';
+import { productionTelemetryLog } from './telemetry/productionTelemetryLog.js';
 import InstitutionalIntelligencePanel from './components/InstitutionalIntelligencePanel.jsx';
 import AdaptiveRegimePanel from './components/AdaptiveRegimePanel.jsx';
 import { useAgentConsensus } from './hooks/useAgentConsensus.js';
@@ -4297,7 +4298,7 @@ function AppInner() {
 
   // ── 4H historical candles for all pairs (tactical momentum context) ──────
   const candleMap    = useAllPairCandles();
-  // ── Macro signal + rates data (confluence + macroConfidence wiring) ────────
+  // ── Macro signal + rates data (confluence + carry alignment) ────────────────
   const macroSignal  = useMacroSignal();
   const ratesData    = useRatesData();
 
@@ -4640,8 +4641,30 @@ function AppInner() {
       riskData,
       tradeReadinessScore,
       globalMarketState,
+      tacState:           tacStateMap[selectedPair] ?? null,
+      pairRow:            fxPairs.find(p => p.pair === selectedPair) ?? null,
     });
-  }, [selectedPair, biasArr, sentimentData, riskData, tradeReadinessScore, globalMarketState]);
+  }, [selectedPair, biasArr, sentimentData, riskData, tradeReadinessScore, globalMarketState, tacStateMap]);
+
+  // ── FASE 9 — TELEMETRÍA DE PRODUCCIÓN ───────────────────────────────────────
+  // Pure observation: records a classified snapshot of the 7 audited engines
+  // (Bias, Execution, Confluence, IIS, Risk Regime, Flow, Decay) for the
+  // selected pair. Rate-limited internally (1 entry / 5min). Does not alter
+  // any score, weight, threshold or engine output.
+  useEffect(() => {
+    if (!currentContext) return;
+    const pairConfluence = allBiasArr.find(b => b.pair === selectedPair)?.confluence ?? null;
+    productionTelemetryLog.recordSnapshot({
+      pair:           selectedPair,
+      biasScore:      currentContext.biasScore,
+      intradayResult: currentContext.intradayResult,
+      confluence:     pairConfluence,
+      consensus:      agentConsensus?.consensus ?? null,
+      riskRegime,
+      flowState:      currentContext.flowState,
+      decayResult:    currentContext.decayResult,
+    });
+  }, [currentContext, allBiasArr, riskRegime, selectedPair]);
 
   // ── FINAL DECISION — single source of truth for all module blocking ────────
   // Derived from currentContext scores. ALL components must respect this verdict.

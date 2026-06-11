@@ -77,7 +77,7 @@ function computeExec(biasEntry, sentimentData, riskData) {
   const b = biasEntry.bias ?? biasEntry;
   const score = b.score ?? biasEntry.score;
   try {
-    return calculateExecutionScore({
+    const exec = calculateExecutionScore({
       biasScore:     score,
       biasDirection: b.direction ?? (score > 0 ? 'bullish' : score < 0 ? 'bearish' : 'neutral'),
       riskScore:     riskData?.score    ?? 0,
@@ -87,6 +87,9 @@ function computeExec(biasEntry, sentimentData, riskData) {
       midCount:      sentimentData?.midCount  ?? 0,
       carryScore:    biasEntry.carryScore ?? null,
     });
+    // Annotation only — does not affect the calculation, flags that the
+    // risk component above was substituted with 0 because riskData is missing.
+    return { ...exec, _riskUnavailable: riskData == null };
   } catch { return null; }
 }
 
@@ -798,6 +801,7 @@ function buildPairSection(b, pairRow, exec, T, cat, enriched, conviction, horizo
           <span class="badge ${badgeClass}">${esc(label)}</span>
           <span class="badge badge-acc" style="font-size:9px;">Score: ${score > 0 ? '+' : ''}${score}</span>
           ${exec?.permission?.label ? `<span class="badge ${exec.score >= 70 ? 'badge-bull' : exec.score >= 50 ? 'badge-amb' : 'badge-bear'}">${esc(exec.permission.label)}</span>` : ''}
+          ${exec?._riskUnavailable ? `<span class="badge" style="font-size:9px;color:${PALETTE.amber};border:1px solid ${PALETTE.amber}44;background:${PALETTE.amber}14;">Risk component unavailable</span>` : ''}
         </div>
       </div>
 

@@ -16,9 +16,10 @@ const CONF_COLOR = (c, T) =>
 const RISK_COLOR = (level, T) =>
   level === 'LOW' ? T.green : level === 'MODERATE' ? T.amber : level === 'HIGH' ? T.orange : T.red;
 
-function AgentCard({ title, subtitle, score, confidence, direction, signals, warnings, color, T, darkMode, isVeto, tooltip }) {
+function AgentCard({ title, subtitle, score, confidence, direction, signals, warnings, color, T, darkMode, isVeto, isRiskManager, riskLevel, tooltip }) {
   const [expanded, setExpanded] = useState(false);
-  const barColor = color || SCORE_COLOR(score, T);
+  const isUnavailable = confidence === 'unavailable';
+  const barColor = isUnavailable ? T.sub2 : (color || SCORE_COLOR(score, T));
   const showWarnings = warnings?.length > 0;
 
   return (
@@ -39,12 +40,12 @@ function AgentCard({ title, subtitle, score, confidence, direction, signals, war
           {subtitle && <span style={{ fontSize: 9, color: T.sub2, marginLeft: 4 }}>{subtitle}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {confidence && (
+          {confidence && !isRiskManager && (
             <span style={{ fontSize: 9, color: CONF_COLOR(confidence, T), fontWeight: 700 }}>
               {CONF_LABEL[confidence] || confidence}
             </span>
           )}
-          {direction && direction !== 'neutral' && (
+          {direction && direction !== 'neutral' && !isUnavailable && (
             <Chip
               label={direction.toUpperCase()}
               color={direction === 'bull' || direction === 'LONG BIAS' ? T.green : T.red}
@@ -54,24 +55,44 @@ function AgentCard({ title, subtitle, score, confidence, direction, signals, war
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-        <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: barColor, letterSpacing: '-0.02em' }}>
-          {score ?? '—'}
-        </span>
-        <span style={{ fontSize: 9, color: T.sub, fontWeight: 700 }}>/100</span>
-        {isVeto && (
+      {isRiskManager ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 }}>
           <span style={{
-            fontSize: 9, fontWeight: 700, color: T.red,
-            background: T.red + '18', border: `1px solid ${T.red}44`,
-            padding: '1px 7px', borderRadius: 99, marginLeft: 8,
+            fontSize: 14, fontWeight: 800, letterSpacing: '0.02em',
+            color: isVeto ? T.red : T.green,
           }}>
-            VETO ACTIVO
+            {isVeto ? 'VETO ACTIVO' : 'VETO INACTIVO'}
           </span>
-        )}
-      </div>
-      <ScoreBar score={score} color={barColor} T={T} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, color: T.sub2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Nivel de riesgo
+            </span>
+            <Chip label={riskLevel} color={RISK_COLOR(riskLevel, T)} T={T} />
+          </div>
+          <span style={{ fontSize: 9, color: T.sub2 }}>
+            {warnings?.length ? `${warnings.length} condición${warnings.length > 1 ? 'es' : ''} de riesgo detectada${warnings.length > 1 ? 's' : ''}` : 'Sin condiciones de riesgo activas'}
+          </span>
+        </div>
+      ) : isUnavailable ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
+          <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: T.sub2, letterSpacing: '-0.02em' }}>
+            N/D
+          </span>
+          <span style={{ fontSize: 10, color: T.sub2 }}>Datos insuficientes</span>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'monospace', color: barColor, letterSpacing: '-0.02em' }}>
+              {score ?? '—'}
+            </span>
+            <span style={{ fontSize: 9, color: T.sub, fontWeight: 700 }}>/100</span>
+          </div>
+          <ScoreBar score={score} color={barColor} T={T} />
+        </>
+      )}
 
-      {showWarnings && !expanded && (
+      {showWarnings && !expanded && !isRiskManager && (
         <div style={{ marginTop: 7 }}>
           <span style={{ fontSize: 10, color: T.amber }}>
             ⚠ {warnings.length} factor{warnings.length > 1 ? 'es' : ''} de riesgo
@@ -127,8 +148,10 @@ function ConditionsList({ title, items, icon, color, T }) {
   );
 }
 
-function EnvironmentBadge({ environment, envConfig, score, direction, T }) {
+function EnvironmentBadge({ environment, envConfig, score, direction, T, validCount, totalCount }) {
   const color = envConfig?.color || T.sub;
+  const unavailableCount = totalCount - validCount;
+  const coveragePct = totalCount > 0 ? Math.round((validCount / totalCount) * 100) : 0;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
       <div style={{
@@ -143,7 +166,7 @@ function EnvironmentBadge({ environment, envConfig, score, direction, T }) {
         <span style={{ fontSize: 8, color: T.sub, letterSpacing: '0.08em', marginTop: 1 }}>PUNTUACIÓN</span>
       </div>
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 800, color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             {envConfig?.label || environment}
           </span>
@@ -154,9 +177,19 @@ function EnvironmentBadge({ environment, envConfig, score, direction, T }) {
             />
           )}
         </div>
-        <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.5, maxWidth: 380 }}>
+        <p style={{ margin: 0, fontSize: 12, color: T.sub, lineHeight: 1.5, maxWidth: 380, marginBottom: 6 }}>
           {envConfig?.desc || ''}
         </p>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontSize: 9, color: unavailableCount > 0 ? T.amber : T.sub2,
+          background: unavailableCount > 0 ? `${T.amber}10` : 'transparent',
+          border: unavailableCount > 0 ? `1px solid ${T.amber}33` : `1px solid ${T.border}`,
+          padding: '2px 8px', borderRadius: 99, letterSpacing: '0.04em',
+        }}>
+          Cobertura de datos: {validCount}/{totalCount} agentes ({coveragePct}%)
+          {unavailableCount > 0 && ` · ${unavailableCount} sin datos`}
+        </div>
       </div>
     </div>
   );
@@ -224,6 +257,11 @@ export default function InstitutionalIntelligencePanel({ consensus, darkMode, T,
     },
   ];
 
+  // Risk Manager has no score concept — count it as covered (it always evaluates).
+  const validAgentCount = AGENT_DEFS.filter(
+    ({ key, data }) => key === 'riskManager' || data?.confidence !== 'unavailable'
+  ).length;
+
   return (
     <div style={{
       maxWidth: 1100, margin: '0 auto',
@@ -264,6 +302,8 @@ export default function InstitutionalIntelligencePanel({ consensus, darkMode, T,
           score={con.score}
           direction={con.direction}
           T={T}
+          validCount={validAgentCount}
+          totalCount={AGENT_DEFS.length}
         />
 
         {risk.veto && (
@@ -304,7 +344,7 @@ export default function InstitutionalIntelligencePanel({ consensus, darkMode, T,
               title={title}
               subtitle={subtitle}
               tooltip={tooltip}
-              score={data?.score ?? 50}
+              score={key === 'riskManager' ? undefined : data?.score}
               confidence={data?.confidence}
               direction={data?.direction || data?.condition}
               signals={data?.signals}
@@ -313,6 +353,8 @@ export default function InstitutionalIntelligencePanel({ consensus, darkMode, T,
               T={T}
               darkMode={darkMode}
               isVeto={isVeto}
+              isRiskManager={key === 'riskManager'}
+              riskLevel={risk.level}
             />
           ))}
         </div>
@@ -431,7 +473,7 @@ export default function InstitutionalIntelligencePanel({ consensus, darkMode, T,
           COT TRACKER · INTELIGENCIA INSTITUCIONAL · CONSENSO DE 6 AGENTES
         </span>
         <span style={{ fontSize: 9, color: T.sub2 }}>
-          Confianza: {CONF_LABEL[con.confidence] || con.confidence} · Agentes: 6/6 activos
+          Confianza: {CONF_LABEL[con.confidence] || con.confidence} · Agentes: {validAgentCount}/{AGENT_DEFS.length} activos
         </span>
       </div>
     </div>

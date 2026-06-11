@@ -27,13 +27,14 @@ const LEVEL_TO_CONFLICT = {
   structural_conflict: 'severe',
 };
 
-function buildDecay(score, level, label) {
+function buildDecay(score, level, label, fallback = false) {
   return {
     score:         Math.round(Math.max(0, Math.min(100, score))),
     level,
     label,
     color:         LEVEL_COLOR[level]           ?? '#6b7280',
     conflictLevel: LEVEL_TO_CONFLICT[level]     ?? 'none',
+    _fallback:     fallback,
   };
 }
 
@@ -56,9 +57,9 @@ export function computeConfidenceDecay({ biasScore, biasDir, tacState }) {
 
   // ── No tactical data ─────────────────────────────────────────────────────────
   if (!tacPressure || tacPressure === 'insufficient') {
-    if (biasAbs >= 3.5) return buildDecay(78, 'moderate_alignment', 'Convicción Institucional');
-    if (biasAbs >= 1.5) return buildDecay(62, 'moderate_alignment', 'Sesgo Institucional');
-    return buildDecay(38, 'weak_alignment', 'Esperando Confirmación');
+    if (biasAbs >= 3.5) return buildDecay(78, 'moderate_alignment', 'Convicción Institucional', true);
+    if (biasAbs >= 1.5) return buildDecay(62, 'moderate_alignment', 'Sesgo Institucional', true);
+    return buildDecay(38, 'weak_alignment', 'Esperando Confirmación', true);
   }
 
   // ── No institutional edge ────────────────────────────────────────────────────
