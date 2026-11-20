@@ -1,6 +1,6 @@
 {
   "2026-11-16": {
-    "capturedAt": "2026-11-20T08:45:58.636Z",
+    "capturedAt": "2026-11-20T20:34:59.582Z",
     "events": [
       {
         "title": "Rightmove HPI m/m",
@@ -249,6 +249,14 @@
         "impact": "Low",
         "forecast": "25.4K",
         "previous": "30.3K"
+      },
+      {
+        "title": "HMRC Payrolls Change",
+        "country": "GBP",
+        "date": "2026-11-17T02:00:00-05:00",
+        "impact": "Low",
+        "forecast": "9K",
+        "previous": "13K"
       },
       {
         "title": "Unemployment Rate",
@@ -961,6 +969,14 @@
         "impact": "Medium",
         "forecast": "",
         "previous": "4.3%"
+      },
+      {
+        "title": "President Trump Speaks",
+        "country": "USD",
+        "date": "2026-11-20T12:00:00-05:00",
+        "impact": "Medium",
+        "forecast": "",
+        "previous": ""
       },
       {
         "title": "FOMC Member Cook Speaks",
