@@ -1,6 +1,6 @@
 {
   "2026-11-23": {
-    "capturedAt": "2026-11-24T02:57:56.136Z",
+    "capturedAt": "2026-11-24T15:02:20.839Z",
     "events": [
       {
         "title": "Bank Holiday",
@@ -157,7 +157,7 @@
       {
         "title": "CB Leading Index m/m",
         "country": "CNY",
-        "date": "2026-11-24T09:00:00-05:00",
+        "date": "2026-11-24T08:51:00-05:00",
         "impact": "Low",
         "forecast": "",
         "previous": "-0.1%"
