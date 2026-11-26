@@ -1,6 +1,6 @@
 {
   "2026-11-23": {
-    "capturedAt": "2026-11-25T14:42:06.745Z",
+    "capturedAt": "2026-11-26T00:33:26.390Z",
     "events": [
       {
         "title": "Bank Holiday",
@@ -361,6 +361,14 @@
         "impact": "Low",
         "forecast": "201K",
         "previous": "203K"
+      },
+      {
+        "title": "Monetary Policy Report Hearings",
+        "country": "GBP",
+        "date": "2026-11-25T09:15:00-05:00",
+        "impact": "Medium",
+        "forecast": "",
+        "previous": ""
       },
       {
         "title": "New Home Sales",
